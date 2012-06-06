@@ -1,0 +1,2 @@
+verilog work ../../adc_internaldelaygen.v
+verilog work ../example_design/adc_internaldelaygen_exdes.v

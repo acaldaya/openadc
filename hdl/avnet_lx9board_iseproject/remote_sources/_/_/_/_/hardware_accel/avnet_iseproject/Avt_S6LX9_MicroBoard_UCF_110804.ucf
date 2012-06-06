@@ -1,0 +1,121 @@
+# ----------------------------------------------------------------------------
+#     _____
+#    /     \
+#   /____   \____
+#  / \===\   \==/
+# /___\===\___\/  AVNET Design Resource Center
+#      \======/         www.em.avnet.com/s6microboard
+#       \====/    
+# ----------------------------------------------------------------------------
+# 
+#  Created With Avnet UCF Generator V0.3.0 
+#     Date: Friday, November 12, 2010 
+#     Time: 4:11:53 PM 
+#
+#  Updates
+#     4 Jan 2011 -- added DIPs; changed IOSTANDARD for LEDs and LPDDR
+#	 11 Jan 2011 -- Changed IOSTANDARD for DIPs to LVCMOS33.
+#				    Replaced '#' on the end of net names with '_n'
+#    14 Jan 2011 -- Added I2C for CDCE913 clock chip
+#                   Added formatting and section breaks
+#    27 Jan 2011 -- Updated URL for PMODs
+#    04 Aug 2011 -- Renaming USER_RESET_N to USER_RESET since it is not low-enabled;
+#                   Added extra comment on Ethernet PHY RXD pull-ups
+#                   Removed extraneous quote mark in I2C port syntax
+# 
+#  This design is the property of Avnet.  Publication of this
+#  design is not authorized without written consent from Avnet.
+#  
+#  Please direct any questions to:
+#     Avnet Technical Forums
+#     http://community.em.avnet.com/t5/Spartan-6-LX9-MicroBoard/bd-p/Spartan-6LX9MicroBoard
+#
+#     Avnet Centralized Technical Support
+#     Centralized-Support@avnet.com
+#     1-800-422-9023
+# 
+#  Disclaimer:
+#     Avnet, Inc. makes no warranty for the use of this code or design.
+#     This code is provided  "As Is". Avnet, Inc assumes no responsibility for
+#     any errors, which may appear in this code, nor does it make a commitment
+#     to update the information contained herein. Avnet, Inc specifically
+#     disclaims any implied warranties of fitness for a particular purpose.
+#                      Copyright(c) 2011 Avnet, Inc.
+#                              All rights reserved.
+# 
+# ----------------------------------------------------------------------------
+############################################################################
+# VCC AUX VOLTAGE 
+############################################################################
+CONFIG VCCAUX=3.3;
+
+############################################################################	
+# User Reset Push Button
+#   Ignore the timing for this signal
+#   Internal pull-down required since external resistor is not populated
+############################################################################	
+NET reset_i      LOC = V4  |IOSTANDARD = LVCMOS33 |PULLDOWN;    # "USER_RESET"
+NET reset_i      TIG;
+
+############################################################################	
+# Texas Instruments CDCE913 Triple-Output PLL Clock Chip
+#   Y1: 40 MHz, USER_CLOCK can be used as external configuration clock
+#   Y2: 66.667 MHz
+#   Y3: 100 MHz 
+############################################################################	
+NET clk_40mhz        LOC = V10 |IOSTANDARD = LVCMOS33;               # "USER_CLOCK"
+#NET clk_66mhz          LOC = K15 |IOSTANDARD = LVCMOS33;               # "CLOCK_Y2"
+NET clk_100mhz          LOC = C10 |IOSTANDARD = LVCMOS33;               # "CLOCK_Y3"
+NET clk_40mhz TNM_NET = clk_40mhz;
+TIMESPEC TS_USER_CLOCK = PERIOD clk_40mhz 40000 kHz;
+#NET clk_66mhz TNM_NET = clk_66mhz;
+#TIMESPEC TS_CLOCK_Y2 = PERIOD clk_66mhz 66666.7 kHz;
+NET clk_100mhz TNM_NET = clk_100mhz;
+TIMESPEC TS_clk_100mhz = PERIOD "clk_100mhz" 100000 KHz HIGH 50%;
+
+//NET fastclock TNM_NET = ADCClock;
+TIMESPEC TS_ADCClock = PERIOD "ADCClock" 133000 KHz HIGH 50%;
+NET "ADC_Data<0>" CLOCK_DEDICATED_ROUTE = FALSE;
+
+
+NET "DUT_CLK_i" CLOCK_DEDICATED_ROUTE = FALSE;
+############################################################################	
+# User LEDs			
+############################################################################	
+NET GPIO_LED1         LOC = P4  |IOSTANDARD = LVCMOS18;               # "GPIO_LED1"
+NET GPIO_LED2         LOC = L6  |IOSTANDARD = LVCMOS18;               # "GPIO_LED2"
+NET GPIO_LED3         LOC = F5  |IOSTANDARD = LVCMOS18;               # "GPIO_LED3"
+NET GPIO_LED4         LOC = C2  |IOSTANDARD = LVCMOS18;               # "GPIO_LED4"
+############################################################################	
+# Silicon Labs CP2102 USB-to-UART Bridge Chip
+############################################################################	
+NET RXD     LOC = R7  |IOSTANDARD = LVCMOS33;               # "USB_RS232_RXD"
+NET TXD     LOC = T7  |IOSTANDARD = LVCMOS33;               # "USB_RS232_TXD"
+############################################################################	
+# Texas Instruments CDCE913 programming port
+#   Internal pull-ups required since external resistors are not populated
+############################################################################	
+NET SCL               LOC=P12   |IOSTANDARD = LVCMOS33 |PULLUP;    # "SCL"
+NET SDA               LOC=U13   |IOSTANDARD = LVCMOS33 |PULLUP;    # "SDA"
+
+NET DUT_CLK_i         LOC=F15   |IOSTANDARD = LVCMOS33;
+NET DUT_trigger_i     LOC=F14   |IOSTANDARD = LVCMOS33 |PULLUP;
+NET ADC_Data[9]       LOC=F16   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
+NET ADC_Data[7]       LOC=C17   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
+NET ADC_Data[5]       LOC=C18   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
+NET ADC_OR            LOC=G14   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
+NET ADC_Data[8]       LOC=D17   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
+NET ADC_Data[6]       LOC=D18   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
+
+NET ADC_Data[3]       LOC=H12   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
+NET ADC_Data[1]       LOC=G13   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
+NET ADC_clk           LOC=E16   |IOSTANDARD = LVCMOS33 | SLEW=FAST | DRIVE=12;
+NET amp_gain          LOC=E18   |IOSTANDARD = LVCMOS33 | SLEW=SLOW | DRIVE=2;
+NET ADC_Data[4]       LOC=K12   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
+NET ADC_Data[2]       LOC=K13   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
+NET ADC_Data[0]       LOC=F17   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
+NET amp_hilo          LOC=F18   |IOSTANDARD = LVCMOS33;
+
+PIN "instance_name/clkout1_buf.O" CLOCK_DEDICATED_ROUTE = FALSE;
+PIN "instance_name/clkout2_buf.O" CLOCK_DEDICATED_ROUTE = FALSE;
+

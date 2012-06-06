@@ -1,0 +1,17 @@
+# Output products list for <counter128>
+_xmsgs\pn_parser.xmsgs
+core_resources.txt
+counter128.asy
+counter128.gise
+counter128.ngc
+counter128.sym
+counter128.v
+counter128.veo
+counter128.xco
+counter128.xise
+counter128\doc\c_counter_binary_v11_0_vinfo.html
+counter128\doc\ds215_counter.pdf
+counter128_flist.txt
+counter128_readme.txt
+counter128_xmdf.tcl
+gui_latency.txt

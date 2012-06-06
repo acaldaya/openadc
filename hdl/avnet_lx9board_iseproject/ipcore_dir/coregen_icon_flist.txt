@@ -1,0 +1,22 @@
+# Output products list for <coregen_icon>
+coregen_icon.asy
+coregen_icon.ejp
+coregen_icon.gise
+coregen_icon.ngc
+coregen_icon.sym
+coregen_icon.v
+coregen_icon.veo
+coregen_icon.xco
+coregen_icon.xise
+coregen_icon\example_design\example_coregen_icon.ucf
+coregen_icon\example_design\example_coregen_icon.v
+coregen_icon\implement\chipscope_vio.xco
+coregen_icon\implement\coregen.cgp
+coregen_icon\implement\example_coregen_icon.prj
+coregen_icon\implement\example_coregen_icon.xst
+coregen_icon\implement\implement.bat
+coregen_icon\implement\implement.sh
+coregen_icon\implement\pa_implement.tcl
+coregen_icon_flist.txt
+coregen_icon_readme.txt
+coregen_icon_xmdf.tcl

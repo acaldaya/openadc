@@ -1,0 +1,14 @@
+# Output products list for <coregen_vio>
+_xmsgs\pn_parser.xmsgs
+coregen_vio.asy
+coregen_vio.cdc
+coregen_vio.gise
+coregen_vio.ngc
+coregen_vio.sym
+coregen_vio.v
+coregen_vio.veo
+coregen_vio.xco
+coregen_vio.xise
+coregen_vio_flist.txt
+coregen_vio_readme.txt
+coregen_vio_xmdf.tcl
