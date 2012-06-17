@@ -1,6 +1,6 @@
 `include "timescale.v"
 
-//`define CHIPSCOPE
+`define CHIPSCOPE
 
 `define AVNET
 

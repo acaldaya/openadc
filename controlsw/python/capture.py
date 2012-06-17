@@ -19,6 +19,8 @@ ADDR_FREQ1      = 5
 ADDR_FREQ2      = 6
 ADDR_FREQ3      = 7
 ADDR_FREQ4      = 8
+ADDR_PHASE1     = 9
+ADDR_PHASE2     = 10
 
 CODE_READ       = 0x80
 CODE_WRITE      = 0xC0
@@ -35,6 +37,13 @@ STATUS_ARM_MASK    = 0x01
 STATUS_FIFO_MASK   = 0x02
 STATUS_EXT_MASK    = 0x04
 
+# sign extend b low bits in x
+# from "Bit Twiddling Hacks"
+def SIGNEXT(x, b):
+       m = 1 << (b - 1)
+       x = x & ((1 << b) - 1)
+       return (x ^ m) - m
+
 class serialComm:
     def __init__(self, serial_instance, debug=None):
         self.serial = serial_instance
@@ -45,7 +54,7 @@ class serialComm:
         
         self.serial.write(nullmessage);
     
-    def sendMessage(self, mode, address, payload=None):
+    def sendMessage(self, mode, address, payload=None, Validate=True):
         """Send a message out the serial port"""
 
         if payload is None:
@@ -91,18 +100,19 @@ class serialComm:
 
             return rb
         else:
-            check = self.sendMessage(CODE_READ, address)
-            if check != pba:
-                self.log.error("Command text not set correctly")
-                print "Sent data: ",
-                for c in pba: print("%x")%c,
-                print("")
-                print "Read data: ",
-                if check:
-                    for c in check: print("%x")%c,
+            if Validate:
+                check = self.sendMessage(CODE_READ, address)
+                if check != pba:
+                    self.log.error("Command text not set correctly")
+                    print "Sent data: ",
+                    for c in pba: print("%x")%c,
                     print("")
-                else:
-                    print "<Timeout>"
+                    print "Read data: ",
+                    if check:
+                        for c in check: print("%x")%c,
+                        print("")
+                    else:
+                        print "<Timeout>"
 
     def setSettings(self, state):
         cmd = bytearray(1)
@@ -130,6 +140,37 @@ class serialComm:
         cmd = bytearray(1)
         cmd[0] = gain               
         self.sendMessage(CODE_WRITE, ADDR_GAIN, cmd);
+
+    def setPhase(self, phase):
+        '''Set the phase adjust, range -255 to 255'''
+
+        LSB = phase & 0x00FF;
+        MSB = (phase & 0x0100) >> 8;
+       
+        cmd = bytearray(1)
+        cmd[0] = LSB;
+        self.sendMessage(CODE_WRITE, ADDR_PHASE1, cmd, False);
+
+        cmd[0] = MSB | 0x02;
+        self.sendMessage(CODE_WRITE, ADDR_PHASE2, cmd, False);
+
+    def getPhase(self):
+        result = self.sendMessage(CODE_READ, ADDR_PHASE2);
+
+        if (result[0] & 0x02):
+            MSB = result[0] & 0x01;
+
+            result = self.sendMessage(CODE_READ, ADDR_PHASE1);
+            LSB = result[0]
+
+            phase = LSB | (MSB << 8);
+
+            #Sign Extend
+            phase = SIGNEXT(phase, 9)
+
+            return phase
+        else:
+            return None
 
     def getStatus(self):
         result = self.sendMessage(CODE_READ, ADDR_STATUS);
@@ -343,8 +384,8 @@ class MainWindow(QMainWindow):
         #print "max: %f\nmin: %f"%(max(self.datapoints), min(self.datapoints))
         #print"max %f = %f bits\n"%(max(self.datapoints), math.log((max(self.datapoints) - sum(self.datapoints)/len(self.datapoints)) * 1024, 2))
         stddev = numpy.std(self.datapoints)
-        print "SNR = %f, stddev = %f\n"%(20 * math.log(numpy.average(self.datapoints)/stddev, 10), stddev)
-            
+        #print "SNR = %f, stddev = %f\n"%(20 * math.log(numpy.average(self.datapoints)/stddev, 10), stddev)
+        print "%f dB\n"%(20 * math.log(max(self.datapoints) - 0.5, 10));            
 
     def ADCsettrigmode(self):
         self.trigmode = 0;
@@ -364,8 +405,14 @@ class MainWindow(QMainWindow):
         cur = self.sc.getSettings() & ~(SETTINGS_TRIG_HIGH | SETTINGS_WAIT_YES);
         self.sc.setSettings(cur | self.trigmode)
 
+    def ADCsetclock(self, int=0):
+        self.sc.setPhase(self.phase.value())
+                
+        #print "Setting: %d %X %X"%(intval, MSB, LSB)
+
     def ADCupdate(self):
         print self.sc.getExtFrequency()
+        print self.sc.getPhase()
 
     def ADCconnect(self):
         # connect to serial port
@@ -504,6 +551,17 @@ class MainWindow(QMainWindow):
 
         self.gainlow.setChecked(True)
         self.trigmodelow.setChecked(True)
+
+        self.phase = QSpinBox()
+        self.phase.setMinimum(-255)
+        self.phase.setMaximum(255)
+        self.connect(self.phase, SIGNAL("valueChanged(int)"),self, SLOT("ADCsetclock(int)"))
+
+        clocksettings = QGroupBox("Clock Settings")
+        clocklayout = QVBoxLayout()
+        clocksettings.setLayout(clocklayout)
+        clocklayout.addWidget(self.phase)
+        layout.addWidget(clocksettings)
 
         drawresults = QGroupBox("Results Preview")
         resultsLayout = QVBoxLayout()

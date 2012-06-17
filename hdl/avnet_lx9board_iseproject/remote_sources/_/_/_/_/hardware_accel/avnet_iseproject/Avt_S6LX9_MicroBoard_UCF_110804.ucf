@@ -116,6 +116,6 @@ NET ADC_Data[2]       LOC=K13   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
 NET ADC_Data[0]       LOC=F17   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
 NET amp_hilo          LOC=F18   |IOSTANDARD = LVCMOS33;
 
-PIN "instance_name/clkout1_buf.O" CLOCK_DEDICATED_ROUTE = FALSE;
-PIN "instance_name/clkout2_buf.O" CLOCK_DEDICATED_ROUTE = FALSE;
+//PIN "instance_name/clkout1_buf.O" CLOCK_DEDICATED_ROUTE = FALSE;
+//PIN "instance_name/clkout2_buf.O" CLOCK_DEDICATED_ROUTE = FALSE;
 

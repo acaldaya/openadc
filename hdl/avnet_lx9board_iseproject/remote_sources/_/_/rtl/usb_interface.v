@@ -25,6 +25,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
 							fifo_empty, fifo_data, fifo_rd_en, fifo_rd_clk,
 							cmd_arm, trigger_mode, trigger_wait,
 							extclk_frequency,
+							phase_o, phase_ld_o, phase_i, phase_done_i, phase_clk_o							
 `ifdef CHIPSCOPE
                      ,chipscope_control
 `endif                     
@@ -54,6 +55,12 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 
 	 input [31:0]					extclk_frequency;
 	 
+	 output							phase_clk_o;
+	 output [8:0]					phase_o;
+	 output							phase_ld_o;
+	 input  [8:0]					phase_i;
+	 input							phase_done_i;
+	 
 	       
 `ifdef CHIPSCOPE
     inout [35:0]             chipscope_control;
@@ -74,6 +81,8 @@ module usb_interface(reset, clk, rx_in, tx_out,
     assign ftdi_clk = clk;
     assign ftdi_rxf_n = ~ftdi_rxf;
 	 assign fifo_rd_clk = clk;
+	 
+	 assign phase_clk_o = clk;
     
     //Reinstate following for FTDI
     //assign ftdi_d = ftdi_isOutput ? ftdi_dout : 8'bZ;
@@ -112,7 +121,24 @@ module usb_interface(reset, clk, rx_in, tx_out,
     reg [7:0]  registers_settings;
 	 reg [7:0]  registers_echo;
 	 reg [31:0] registers_extclk_frequency;
-    
+	 reg [8:0]	phase_out;
+	 reg [8:0]  phase_in;
+	 reg        phase_loadout;
+	 reg			phase_done;
+	 
+	 assign phase_o = phase_out;
+	 assign phase_ld_o = phase_loadout;
+	 
+	 always @(posedge ftdi_clk) begin
+		if (reset | phase_loadout) begin
+			phase_in <= 0;
+			phase_done <= 0;
+		end else if (phase_done_i) begin
+			phase_in <= phase_i;
+			phase_done <= 1;
+		end
+	end
+	 
 	 /* Registers:
 	 
 	 0x00 - GAIN SETTING
@@ -174,7 +200,19 @@ module usb_interface(reset, clk, rx_in, tx_out,
 		 [ E7 E6 E5 E4 E3 E2 E1 E0 ]
 		 
 		 E = Write data to this register then read back to
-		     confirm device connection is OK		  
+		     confirm device connection is OK	
+
+	 0x05 - 0x08 - External Frequency Counter
+	 
+	 0x09 - Phase Adjust LSB
+	 
+	    [ P7 P6 P5 P4 P3 P2 P1 P0 ]
+		 
+	 0x0A - Phase Adjust MSB
+	    
+		 [                    S P8 ]
+		 
+		 S = Start (write), Status (read)
 	 
 	*/
 	 
@@ -187,6 +225,8 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 `define EXTFREQ_ADDR2  6
 	 `define EXTFREQ_ADDR3  7
 	 `define EXTFREQ_ADDR4  8
+	 `define PHASE_ADDR1    9
+	 `define PHASE_ADDR2   10
     
     `define IDLE           'b0000
     `define ADDR           'b0001
@@ -288,7 +328,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
                   registers_settings <= ftdi_din;
                end else if (address == `ECHO_ADDR) begin
                   registers_echo <= ftdi_din;
-               end 
+					end
 					
                state <= `IDLE;                         
              end
@@ -344,6 +384,17 @@ module usb_interface(reset, clk, rx_in, tx_out,
 						extclk_locked <= 0;
 						ftdi_wr_n <= 0;
 						state <= `IDLE;
+					end else if (address == `PHASE_ADDR1) begin
+						ftdi_dout <= phase_in[7:0];
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;
+					end else if (address == `PHASE_ADDR2) begin
+						ftdi_dout[0] <= phase_in[8];
+						ftdi_dout[1] <= phase_done;
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;
                end  else begin
 						extclk_locked <= 0;
 						ftdi_dout <= 8'bx;						
@@ -393,6 +444,31 @@ module usb_interface(reset, clk, rx_in, tx_out,
       end                  
     end 
     
+
+    always @(posedge ftdi_clk or posedge reset)
+    begin
+      if (reset == 1) begin
+         
+      end else begin
+         case (state)               
+            `DATAWR2: begin
+               if (address == `PHASE_ADDR1) begin
+						phase_out[7:0] <= ftdi_din;
+					end else if (address == `PHASE_ADDR2) begin
+						phase_out[8] <= ftdi_din[0];	
+						phase_loadout <= ftdi_din[1];
+					end                     
+             end
+						
+				default: begin
+					phase_loadout <= 0;
+
+				end
+             
+         endcase
+      end                  
+    end 
+
 	  
 `ifdef CHIPSCOPE
    assign cs_trig = (state == `IDLE) ? 0 : 1;
