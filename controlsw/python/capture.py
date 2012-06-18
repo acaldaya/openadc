@@ -387,6 +387,20 @@ class MainWindow(QMainWindow):
         #print "SNR = %f, stddev = %f\n"%(20 * math.log(numpy.average(self.datapoints)/stddev, 10), stddev)
         print "%f dB\n"%(20 * math.log(max(self.datapoints) - 0.5, 10));            
 
+        dpfft= numpy.fft.fft(self.datapoints)
+        freqs = numpy.fft.fftfreq(len(dpfft))
+
+        ind = numpy.argsort(numpy.abs(dpfft)**2)
+
+        freq_in_hertz=freqs[ind[-10:]]*abs(100E6)
+
+        for j in ind[-10:]:
+              if freqs[j] <= 0:
+                      continue
+
+              print "%6f %6f"%(freqs[j]*100E6, numpy.abs(dpfft[j]))
+              
+
     def ADCsettrigmode(self):
         self.trigmode = 0;
 
@@ -576,6 +590,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(drawresults)
 
         self.connect(self.drawingGain, SIGNAL("editingFinished()"),self,SLOT("drawSetZoom()"))
+
+        drawfft = QGroupBox("FFT Preview")
+        fftlayout = QVBoxLayout()
+        self.fftarea = DrawArea()
+        fftlayout.addWidget(self.drawarea)
+        drawfft.setLayout(fftlayout)
+        layout.addWidget(drawfft)
               
         # Set dialog layout
         self.setLayout(layout)       
