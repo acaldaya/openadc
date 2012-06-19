@@ -29,6 +29,7 @@ SETTINGS_TRIG_LOW  = 0x00
 SETTINGS_ARM       = 0x08
 SETTINGS_WAIT_YES  = 0x20
 SETTINGS_WAIT_NO   = 0x00
+SETTINGS_CLK_EXT   = 0x40
 
 STATUS_ARM_MASK    = 0x01
 STATUS_FIFO_MASK   = 0x02
@@ -126,11 +127,19 @@ class serialOpenADCInterface:
     def setGainMode(self, gainmode):
         '''Set the gain Mode'''
         if gainmode == "high":
-            self.setSettings(self.sc.getSettings() | SETTINGS_GAIN_HIGH);
+            self.setSettings(self.getSettings() | SETTINGS_GAIN_HIGH);
         elif gainmode == "low":           
-            self.setSettings(self.sc.getSettings() & ~SETTINGS_GAIN_HIGH);
+            self.setSettings(self.getSettings() & ~SETTINGS_GAIN_HIGH);
         else:
             raise ValueError, "Invalid Gain Mode, only 'low' or 'high' allowed"
+
+    def setClockSource(self, source):
+        if source == "int":
+            self.setSettings(self.getSettings() & ~SETTINGS_CLK_EXT);
+        elif source == "ext":
+            self.setSettings(self.getSettings() | SETTINGS_CLK_EXT);
+        else:
+            raise ValueError, "Invalid clock source, only 'int' or 'ext' allowed"
 
     def setGain(self, gain):
         '''Set the Gain range 0-78'''
