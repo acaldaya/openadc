@@ -1,13 +1,13 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <report-views version="2.0" >
  <header>
-  <DateModified>2012-06-06T20:45:05</DateModified>
+  <DateModified>2012-06-19T16:50:08</DateModified>
   <ModuleName>interface</ModuleName>
-  <SummaryTimeStamp>2012-06-06T11:30:02</SummaryTimeStamp>
+  <SummaryTimeStamp>2012-06-19T16:48:19</SummaryTimeStamp>
   <SavedFilePath>C:/E/Documents/openadc/openadc_git/hdl/avnet_lx9board_iseproject/iseconfig/interface.xreport</SavedFilePath>
-  <ImplementationReportsDirectory>C:/E/Documents/openadc/openadc_git/hdl/avnet_lx9board_iseproject\</ImplementationReportsDirectory>
-  <DateInitialized>2012-04-08T14:14:20</DateInitialized>
-  <EnableMessageFiltering>true</EnableMessageFiltering>
+  <ImplementationReportsDirectory>C:/E/Documents/openadc/openadc_git/hdl/avnet_lx9board_iseproject</ImplementationReportsDirectory>
+  <DateInitialized>2012-06-19T16:41:39</DateInitialized>
+  <EnableMessageFiltering>false</EnableMessageFiltering>
  </header>
  <body>
   <viewgroup label="Design Overview" >
