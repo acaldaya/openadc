@@ -234,6 +234,10 @@ module interface(
 
 	wire [7:0] PWM_incr;
 
+	wire ADC_clk_extsrc;
+	wire ADC_clk_intsrc;
+	wire ADC_clk_selection; //0=internal, 1=external
+
 `undef CHIPSCOPE
    usb_interface usb(.reset(reset),
                      .clk(slowclock),
@@ -254,7 +258,8 @@ module interface(
 							.phase_ld_o(phase_load),
 							.phase_i(phase_actual),
 							.phase_done_i(phase_done),
-							.phase_clk_o(phase_clk)						
+							.phase_clk_o(phase_clk),
+							.adc_clk_src_o(ADC_clk_selection)
 							
 `ifdef CHIPSCOPE                     
                      , .chipscope_control(chipscope_control)
@@ -273,6 +278,24 @@ module interface(
 											  .dcm_psdone_i(dcm_psdone),
 											  .dcm_status_i(dcm_status));	 
 		 
+		 
+	 	
+	assign ADC_clk_intsrc = clk_100mhz;		 
+		 
+	// BUFGMUX: Global Clock Mux Buffer
+	// Spartan-6
+	// Xilinx HDL Libraries Guide, version 13.2
+	BUFGMUX #(
+	.CLK_SEL_TYPE("SYNC") // Glitchles ("SYNC") or fast ("ASYNC") clock switch-over
+	)
+	BUFGMUX_inst (
+	.O(ADC_clk_src), // 1-bit output: Clock buffer output
+	.I0(ADC_clk_intsrc), // 1-bit input: Clock buffer input (S=0)
+	.I1(ADC_clk_extsrc), // 1-bit input: Clock buffer input (S=1)
+	.S(ADC_clk_selection) // 1-bit input: Clock buffer select
+	);
+	// End of BUFGMUX_inst instantiation
+		 
 	// DCM_SP: Digital Clock Manager
 	// Spartan-6
 	// Xilinx HDL Libraries Guide, version 13.2
@@ -289,7 +312,7 @@ module interface(
 	)
 	DCM_extclock_gen (
 	.CLK2X(dcm_clk),
-	.CLKFX(ADC_clk_src), // 1-bit output: Digital Frequency Synthesizer output (DFS)
+	.CLKFX(ADC_clk_extsrc), // 1-bit output: Digital Frequency Synthesizer output (DFS)
 	.LOCKED(locked), // 1-bit output: DCM_SP Lock Output
 	.PSDONE(dcm_psdone), // 1-bit output: Phase shift done output
 	.STATUS(dcm_status), // 8-bit output: DCM_SP status output

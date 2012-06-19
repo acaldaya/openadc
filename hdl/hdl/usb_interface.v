@@ -25,7 +25,8 @@ module usb_interface(reset, clk, rx_in, tx_out,
 							fifo_empty, fifo_data, fifo_rd_en, fifo_rd_clk,
 							cmd_arm, trigger_mode, trigger_wait,
 							extclk_frequency,
-							phase_o, phase_ld_o, phase_i, phase_done_i, phase_clk_o							
+							phase_o, phase_ld_o, phase_i, phase_done_i, phase_clk_o,
+							adc_clk_src_o							
 `ifdef CHIPSCOPE
                      ,chipscope_control
 `endif                     
@@ -60,6 +61,8 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 output							phase_ld_o;
 	 input  [8:0]					phase_i;
 	 input							phase_done_i;
+	 
+	 output							adc_clk_src_o;
 	 
 	       
 `ifdef CHIPSCOPE
@@ -150,7 +153,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 
 	 0x01 - SETTINGS
 	 
-	   [  X  X  X  X  P  T  H  R ]
+	   [  X  C  W  P  A  T  H  R ]
 	     
 		  R = (bit 0) System Reset, active high
 		  H = (bit 1) Hilo output to amplifier
@@ -168,6 +171,9 @@ module usb_interface(reset, clk, rx_in, tx_out,
 		      1 = Wait for trigger to go inactive before arming
 				0 = Arm immediatly, which if trigger line is currently in active state
 				    will also immediatly trigger
+		  C = (bit 6) Select clock source for ADC
+		      1 = External x4
+				0 = Internal 100 MHz
 		  
 	 0x02 - STATUS
 	 
@@ -247,6 +253,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 assign trigger_mode = registers_settings[2];
 	 assign cmd_arm = registers_settings[3];
 	 assign trigger_wait = registers_settings[5];
+	 assign adc_clk_src_o = registers_settings[6];
 	 
 	 assign gain = registers_gain;
 	  
