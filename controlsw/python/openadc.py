@@ -52,7 +52,7 @@ class serialOpenADCInterface:
         
         self.serial.write(nullmessage);
     
-    def sendMessage(self, mode, address, payload=None, Validate=True):
+    def sendMessage(self, mode, address, payload=None, Validate=True, maxResp=None):
         """Send a message out the serial port"""
 
         if payload is None:
@@ -64,6 +64,9 @@ class serialOpenADCInterface:
         if ((mode == CODE_WRITE) and (length != 1)) or ((mode == CODE_READ) and (length != 0)):
             self.log.error("Invalid payload for mode")
             return None
+
+        if mode == CODE_READ:
+              self.serial.flushInput()
 
         #Flip payload around
         pba = bytearray(payload)
@@ -82,7 +85,10 @@ class serialOpenADCInterface:
         if (mode == CODE_READ):
 
             if (ADDR_ADCDATA == address):
-                datalen = 5000
+                if maxResp:
+                       datalen = maxResp
+                else:
+                       datalen = 5000
             else:
                 datalen = 1
             
@@ -146,6 +152,10 @@ class serialOpenADCInterface:
         cmd = bytearray(1)
         cmd[0] = gain               
         self.sendMessage(CODE_WRITE, ADDR_GAIN, cmd);
+
+    def getGain(self):
+        result = self.sendMessage(CODE_READ, ADDR_GAIN)
+        return result[0]
 
     def setPhase(self, phase):
         '''Set the phase adjust, range -255 to 255'''

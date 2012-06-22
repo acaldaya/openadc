@@ -40,6 +40,10 @@ class pysideGraph():
         self.ymax = QDoubleSpinBox()
         self.ymax.setMinimum(ymin)
         self.ymax.setMaximum(ymax)
+        self.ymin.setValue(ymin)
+        self.ymax.setValue(ymax)
+        self.xmin.setValue(xmin)
+        self.xmax.setValue(xmax)
         self.ymax.setDecimals(5)
 
         self.persistant = QCheckBox("Persistance")
@@ -208,8 +212,37 @@ class OpenADCQt():
     def getLayout(self):
         return self.masterLayout
         
-    def setOpenADC(self, scInstance):
-        self.sc = scInstance
+    def readAllSettings(self):
+
+        #Read all settings as needed
+        sets = self.sc.getSettings();
+
+        if sets & openadc.SETTINGS_GAIN_HIGH:
+            self.hilowmode = openadc.SETTINGS_GAIN_HIGH
+            self.gainhigh.setChecked(True)
+        else:
+            self.hilowmode = openadc.SETTINGS_GAIN_LOW
+            self.gainlow.setChecked(True)
+
+        if sets & openadc.SETTINGS_CLK_EXT:
+            self.clockExternal.setChecked(True)
+        else:
+            self.clockInternal.setChecked(True)
+            
+        self.gain.setValue(self.sc.getGain())
+
+        self.phase.setValue(self.sc.getPhase())
+
+
+        case = sets & (openadc.SETTINGS_TRIG_HIGH | openadc.SETTINGS_WAIT_YES);
+        if case == openadc.SETTINGS_TRIG_HIGH | openadc.SETTINGS_WAIT_YES:
+            self.trigmoderising.setChecked(True)
+        elif case == openadc.SETTINGS_TRIG_LOW | openadc.SETTINGS_WAIT_YES:
+            self.trigmodefalling.setChecked(True)
+        elif case == openadc.SETTINGS_TRIG_HIGH | openadc.SETTINGS_WAIT_NO:
+            self.trigmodehigh.setChecked(True)
+        else:
+            self.trigmodelow.setChecked(True)
 
     def updateGainLabel(self):
         #GAIN (dB) = 50 (dB/V) * VGAIN - 6.5 dB, (HILO = LO)
@@ -235,12 +268,12 @@ class OpenADCQt():
         self.updateGainLabel()
 
         if self.gainhigh.isChecked():
-            self.hilowmode = SETTINGS_GAIN_HIGH
-            self.sc.setSettings(self.sc.getSettings() | SETTINGS_GAIN_HIGH);
+            self.hilowmode = openadc.SETTINGS_GAIN_HIGH
+            self.sc.setSettings(self.sc.getSettings() | openadc.SETTINGS_GAIN_HIGH);
 
         if self.gainlow.isChecked():            
-            self.hilowmode = SETTINGS_GAIN_LOW
-            self.sc.setSettings(self.sc.getSettings() & ~SETTINGS_GAIN_HIGH);
+            self.hilowmode = openadc.SETTINGS_GAIN_LOW
+            self.sc.setSettings(self.sc.getSettings() & ~openadc.SETTINGS_GAIN_HIGH);
 
     def processData(self, data):
 
@@ -275,24 +308,28 @@ class OpenADCQt():
         self.ADCsettrigmode();
         self.sc.setSettings(self.sc.getSettings() | 0x08);
         
-    def ADCcapture(self):
+    def ADCcapture(self, update=True, NumberPoints=None):
 
         #Wait for trigger
         status = self.sc.getStatus()
         while (status & openadc.STATUS_FIFO_MASK) == 0:
             status = self.sc.getStatus()
-            time.sleep(0.1)
+            time.sleep(0.05)
 
         self.sc.setSettings(self.sc.getSettings() & ~0x08);
 
+        if NumberPoints:
+            NumberPoints = NumberPoints * 2
+
         #self.statusBar().showMessage("Reading Data")
-        data = self.sc.sendMessage(openadc.CODE_READ, openadc.ADDR_ADCDATA);
+        data = self.sc.sendMessage(openadc.CODE_READ, openadc.ADDR_ADCDATA, None, False, NumberPoints);
 
         #self.statusBar().showMessage("Received %d bytes"%len(data))
 
         self.datapoints = self.processData(data)
 
-        self.preview.updateData(self.datapoints)         
+        if update:
+            self.preview.updateData(self.datapoints)         
 
     def ADCsettrigmode(self):
         self.trigmode = 0;
@@ -333,14 +370,20 @@ class OpenADCQt():
             # Open serial port if not already
             self.ser = serial.Serial()
             self.ser.port     = "com6"
-            self.ser.baudrate = 115200;
+            self.ser.baudrate = 512000;
             self.ser.timeout  = 0.5     # 0.5 second timeout
-        
-            try:
-                self.ser.open()
-            except serial.SerialException, e:
-                #self.statusBar().showMessage("Could not open com6")
-                raise IOError("Could not open %s"%self.ser.name)
+
+
+
+            attempts = 4
+            while attempts > 0:
+                try:
+                    self.ser.open()
+                    attempts = 0
+                except serial.SerialException, e:
+                    attempts = attempts - 1
+                    if attempts == 0:
+                        raise IOError("Could not open %s"%self.ser.name)
 
         #See if device seems to be attached
         self.sc = openadc.serialOpenADCInterface(self.ser)
@@ -370,6 +413,9 @@ class OpenADCQt():
                 #self.statusBar().showMessage("Failed to received response from USB Device")
 
 #        self.statusBar().showMessage("Connected to ADC Module on port %s" % self.ser.portstr)
+
+        self.readAllSettings()
+
 
     def __del__(self):
         if self.ser:
