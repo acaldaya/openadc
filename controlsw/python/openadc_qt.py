@@ -54,7 +54,7 @@ class pysideGraph():
         settingsLayout.addWidget(QLabel("Y Limits:"), 1, 0)
         settingsLayout.addWidget(self.ymin, 1, 1)
         settingsLayout.addWidget(self.ymax, 1, 2)
-        settingsLayout.addWidget(self.persistant, 2, 0)
+        settingsLayout.addWidget(self.persistant, 1, 3)
         layout.addLayout(settingsLayout)       
         self.gb.setLayout(layout)
 
@@ -126,19 +126,14 @@ class OpenADCQt():
 
         #Add to layout
         gainsettings = QGroupBox("Gain Settings");
-        gainlayout = QVBoxLayout()
+        gainlayout = QGridLayout()
         gainsettings.setLayout(gainlayout)
-        gainmodelayout = QHBoxLayout()
-        gainmodelayout.addWidget(QLabel("Gain Mode: "));
-        gainmodelayout.addWidget(self.gainhigh)
-        gainmodelayout.addWidget(self.gainlow)
-        gainlayout.addLayout(gainmodelayout)
-        gainsettinglayout = QHBoxLayout()
-        gainsettinglayout.addWidget(QLabel("Setting: "));
-        gainsettinglayout.addWidget(self.gain)
-        gainlayout.addLayout(gainmodelayout)
-        gainlayout.addLayout(gainsettinglayout)
-        gainlayout.addWidget(self.gainresults)
+        gainlayout.addWidget(QLabel("Gain Mode: "), 0, 0);
+        gainlayout.addWidget(self.gainhigh, 0, 1)
+        gainlayout.addWidget(self.gainlow, 0, 2)
+        gainlayout.addWidget(QLabel("Setting: "), 0, 3);
+        gainlayout.addWidget(self.gain, 0, 4)
+        gainlayout.addWidget(self.gainresults, 1, 0)
         layout.addWidget(gainsettings)
 
         #Set default
@@ -231,7 +226,9 @@ class OpenADCQt():
             
         self.gain.setValue(self.sc.getGain())
 
-        self.phase.setValue(self.sc.getPhase())
+        phase = self.sc.getPhase();
+        if phase:
+            self.phase.setValue(phase)
 
 
         case = sets & (openadc.SETTINGS_TRIG_HIGH | openadc.SETTINGS_WAIT_YES);
