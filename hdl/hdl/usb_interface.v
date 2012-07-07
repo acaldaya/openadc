@@ -26,10 +26,18 @@ module usb_interface(reset, clk, rx_in, tx_out,
 							cmd_arm, trigger_mode, trigger_wait,
 							extclk_frequency,
 							phase_o, phase_ld_o, phase_i, phase_done_i, phase_clk_o,
-							adc_clk_src_o							
+							adc_clk_src_o,
+							maxsamples
 `ifdef CHIPSCOPE
                      ,chipscope_control
 `endif                     
+
+
+`ifdef DDR
+							,ddr_address,
+							ddr_rd_req,
+							ddr_rd_done
+`endif
                      );
         
     input         				reset;
@@ -66,8 +74,14 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 
 	       
 `ifdef CHIPSCOPE
-    inout [35:0]             chipscope_control;
+    inout [35:0]              chipscope_control;
 `endif     
+		 
+`ifdef DDR
+	 output [31:0] 				ddr_address;
+	 output							ddr_rd_req;
+	 input							ddr_rd_done;
+`endif
 		 
     wire          				ftdi_rxf_n;
     wire          				ftdi_txe_n;	 
@@ -124,6 +138,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
     reg [7:0]  registers_settings;
 	 reg [7:0]  registers_echo;
 	 reg [31:0] registers_extclk_frequency;
+	 reg [31:0] registers_ddr_address;
 	 reg [8:0]	phase_out;
 	 reg [8:0]  phase_in;
 	 reg        phase_loadout;
@@ -181,9 +196,9 @@ module usb_interface(reset, clk, rx_in, tx_out,
 		 T = (bit 0) Triggered status
 		      1 = System armed
 				0 = System disarmed		
-		 F = (bit 1) FIFO Status
-		      1 = FIFO Full (ready to read)
-				0 = FIFO not full (do not read yet)			
+		 F = (bit 1) Capture Status
+		      1 = FIFO Full / Capture Done
+				0 = FIFO Not Full / Capture Not Done
 		 E = (bit 2) External trigger status
 		      1 = Trigger line high
 				0 = Trigger line low
@@ -195,7 +210,8 @@ module usb_interface(reset, clk, rx_in, tx_out,
 
        Data is read from this register by issuing a READ command.
 		 The entire contents of the FIFO will be dumped following
-		 that read command (4096 bytes)		 
+		 that read command (e.g.: number of samples requested), or
+		 in DDR mode 196 words is dumped per read (e.g.: 392 bytes)
 	 
 	    [  1  X  X  P OR D9 D8 D7 ]
 		 
@@ -219,6 +235,24 @@ module usb_interface(reset, clk, rx_in, tx_out,
 		 [                    S P8 ]
 		 
 		 S = Start (write), Status (read)
+		 
+	 0x10 - 0x13 - Number of samples to capture on trigger
+	    0x10 - LSB
+		 0x11
+		 0x12
+		 0x13 - MSB
+	 
+	 0x14 - 0x17 - DDR address to read from.
+	 
+	    This must be 32-bit aligned, e.g. lower 2 bits are zero.
+		 This register is automatically incremented following a
+		 READ command. So to dump entire memory set DDR address to
+		 'zero' then issue read commands.
+		 
+		 0x14 - LSB
+		 0x15
+		 0x16
+		 0x17 - MSB
 	 
 	*/
 	 
@@ -233,17 +267,21 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 `define EXTFREQ_ADDR4  8
 	 `define PHASE_ADDR1    9
 	 `define PHASE_ADDR2   10
-    
-    `define IDLE           'b0000
-    `define ADDR           'b0001
-    `define DATAWR1        'b0010
-    `define DATAWR2        'b0011
-    `define DATAWRDONE     'b0100
-    `define DATARDSTART    'b1000
-    `define DATARD1        'b1001
-    `define DATARD2        'b1010
 	 
-          
+	 `define DDRADDR_ADDR1  16
+	 `define DDRADDR_ADDR2  17
+	 `define DDRADDR_ADDR3  18
+	 `define DDRADDR_ADDR4  19
+    
+    `define IDLE            'b0000
+    `define ADDR            'b0001
+    `define DATAWR1         'b0010
+    `define DATAWR2         'b0011
+    `define DATAWRDONE      'b0100
+    `define DATARDSTART     'b1000
+    `define DATARD1         'b1001
+    `define DATARD2         'b1010
+	 `define DATARD_DDRSTART 'b1011         
 
     reg [3:0]              state = `IDLE;
     reg [5:0]              address;
@@ -335,6 +373,14 @@ module usb_interface(reset, clk, rx_in, tx_out,
                   registers_settings <= ftdi_din;
                end else if (address == `ECHO_ADDR) begin
                   registers_echo <= ftdi_din;
+					end else if (address == `DDRADDR_ADDR1) begin
+						registers_ddr_address[7:0] <= ftdi_din;
+					end else if (address == `DDRADDR_ADDR2) begin
+						registers_ddr_address[15:8] <= ftdi_din;
+					end else if (address == `DDRADDR_ADDR3) begin
+						registers_ddr_address[23:16] <= ftdi_din;
+					end else if (address == `DDRADDR_ADDR4) begin
+						registers_ddr_address[31:24] <= ftdi_din;
 					end
 					
                state <= `IDLE;                         
@@ -363,8 +409,12 @@ module usb_interface(reset, clk, rx_in, tx_out,
 						extclk_locked <= 0;
 					end else if (address == `ADCDATA_ADDR) begin						
 						ftdi_dout <= 8'hAC;
-						ftdi_wr_n <= 1;
+						ftdi_wr_n <= 1;					
+`ifdef DDR
+						state <= `DATARD_DDRSTART;
+`else						
 						state <= `DATARD1;
+`endif
 						extclk_locked <= 0;
 					end else if (address == `STATUS_ADDR) begin
 						ftdi_dout <= status;
@@ -429,6 +479,18 @@ module usb_interface(reset, clk, rx_in, tx_out,
 						state <= `DATARD1;
 					end
             end
+				
+				`DATARD_DDRSTART: begin
+					ftdi_wr_n <= 1;
+					ftdi_rd_n <= 1;
+					fifo_rd_en <= 0;
+					
+					if (ddr_rd_done)
+						state <= `DATARD1;
+					else
+						state <= `DATARD_DDRSTART;
+					
+				end
             
             `DATARD2: begin
                ftdi_isOutput <= 1;
@@ -450,6 +512,15 @@ module usb_interface(reset, clk, rx_in, tx_out,
          endcase
       end                  
     end 
+	 
+	 always @(posedge ftdi_clk)
+	 begin
+		if (state == DATARD_DDRSTART) begin
+			ddr_rd_req <= 1;
+		end else begin
+			ddr_rd_req <= 0;
+		end
+	 end
     
 
     always @(posedge ftdi_clk or posedge reset)

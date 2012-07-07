@@ -7,3 +7,5 @@
 `define UART_CLK 40000000
 
 `define UART_BAUD 512000
+
+`define DDR
