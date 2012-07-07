@@ -309,9 +309,15 @@ class OpenADCQt():
 
         #Wait for trigger
         status = self.sc.getStatus()
+
+        timeout = 0;
         while (status & openadc.STATUS_FIFO_MASK) == 0:
             status = self.sc.getStatus()
             time.sleep(0.05)
+
+            timeout = timeout + 1
+            if timeout > 100:
+                return False
 
         self.sc.setSettings(self.sc.getSettings() & ~0x08);
 
@@ -416,5 +422,5 @@ class OpenADCQt():
 
     def __del__(self):
         if self.ser:
-            self.ser.open()    
+            self.ser.close()    
     
