@@ -56,8 +56,8 @@ module tb_ddr_top;
 	reg adc_trig_status;
 	reg adc_capture_go;
 	reg ddr_read_req;
-	reg ddr_read_address;
-	reg ddr_read_fifoclk;
+	reg [31:0] ddr_read_address;
+	wire ddr_read_fifoclk;
 	reg ddr_read_fifoen;
 
 	// Outputs
@@ -132,6 +132,14 @@ module tb_ddr_top;
       .We_n  (LPDDR_WE_n),
       .Dm    ({LPDDR_UDM,LPDDR_LDM})
       );
+		
+	wire[9:0] adc_data0 ;
+	wire[9:0] adc_data1 ;
+	wire[9:0] adc_data2 ;
+	wire adc_or_out;
+	wire adc_ts_out;
+	
+	reg [31:0] adc_temp;
 
 	initial begin
 		// Initialize Inputs
@@ -143,8 +151,7 @@ module tb_ddr_top;
 		adc_trig_status = 0;
 		adc_capture_go = 0;
 		ddr_read_req = 0;
-		ddr_read_address = 0;
-		ddr_read_fifoclk = 0;
+		ddr_read_address = 256;
 		ddr_read_fifoen = 0;
 		#1;
 		reset = 1;
@@ -164,9 +171,43 @@ module tb_ddr_top;
 		@(posedge adc_capture_stop);
 		adc_capture_go = 0;
 		
-		//Now what?
+		//Dump data out to file
+		ddr_read_req = 1;
+		@(posedge ddr_read_done);
+		ddr_read_req=0;
+		ddr_read_fifoen = 1;		
+			
+		@(posedge ddr_read_fifoempty);
+		ddr_read_fifoen = 0;
 		
 		$finish;
+	end
+	
+	assign adc_or_out = adc_temp[31];
+	assign adc_ts_out = adc_temp[30];
+	assign adc_data2 = adc_temp[29:20]; //Sample N + 2
+	assign adc_data1 = adc_temp[19:10]; //Sample N + 1
+	assign adc_data0 = adc_temp[9:0];   //Sample N
+	
+	reg ddr_read_fifoen_delay;
+	
+	always @(posedge ddr_read_fifoclk) begin
+		ddr_read_fifoen_delay <= ddr_read_fifoen;
+	end
+	
+	always @(posedge ddr_read_fifoclk) begin	
+	if (ddr_read_fifoclk & ddr_read_fifoen_delay) begin	
+		adc_temp[31:24] = ddr_read_data;
+		
+		@(posedge ddr_read_fifoclk);
+		adc_temp[23:16] = ddr_read_data;
+		
+		@(posedge ddr_read_fifoclk);
+		adc_temp[15:8] = ddr_read_data;
+		
+		@(posedge ddr_read_fifoclk);
+		adc_temp[7:0] = ddr_read_data;
+	end
 	end
 	
 	//ADC clock is slower
@@ -181,6 +222,8 @@ module tb_ddr_top;
 		adc_datain = adc_datain + 1;
 	end
 		
+	
+	assign ddr_read_fifoclk = clk_100mhz;
 	
 	always begin
 		#5 clk_100mhz = ~clk_100mhz;

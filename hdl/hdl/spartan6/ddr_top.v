@@ -58,23 +58,12 @@ module ddr_top(
 	 output			LPDDR_RZQ	 
 	 );
 	 	 
-	wire 				ddrfifo_wr_clk;
-	wire [7:0] 		ddrfifo_din;
-	wire [7:0] 		ddrfifo_dout;
 	reg 				ddrfifo_wr_en;
 	wire 				ddrfifo_full;
-	wire				ddrfifo_empty;
-	wire				ddrfifo_rd_en;
-	wire				ddrfifo_rd_clk;	 
-
-	//wire				c3_p2_cmd_clk;
+	
    reg				c3_p2_cmd_en;
-   //wire [2:0]		c3_p2_cmd_instr;
-   //wire [5:0]		c3_p2_cmd_bl;
-   //wire [29:0]		c3_p2_cmd_byte_addr;
    wire				c3_p2_cmd_empty;
    wire				c3_p2_cmd_full;
-   //wire				c3_p2_rd_clk,
    wire				c3_p2_rd_en;
    wire [31:0]		c3_p2_rd_data;
    wire				c3_p2_rd_full;
@@ -83,18 +72,12 @@ module ddr_top(
    wire				c3_p2_rd_overflow;
    wire				c3_p2_rd_error;
 	 
-	//wire 				c3_p3_cmd_clk;
 	reg 				c3_p3_cmd_en;
-	//wire [2:0] 		c3_p3_cmd_instr;
-	//wire [5:0] 		c3_p3_cmd_bl;
-	wire [29:0] 	c3_p3_cmd_byte_addr;
 	wire 				c3_p3_cmd_empty;
 	wire 				c3_p3_cmd_full;
 	
-	//wire 				c3_p3_wr_clk;
 	reg 				c3_p3_wr_en;
 	wire 	[3:0] 	c3_p3_wr_mask;
-	wire [31:0] 	c3_p3_wr_data;
 	wire 				c3_p3_wr_full;
 	wire 				c3_p3_wr_empty;
 	wire [6:0] 		c3_p3_wr_count;
@@ -128,7 +111,7 @@ module ddr_top(
 	assign			adc_capture_stop = adc_capture_stop_reg;
 	
 	always@(posedge adc_sampleclk) begin
-		if (sample_counter > 4000) begin
+		if (sample_counter > 400) begin
 				adc_capture_stop_reg <= 1;
 		end else begin
 				adc_capture_stop_reg <= 0;
@@ -142,14 +125,15 @@ module ddr_top(
 			adcfifo_wr_en <= 0;
 		end else begin
 			if (adcfifo_merge_cnt == 'b001)
-				adcfifo_adcsample0 = adc_datain;
+				adcfifo_adcsample0 <= adc_datain;
 			else if (adcfifo_merge_cnt == 'b010)
-				adcfifo_adcsample1 = adc_datain;
+				adcfifo_adcsample1 <= adc_datain;
 			else if (adcfifo_merge_cnt == 'b100)
-				adcfifo_adcsample2 = adc_datain;
+				adcfifo_adcsample2 <= adc_datain;
 
-			adcfifo_or = adc_or;
-			adcfifo_trigstat = adc_trig_status;
+			adcfifo_or <= adc_or;
+			adcfifo_trigstat <= adc_trig_status;
+			
 			if (adcfifo_merge_cnt == 'b100) begin
 				adcfifo_merge_cnt <= 'b001;
 				adcfifo_wr_en <= 1;
@@ -337,13 +321,13 @@ module ddr_top(
 		.c3_p3_cmd_en                           (c3_p3_cmd_en),
 		.c3_p3_cmd_instr                        (3'b000), //WRITE command
 		.c3_p3_cmd_bl                           (6'd63), //64 word burst
-		.c3_p3_cmd_byte_addr                    (c3_p3_cmd_byte_addr),
+		.c3_p3_cmd_byte_addr                    (ddr_write_addr[29:0]),
 		.c3_p3_cmd_empty                        (c3_p3_cmd_empty),
 		.c3_p3_cmd_full                         (c3_p3_cmd_full),
 		.c3_p3_wr_clk                           (ddr_usrclk),
 		.c3_p3_wr_en                            (c3_p3_wr_en),
-		.c3_p3_wr_mask                          (0),
-		.c3_p3_wr_data                          (c3_p3_wr_data),
+		.c3_p3_wr_mask                          (4'd0),
+		.c3_p3_wr_data                          (adcfifo_dout),
 		.c3_p3_wr_full                          (c3_p3_wr_full),
 		.c3_p3_wr_empty                         (c3_p3_wr_empty),
 		.c3_p3_wr_count                         (c3_p3_wr_count),
@@ -364,20 +348,20 @@ module ddr_top(
 	ddr_read_fifo ddr_resize_fifo (
 		.rst(reset), // input rst
 		.wr_clk(ddr_usrclk), // input wr_clk
-		.rd_clk(ddrfifo_rd_clk), // input rd_clk
+		.rd_clk(ddr_read_fifoclk), // input rd_clk
 		.din(c3_p2_rd_data), // input [31 : 0] din
 		.wr_en(ddrfifo_wr_en), // input wr_en
-		.rd_en(ddrfifo_rd_en), // input rd_en
-		.dout(ddrfifo_dout), // output [7 : 0] dout
+		.rd_en(ddr_read_fifoen), // input rd_en
+		.dout(ddr_read_data), // output [7 : 0] dout
 		.full(ddrfifo_full), // output full
-		.empty(ddrfifo_empty) // output empty
+		.empty(ddr_read_fifoempty) // output empty
 	);
 	
 	
 	always @(posedge ddr_usrclk or posedge ddr_usrreset)
     begin
       if (reset == 1) begin
-         state <= `IDLE; 
+         ddrread_state <= `IDLE; 
       end else begin
 		case (ddrread_state)
             `IDLE: begin
