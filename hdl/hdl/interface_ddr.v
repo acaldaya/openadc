@@ -49,8 +49,8 @@ module interface(
 	 inout  [15:0] LPDDR_DQ,
 	 output        LPDDR_LDM,
 	 output        LPDDR_UDM,
-	 input			LPDDR_LDQS,
-	 input			LPDDR_UDQS,
+	 inout			LPDDR_LDQS,
+	 inout			LPDDR_UDQS,
 	 output			LPDDR_CK_N,
 	 output			LPDDR_CK_P,
 	 output			LPDDR_CKE,
@@ -162,12 +162,13 @@ module interface(
 	reg 			armed;
 	reg			adc_capture_start;
 	
-  `ifdef CHIPSCOPE
+  //`ifdef CHIPSCOPE
   wire [35:0]                          chipscope_control;
   coregen_icon icon (
     .CONTROL0(chipscope_control) // INOUT BUS [35:0]
    );  
-   
+  
+/*  
    wire [15:0] cs_data;
 	 
    coregen_ila ila (
@@ -177,6 +178,7 @@ module interface(
    );   
 
   `endif
+	*/
 	
 	wire trigger;	
 	assign trigger = DUT_trigger_i;
@@ -187,6 +189,9 @@ module interface(
 	//1 = wait for trigger to be INACTIVE before arming (e.g.: avoid triggering immediatly)
 	//0 = arm as soon as cmd_arm goes high (e.g.: if trigger is already in active state, trigger)
 	wire trigger_wait;
+	
+	wire adc_capture_done;
+	reg adc_capture_go;
 	
 	//ADC Trigger Stuff	
 	reg reset_arm;
@@ -233,7 +238,7 @@ module interface(
 	wire				ddrfifo_rd_en;
 	wire				ddrfifo_rd_clk;	
 
-`undef CHIPSCOPE
+`define CHIPSCOPE
    usb_interface usb(.reset(reset),
                      .clk(slowclock),
 							.rx_in(rxd),
@@ -262,6 +267,7 @@ module interface(
 `ifdef CHIPSCOPE                     
                      , .chipscope_control(chipscope_control)
 `endif
+
                      );                      	 
 	
 	 dcm_phaseshift_interface dcmps(.clk_i(phase_clk),
@@ -277,9 +283,10 @@ module interface(
 											  .dcm_status_i(dcm_status));	 
 		 
 		 
-	 	
-	assign ADC_clk_intsrc = clk_100mhz;		 
-		 
+	
+	wire clk_100mhz_buf; 	
+	assign ADC_clk_intsrc = clk_100mhz_buf;		 
+			 
 	// BUFGMUX: Global Clock Mux Buffer
 	// Spartan-6
 	// Xilinx HDL Libraries Guide, version 13.2
@@ -293,7 +300,14 @@ module interface(
 	.S(ADC_clk_selection) // 1-bit input: Clock buffer select
 	);
 	// End of BUFGMUX_inst instantiation
-		 
+			 
+			 
+			 /*
+	IBUFG IBUFG_inst (
+		.O(clk_100mhz_buf),
+		.I(clk_100mhz) );
+		*/
+			 
 	// DCM_SP: Digital Clock Manager
 	// Spartan-6
 	// Xilinx HDL Libraries Guide, version 13.2
@@ -347,5 +361,49 @@ module interface(
 	
 	//assign amp_hilo = 1'b0;
 	assign amp_gain = PWM_accumulator[8];
+	
+	ddr_top ddr(
+    .reset(reset),
+    .clk_100mhz_in(clk_100mhz),
+	 .clk_100mhz_out(clk_100mhz_buf),
+	 
+	 //ADC Sample Input
+	 .adc_datain(ADC_Data_tofifo),
+	 .adc_sampleclk(ADC_clk_sample),
+	 .adc_or(ADC_OR),
+	 .adc_trig_status(DUT_trigger_i),
+	 .adc_capture_go(adc_capture_go), //Set to '1' to start capture, keep at 1 until adc_capture_stop goes high
+	 .adc_capture_stop(adc_capture_done),
+	 
+	 //DDR to USB Read Interface
+	 .ddr_read_req(ddr_read_req),
+	 .ddr_read_done(ddr_read_done),
+	 .ddr_read_address(ddr_read_address[29:0]),
+	 .ddr_read_fifoclk(ddrfifo_rd_clk),
+	 .ddr_read_fifoen(ddrfifo_rd_en),
+	 .ddr_read_fifoempty(ddrfifo_empty),
+	 .ddr_read_data(ddrfifo_dout),
+	 .ddr_cal_done(reg_status[5]),
+	 .ddr_error(reg_status[4]),
+	 
+	 //DDR HW Interface
+	 .LPDDR_A(LPDDR_A),
+	 .LPDDR_BA(LPDDR_BA),
+	 .LPDDR_DQ(LPDDR_DQ),
+	 .LPDDR_LDM(LPDDR_LDM),
+	 .LPDDR_UDM(LPDDR_UDM),
+	 .LPDDR_LDQS(LPDDR_LDQS),
+	 .LPDDR_UDQS(LPDDR_UDQS),
+	 .LPDDR_CK_N(LPDDR_CK_N),
+	 .LPDDR_CK_P(LPDDR_CK_P),
+	 .LPDDR_CKE(LPDDR_CKE),
+	 .LPDDR_CAS_n(LPDDR_CAS_n),
+	 .LPDDR_RAS_n(LPDDR_RAS_n),
+	 .LPDDR_WE_n(LPDDR_WE_n),
+	 .LPDDR_RZQ(LPDDR_RZQ)	 
+	 );
+	
+	
+	assign adcfifo_full = ~adc_capture_go;
 	
 endmodule

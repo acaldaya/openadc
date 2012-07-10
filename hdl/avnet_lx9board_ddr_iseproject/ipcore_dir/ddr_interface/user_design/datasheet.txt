@@ -1,0 +1,64 @@
+
+
+CORE Generator Options:
+   Target Device              : xc6slx9-csg324
+   Speed Grade                : -2
+   HDL                        : verilog
+   Synthesis Tool             : Foundation_ISE
+
+MIG Output Options:
+   Component Name             : ddr_interface
+   No of Controllers          : 1
+   Hardware Test Bench           : disabled
+
+    
+/*******************************************************/
+/*                  Controller 3                       */
+/*******************************************************/
+Controller Options : 
+   Memory                  : LPDDR
+   Design Clock Frequency  : 10000 ps (100.00 MHz)
+   Memory Type             : Components
+   Memory Part             : MT46H32M16XXXX-5
+   Equivalent Part(s)      : MT46H32M16LFBF-5
+   Row Address             : 13
+   Bank Address            : 2
+   Data Mask               : enabled
+
+Memory Options :
+   Burst Length                       : 4(010)
+   CAS Latency                        : 3
+   Partial-Array Self Refresh         : Full Array
+   Operation                          : Normal AR Operation 
+   Drive Strength                     : Full-Strength
+
+User Interface Parameters :
+   Configuration Type     : Two 32-bit bi-directional and four 32-bit unidirectional ports
+   Ports Selected         : Port2, Port3
+   Memory Address Mapping : ROW_BANK_COLUMN
+
+   Arbitration Algorithm  : Round Robin
+
+   Arbitration            : 
+      Time Slot0 : 23
+      Time Slot1 : 32
+      Time Slot2 : 23
+      Time Slot3 : 32
+      Time Slot4 : 23
+      Time Slot5 : 32
+      Time Slot6 : 23
+      Time Slot7 : 32
+      Time Slot8 : 23
+      Time Slot9 : 32
+      Time Slot10: 23
+      Time Slot11: 32
+
+FPGA Options :
+   Class for Address and Control       : II
+   Class for Data                      : II
+   Memory Interface Pin Termination    : EXTERN_TERM
+   DQ/DQS                              : 25 Ohms
+   Bypass Calibration                  : enabled
+   Debug Signals for Memory Controller : Disable
+   Input Clock Type                    : Single-Ended 
+    

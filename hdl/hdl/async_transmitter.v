@@ -17,11 +17,8 @@ parameter RegisterInputData = 1;	// in RegisterInputData mode, the input doesn't
 // Baud generator
 parameter BaudGeneratorAccWidth = 16;
 reg [BaudGeneratorAccWidth:0] BaudGeneratorAcc;
-`ifdef DEBUG
-wire [BaudGeneratorAccWidth:0] BaudGeneratorInc = 17'h10000;
-`else
 wire [BaudGeneratorAccWidth:0] BaudGeneratorInc = ((Baud<<(BaudGeneratorAccWidth-4))+(ClkFrequency>>5))/(ClkFrequency>>4);
-`endif
+
 
 wire BaudTick = BaudGeneratorAcc[BaudGeneratorAccWidth];
 wire TxD_busy;

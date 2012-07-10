@@ -41,7 +41,24 @@ module interface(
 	 input         DUT_CLK_i,
 	 input         DUT_trigger_i,
 	 output        amp_gain,
-	 output        amp_hilo 
+	 output        amp_hilo
+	 
+`ifdef USE_DDR
+	 ,output [12:0] LPDDR_A,
+	 output [1:0]  LPDDR_BA,
+	 inout  [15:0] LPDDR_DQ,
+	 output        LPDDR_LDM,
+	 output        LPDDR_UDM,
+	 input			LPDDR_LDQS,
+	 input			LPDDR_UDQS,
+	 output			LPDDR_CK_N,
+	 output			LPDDR_CK_P,
+	 output			LPDDR_CKE,
+	 output			LPDDR_CAS_n,
+	 output			LPDDR_RAS_n,
+	 output			LPDDR_WE_n,
+	 output			LPDDR_RZQ
+`endif
     );
 
 	wire        slowclock;
@@ -143,23 +160,59 @@ module interface(
 
   
 	//Input to FIFO based on output register format
-	wire [15:0] fifo_in;	
-	assign fifo_in[15] = 1;
-	assign fifo_in[14] = 0;
-	assign fifo_in[13] = 0;
-	assign fifo_in[12] = 0; //PLL LOCK STATUS
-	assign fifo_in[11] = ADC_OR;
-	assign fifo_in[10:8] = ADC_Data_tofifo[9:7];
-	assign fifo_in[7] = 0;
-	assign fifo_in[6:0] = ADC_Data_tofifo[6:0];
-
-	wire fifo_full;
-	wire fifo_empty;
-	reg fifo_wr_en;
-	wire fifo_rd_en;
-	wire [7:0] fifo_dout;
-	wire [7:0] reg_status;
-	reg armed;
+	wire [31:0] fifo_in;	
+	reg [2:0]  	fifo_merge_cnt;
+	reg        	fifo_or;
+	reg			fifo_trigstat;
+	reg			adc_capture_go;
+	reg [9:0] 	adcsample [0:2];
+	
+	wire 			fifo_full;
+	wire 			fifo_empty;
+	reg 			fifo_wr_en;
+	wire 			fifo_rd_en;
+	wire 	[7:0] fifo_dout;
+	wire [7:0] 	reg_status;
+	wire 			fifo_has64;
+	reg 			armed;
+	
+	reg [31:0]  sample_counter; //How many 3-sample tuples gone through fifo
+	
+	reg 			adc_capture_stop;
+	
+	always@(posedge ADC_clk_sample) begin
+		if sample_counter > 1000000 begin
+				adc_capture_stop = 1;
+		end else begin
+				adc_capture_stop = 0;
+		end
+	end
+	
+	always@(posedge ADC_clk_sample) begin
+		if (~adc_capture_go) begin
+			ADC_clk_sample <= 0;
+			fifo_merge_cnt <= 0;
+			fifo_wr_en <= 0;
+		end else begin
+		   fifo_adcsample[fifo_merge_cnt] = adcsample;
+			fifo_or = ADC_OR;
+			fifo_trigstat = DUT_trigger_i;
+			if (fifo_merge_cnt == 3'b10) begin
+				fifo_merge_cnt <= 0;
+				fifo_wr_en <= 1;
+				ADC_clk_sample <= ADC_clk_sample + 1;
+			end else begin
+				fifo_merge_cnt <= fifo_merge_cnt + 1;
+				fifo_wr_en <= 0;
+			end
+		end
+	end
+	
+	assign fifo_in[31] = fifo_or;
+	assign fifo_in[30] = fifo_trigstat;
+	assign fifo_in[29:20] = adcsample[2];
+	assign fifo_in[19:10] = adcsample[1];
+	assign fifo_in[9:0] = adcsample[0];
 	
   `ifdef CHIPSCOPE
   wire [35:0]                          chipscope_control;
@@ -178,17 +231,21 @@ module interface(
   `endif
 
 
+	wire [31:0] adc_fifo_in
+
+
 	//Generate ADC FIFO
 	adc_fifo adcfifo (
 	  .wr_clk(ADC_clk_sample), // input wr_clk
 	  .rst(reset), // input rst
 	  .rd_clk(fifo_rd_clk), // input rd_clk
-	  .din(fifo_in), // input [15 : 0] din
+	  .din(fifo_in), // input [31 : 0] din
 	  .wr_en(fifo_wr_en), // input wr_en
 	  .rd_en(fifo_rd_en), // input rd_en
-	  .dout(fifo_dout), // output [7 : 0] dout
+	  .dout(fifo_dout), // output [31 : 0] dout
 	  .full(fifo_full), // output full
-	  .empty(fifo_empty) // output empty
+	  .empty(fifo_empty), // output empty
+	  .prog_full(fifo_has64) // has 64 words at least
 	);  
 	
 	wire trigger;	
@@ -205,14 +262,14 @@ module interface(
 	reg reset_arm;
 	always @(posedge ADC_clk_sample or posedge reset) begin
 		if (reset) begin
-			fifo_wr_en <= 0;
+			adc_capture_go <= 0;
 			reset_arm <= 0;
 		end else begin
-			if (fifo_full) begin
-				fifo_wr_en <= 0;
+			if (adc_capture_stop) begin
+				adc_capture_go <= 0;
 				reset_arm <= 0;
 			end else if ((trigger == trigger_mode) & armed) begin
-				fifo_wr_en <= 1;
+				adc_capture_go <= 1;
 				reset_arm <= 1;
 			end
 		end
@@ -230,7 +287,13 @@ module interface(
         
 	assign reg_status[0] = armed;
    assign reg_status[1] = fifo_full;
-	assign reg_status[2] = trigger;
+	assign reg_status[2] = trigger;            
+
+
+
+
+
+
 
 	wire [7:0] PWM_incr;
 
@@ -246,10 +309,10 @@ module interface(
 							.gain(PWM_incr),
                      .hilow(amp_hilo),
 							.status(reg_status),
-							.fifo_empty(fifo_empty),
-							.fifo_data(fifo_dout),
-							.fifo_rd_en(fifo_rd_en),
-							.fifo_rd_clk(fifo_rd_clk),                     
+							.fifo_empty(ddrfifo_empty),
+							.fifo_data(ddrfifo_dout),
+							.fifo_rd_en(ddrfifo_rd_en),
+							.fifo_rd_clk(ddrfifo_rd_clk),                     
 							.cmd_arm(cmd_arm),
 							.trigger_mode(trigger_mode),
 							.trigger_wait(trigger_wait),                     
@@ -348,6 +411,7 @@ module interface(
 	always @(posedge slowclock) PWM_accumulator <= PWM_accumulator[7:0] + PWM_incr;
 	
 	//assign amp_hilo = 1'b0;
-	assign amp_gain = PWM_accumulator[8];
+	assign amp_gain = PWM_accumulator[8];	
+	
 
 endmodule

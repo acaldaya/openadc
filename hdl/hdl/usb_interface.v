@@ -1,5 +1,5 @@
 `include "includes.v"
-`undef CHIPSCOPE
+`define CHIPSCOPE
 
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
@@ -33,7 +33,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
 `endif                     
 
 
-`ifdef DDR
+`ifdef USE_DDR
 							,ddr_address,
 							ddr_rd_req,
 							ddr_rd_done
@@ -72,23 +72,29 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 
 	 output							adc_clk_src_o;
 	 
+	 output [31:0]					maxsamples;
+	 
 	       
 `ifdef CHIPSCOPE
     inout [35:0]              chipscope_control;
 `endif     
 		 
-`ifdef DDR
+`ifdef USE_DDR
 	 output [31:0] 				ddr_address;
 	 output							ddr_rd_req;
 	 input							ddr_rd_done;
+	 reg								ddr_rd_reg;
+	 
+	 assign ddr_rd_req = ddr_rd_reg;
 `endif
-		 
+	
     wire          				ftdi_rxf_n;
     wire          				ftdi_txe_n;	 
     reg           				ftdi_rd_n;
     reg           				ftdi_wr_n;
 	 reg								fifo_rd_en;
     
+	 
     wire [7:0] ftdi_din;
     reg [7:0]  ftdi_dout;
     reg        ftdi_isOutput;
@@ -112,8 +118,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
    coregen_ila ila (
     .CONTROL(chipscope_control), // INOUT BUS [35:0]
     .CLK(clk), // IN
-    .DATA(cs_data), // IN BUS [127:0]
-    .TRIG0(cs_trig) // IN BUS [0:0]
+    .TRIG0(cs_data) // IN BUS [127:0]
    );
   
 `endif
@@ -192,7 +197,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
 		  
 	 0x02 - STATUS
 	 
-	    [  X  X  X  X  X  E  F  T ] 
+	    [  X  X  DC DE P  E  F  T ] 
 		 T = (bit 0) Triggered status
 		      1 = System armed
 				0 = System disarmed		
@@ -204,7 +209,13 @@ module usb_interface(reset, clk, rx_in, tx_out,
 				0 = Trigger line low
 		 P = (bit 3) DUT Clkin PLL Status
 		      1 = Locked / OK
-				0 = Unlocked
+				0 = Unlocked				
+		 DE = (bit 4) DDR Error
+		      1 = DDR error (FIFO underflow/overflow or DDR Error)
+				0 = No error		 
+		 DC = (bit 5) DDR Calibration Done
+		      1 = Cal done OK
+				0 = Cal in progress/failed
 		
 	 0x03 - ADC Readings
 
@@ -266,8 +277,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 `define EXTFREQ_ADDR3  7
 	 `define EXTFREQ_ADDR4  8
 	 `define PHASE_ADDR1    9
-	 `define PHASE_ADDR2   10
-	 
+	 `define PHASE_ADDR2    10	 
 	 `define DDRADDR_ADDR1  16
 	 `define DDRADDR_ADDR2  17
 	 `define DDRADDR_ADDR3  18
@@ -410,7 +420,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
 					end else if (address == `ADCDATA_ADDR) begin						
 						ftdi_dout <= 8'hAC;
 						ftdi_wr_n <= 1;					
-`ifdef DDR
+`ifdef USE_DDR
 						state <= `DATARD_DDRSTART;
 `else						
 						state <= `DATARD1;
@@ -513,12 +523,16 @@ module usb_interface(reset, clk, rx_in, tx_out,
       end                  
     end 
 	 
-	 always @(posedge ftdi_clk)
+	 always @(posedge ftdi_clk or posedge ddr_rd_done)
 	 begin
-		if (state == DATARD_DDRSTART) begin
-			ddr_rd_req <= 1;
-		end else begin
+		if (ddr_rd_done) begin
 			ddr_rd_req <= 0;
+		end else if (ftdi_clk) begin
+			if (state == `DATARD_DDRSTART) begin
+				ddr_rd_reg <= 1;
+			end else begin
+				ddr_rd_reg <= 0;
+			end
 		end
 	 end
     
@@ -549,11 +563,13 @@ module usb_interface(reset, clk, rx_in, tx_out,
 
 	  
 `ifdef CHIPSCOPE
-   assign cs_trig = (state == `IDLE) ? 0 : 1;
    assign cs_data[3:0] = state;
    assign cs_data[11:4] = address;
    assign cs_data[12] = ftdi_rxf_n;
-   assign cs_data[127:16] = registers_echo[127:16]; 
+   assign cs_data[23:16] = registers_echo[7:0]; 
+	assign cs_data[24] = ftdi_wr_n;
+	assign cs_data[32:25] = ftdi_dout;
+	assign cs_data[33] = txbusy;
  `endif
  
 endmodule

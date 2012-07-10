@@ -21,7 +21,8 @@
 
 module ddr_top(
     input         reset,
-    input			clk_100mhz,
+    input			clk_100mhz_in,
+	 output			clk_100mhz_out,
 	 
 	 //ADC Sample Input
 	 input [9:0]   adc_datain,
@@ -40,6 +41,7 @@ module ddr_top(
 	 output			ddr_read_fifoempty,
 	 output [7:0]	ddr_read_data,
 	 output			ddr_cal_done,
+	 output			ddr_error,
 	 
 	 //DDR HW Interface
 	 output [12:0] LPDDR_A,
@@ -182,20 +184,22 @@ module ddr_top(
 	assign c3_p3_cmd_clk =  ddr_usrclk;
 
 	reg [31:0] ddr_write_addr;
+	reg [31:0] ddr_write_nextaddr;
 	reg [6:0]  ddr_fifo_datawritten;
 
 	reg [3:0] state;
 
 	always @(posedge ddr_usrclk or posedge ddr_usrreset)
     begin
-      if (reset == 1) begin
+      if (ddr_usrreset == 1) begin
          state <= `IDLE; 
          c3_p3_cmd_en <= 0;
 			ddr_write_addr <= 0;	
+			ddr_write_nextaddr <= 0;
 			ddr_fifo_datawritten <= 0;
 			c3_p3_wr_en <= 0;
 			adcfifo_rd_en <= 0;	
-      end else begin
+      end else if (ddr_usrclk == 1) begin
          case (state)
             `IDLE: begin
 					c3_p3_cmd_en <= 0;
@@ -248,7 +252,8 @@ module ddr_top(
 					if (~c3_p3_cmd_full) begin
 						state <= `DATA_WAIT;
 						c3_p3_cmd_en <= 1;
-						ddr_write_addr <= ddr_write_addr + 256;
+						ddr_write_addr <= ddr_write_nextaddr;
+						ddr_write_nextaddr <= ddr_write_nextaddr + 256;
 					end else begin
 						state <= `CMD_WAIT;
 						c3_p3_cmd_en <= 0;
@@ -277,7 +282,7 @@ module ddr_top(
 	)
 	u_ddr_interface (
 
-	  .c3_sys_clk           (clk_100mhz),
+	  .c3_sys_clk           (clk_100mhz_in),
 	  .c3_sys_rst_i           (reset),                        
 
 	  .mcb3_dram_dq           (LPDDR_DQ),  
@@ -335,6 +340,9 @@ module ddr_top(
 		.c3_p3_wr_error                         (c3_p3_wr_error)
 	);
 	
+	assign clk_100mhz_out = ddr_usrclk;
+	assign ddr_error = c3_p3_wr_error | c3_p3_wr_underrun | c3_p2_rd_overflow | c3_p2_rd_error;
+	
 	/* READ LOGIC */
 	`define DDRREAD_READ  	'b0001
 	`define DDRREAD_LOAD1   'b0010
@@ -360,9 +368,9 @@ module ddr_top(
 	
 	always @(posedge ddr_usrclk or posedge ddr_usrreset)
     begin
-      if (reset == 1) begin
+      if (ddr_usrreset == 1) begin
          ddrread_state <= `IDLE; 
-      end else begin
+      end else if (ddr_usrclk == 1) begin		
 		case (ddrread_state)
             `IDLE: begin
 					ddr_read_done_reg <= 0;

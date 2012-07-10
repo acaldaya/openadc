@@ -66,6 +66,7 @@ module tb_ddr_top;
 	wire ddr_read_fifoempty;
 	wire ddr_cal_done;
 	wire [7:0] ddr_read_data;
+	wire ddr_error;
 	wire [12:0] LPDDR_A;
 	wire [1:0] LPDDR_BA;
 	wire LPDDR_LDM;
@@ -86,7 +87,7 @@ module tb_ddr_top;
 	// Instantiate the Unit Under Test (UUT)
 	ddr_top uut (
 		.reset(reset), 
-		.clk_100mhz(clk_100mhz), 
+		.clk_100mhz_in(clk_100mhz), 
 		.adc_datain(adc_datain), 
 		.adc_sampleclk(adc_sampleclk), 
 		.adc_or(adc_or), 
@@ -101,6 +102,7 @@ module tb_ddr_top;
 		.ddr_read_fifoempty(ddr_read_fifoempty), 
 		.ddr_read_data(ddr_read_data), 
 		.ddr_cal_done(ddr_cal_done),
+		.ddr_error(ddr_error),
 		.LPDDR_A(LPDDR_A), 
 		.LPDDR_BA(LPDDR_BA), 
 		.LPDDR_DQ(LPDDR_DQ), 
