@@ -20,7 +20,8 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 module ddr_top(
-    input         reset,
+    input         reset_i,
+	 output			reset_o,
     input			clk_100mhz_in,
 	 output			clk_100mhz_out,
 	 
@@ -161,7 +162,7 @@ module ddr_top(
 	//NOTE: Fifo is fall-through-first-word (FTFW)
 	adc_fifo adcfifo (
 	  .wr_clk(adc_sampleclk), // input wr_clk
-	  .rst(reset), // input rst
+	  .rst(ddr_usrreset), // input rst
 	  .rd_clk(adcfifo_rd_clk), // input rd_clk
 	  .din(adcfifo_in), // input [31 : 0] din
 	  .wr_en(adcfifo_wr_en), // input wr_en
@@ -199,7 +200,7 @@ module ddr_top(
 			ddr_fifo_datawritten <= 0;
 			c3_p3_wr_en <= 0;
 			adcfifo_rd_en <= 0;	
-      end else if (ddr_usrclk == 1) begin
+      end else begin
          case (state)
             `IDLE: begin
 					c3_p3_cmd_en <= 0;
@@ -283,7 +284,7 @@ module ddr_top(
 	u_ddr_interface (
 
 	  .c3_sys_clk           (clk_100mhz_in),
-	  .c3_sys_rst_i           (reset),                        
+	  .c3_sys_rst_i           (reset_i),                        
 
 	  .mcb3_dram_dq           (LPDDR_DQ),  
 	  .mcb3_dram_a            (LPDDR_A),  
@@ -340,6 +341,7 @@ module ddr_top(
 		.c3_p3_wr_error                         (c3_p3_wr_error)
 	);
 	
+	assign reset_o = ddr_usrreset;
 	assign clk_100mhz_out = ddr_usrclk;
 	assign ddr_error = c3_p3_wr_error | c3_p3_wr_underrun | c3_p2_rd_overflow | c3_p2_rd_error;
 	
@@ -354,7 +356,7 @@ module ddr_top(
 	end
 	
 	ddr_read_fifo ddr_resize_fifo (
-		.rst(reset), // input rst
+		.rst(ddr_usrreset), // input rst
 		.wr_clk(ddr_usrclk), // input wr_clk
 		.rd_clk(ddr_read_fifoclk), // input rd_clk
 		.din(c3_p2_rd_data), // input [31 : 0] din
@@ -370,7 +372,7 @@ module ddr_top(
     begin
       if (ddr_usrreset == 1) begin
          ddrread_state <= `IDLE; 
-      end else if (ddr_usrclk == 1) begin		
+      end else begin		
 		case (ddrread_state)
             `IDLE: begin
 					ddr_read_done_reg <= 0;

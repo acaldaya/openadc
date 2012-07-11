@@ -1,5 +1,5 @@
 `include "includes.v"
-`define CHIPSCOPE
+`undef CHIPSCOPE
 
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
@@ -112,7 +112,6 @@ module usb_interface(reset, clk, rx_in, tx_out,
     //assign ftdi_din = ftdi_d;
     
 `ifdef CHIPSCOPE
-   wire cs_trig;
    wire [127:0] cs_data;
     
    coregen_ila ila (
@@ -526,8 +525,8 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 always @(posedge ftdi_clk or posedge ddr_rd_done)
 	 begin
 		if (ddr_rd_done) begin
-			ddr_rd_req <= 0;
-		end else if (ftdi_clk) begin
+			ddr_rd_reg <= 0;
+		end else begin
 			if (state == `DATARD_DDRSTART) begin
 				ddr_rd_reg <= 1;
 			end else begin

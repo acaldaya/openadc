@@ -153,7 +153,7 @@ module tb_ddr_top;
 		adc_trig_status = 0;
 		adc_capture_go = 0;
 		ddr_read_req = 0;
-		ddr_read_address = 256;
+		ddr_read_address = 0;
 		ddr_read_fifoen = 0;
 		#1;
 		reset = 1;

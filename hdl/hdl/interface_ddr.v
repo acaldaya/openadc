@@ -1,4 +1,5 @@
 `include "includes.v"
+`define CHIPSCOPE
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
 // Engineer: 
@@ -62,7 +63,7 @@ module interface(
     );
 
 	wire        slowclock;
-	wire        fastclock;
+	wire 			clk_100mhz_buf; 	
 	
 	assign slowclock = clk_40mhz;
 	
@@ -88,7 +89,7 @@ module interface(
    assign GPIO_LED1 = ~reset_i;   
   
    //Global reset
-   assign reset = reset_i;
+   //assign reset = reset_i;
 
    //Divide clock by 2^24 for heartbeat LED
 	//Divide clock by 2^25 for frequency measurement
@@ -103,7 +104,7 @@ module interface(
    //Blink heartbeat LED
    assign GPIO_LED2 = timer_heartbeat[24];
 	assign GPIO_LED3 = armed;
-   assign GPIO_LED4 = adcfifo_full;
+   assign GPIO_LED4 = adc_capture_go;
  
 	//Frequency Measurement
 	wire freq_measure;
@@ -129,12 +130,15 @@ module interface(
 	reg [9:0] ADC_Data_tofifo;
 	
 	always @(posedge ADC_clk_sample) begin
-		ADC_Data_tofifo <= ADC_Data;
+		//ADC_Data_tofifo <= ADC_Data;
 		
-		//Input Validation Test: uncomment following, which should
+		//Input Validation Test #1: Uncomment the following
+		//ADC_Data_tofifo <= 10'hAA;
+		
+		//Input Validation Test #2: uncomment following, which should
 		//put a perfect ramp. Tests FIFO & USB interface for proper
 		//syncronization
-		//ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
+		ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
 	end
    	
 	ODDR2 #(
@@ -162,11 +166,20 @@ module interface(
 	reg 			armed;
 	reg			adc_capture_start;
 	
-  //`ifdef CHIPSCOPE
+`ifdef CHIPSCOPE
   wire [35:0]                          chipscope_control;
   coregen_icon icon (
     .CONTROL0(chipscope_control) // INOUT BUS [35:0]
-   );  
+   ); 
+   wire [127:0] cs_data;
+    
+   coregen_ila ila (
+    .CONTROL(chipscope_control), // INOUT BUS [35:0]
+    .CLK(ADC_clk_sample), // IN
+    .TRIG0(cs_data) // IN BUS [127:0]
+   );
+`endif
+	
   
 /*  
    wire [15:0] cs_data;
@@ -195,25 +208,32 @@ module interface(
 	
 	//ADC Trigger Stuff	
 	reg reset_arm;
-	always @(posedge ADC_clk_sample or posedge reset) begin
+	always @(posedge ADC_clk_sample) begin
 		if (reset) begin
-			adc_capture_go <= 0;
 			reset_arm <= 0;
 		end else begin
-			if (adc_capture_done) begin
-				adc_capture_go <= 0;
-				reset_arm <= 0;
-			end else if ((trigger == trigger_mode) & armed) begin
-				adc_capture_go <= 1;
+			if ((trigger == trigger_mode) & armed) begin				
 				reset_arm <= 1;
+			end else if ((cmd_arm == 0) & (adc_capture_go == 0)) begin
+				reset_arm <= 0;
 			end
 		end
 	end	
 	
+	always @(posedge ADC_clk_sample, posedge adc_capture_done, posedge reset) begin
+		if (adc_capture_done | reset) begin
+			adc_capture_go <= 0;
+		end else begin
+			if ((trigger == trigger_mode) & armed) begin
+				adc_capture_go <= 1;
+			end
+		end
+	end
+	
 	wire resetarm;
 	wire cmd_arm;
 	assign resetarm = reset | reset_arm;
-	always @(posedge slowclock or posedge resetarm)
+	always @(posedge slowclock)
 	  if (resetarm) begin
 			armed <= 0;
 		end else if (cmd_arm & ((trigger != trigger_mode) | (trigger_wait == 0))) begin
@@ -238,7 +258,20 @@ module interface(
 	wire				ddrfifo_rd_en;
 	wire				ddrfifo_rd_clk;	
 
-`define CHIPSCOPE
+
+	assign cs_data[0] = armed;
+	assign cs_data[1] = reset_arm;
+	assign cs_data[2] = trigger_mode;
+	assign cs_data[3] = trigger;
+	assign cs_data[4] = trigger_wait;
+	assign cs_data[5] = ddr_read_req;
+	assign cs_data[6] = ddr_read_done;
+	assign cs_data[7] = ddrfifo_empty;
+	assign cs_data[8] = adc_capture_go;
+	assign cs_data[9] = adc_capture_done;
+	assign cs_data[10] = cmd_arm;
+
+`undef CHIPSCOPE
    usb_interface usb(.reset(reset),
                      .clk(slowclock),
 							.rx_in(rxd),
@@ -280,11 +313,9 @@ module interface(
 											  .dcm_psen_o(dcm_psen),
 											  .dcm_psincdec_o(dcm_psincdec),
 											  .dcm_psdone_i(dcm_psdone),
-											  .dcm_status_i(dcm_status));	 
-		 
-		 
+											  .dcm_status_i(dcm_status));	  
 	
-	wire clk_100mhz_buf; 	
+	
 	assign ADC_clk_intsrc = clk_100mhz_buf;		 
 			 
 	// BUFGMUX: Global Clock Mux Buffer
@@ -302,7 +333,7 @@ module interface(
 	// End of BUFGMUX_inst instantiation
 			 
 			 
-			 /*
+	/*		
 	IBUFG IBUFG_inst (
 		.O(clk_100mhz_buf),
 		.I(clk_100mhz) );
@@ -362,8 +393,11 @@ module interface(
 	//assign amp_hilo = 1'b0;
 	assign amp_gain = PWM_accumulator[8];
 	
+	//wire clk_ddrusr;
+	
 	ddr_top ddr(
-    .reset(reset),
+    .reset_i(reset_i),
+	 .reset_o(reset),
     .clk_100mhz_in(clk_100mhz),
 	 .clk_100mhz_out(clk_100mhz_buf),
 	 
