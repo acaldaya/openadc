@@ -88,7 +88,7 @@ class serialOpenADCInterface:
                 if maxResp:
                        datalen = maxResp
                 else:
-                       datalen = 5000
+                       datalen = 65000
             else:
                 datalen = 1
             
