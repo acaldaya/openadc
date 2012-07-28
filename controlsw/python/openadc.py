@@ -19,6 +19,11 @@ ADDR_FREQ4      = 8
 ADDR_PHASE1     = 9
 ADDR_PHASE2     = 10
 
+ADDR_DDR1       = 16
+ADDR_DDR2       = 17
+ADDR_DDR3       = 18
+ADDR_DDR4       = 19
+
 CODE_READ       = 0x80
 CODE_WRITE      = 0xC0
 
@@ -51,6 +56,8 @@ class serialOpenADCInterface:
         nullmessage = bytearray([20])
         
         self.serial.write(nullmessage);
+
+        self.offset = 0.5
     
     def sendMessage(self, mode, address, payload=None, Validate=True, maxResp=None):
         """Send a message out the serial port"""
@@ -231,3 +238,84 @@ class serialOpenADCInterface:
         else:
             return False
 
+    def setDDRAddress(self, addr):
+        cmd = bytearray(1)
+        cmd[0] = ((addr >> 0) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_DDR1, cmd)
+        cmd[0] = ((addr >> 8) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_DDR2, cmd)
+        cmd[0] = ((addr >> 16) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_DDR3, cmd)
+        cmd[0] = ((addr >> 24) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_DDR4, cmd)        
+
+    def arm(self):
+       self.setSettings(self.getSettings() | 0x08);
+
+    def capture(self):
+       #Wait for trigger
+       status = self.getStatus()
+
+       timeout = 0;
+       while (status & STATUS_FIFO_MASK) == 0:
+           status = self.getStatus()
+           time.sleep(0.05)
+
+           timeout = timeout + 1
+           if timeout > 100:
+               return False
+
+       self.setSettings(self.getSettings() & ~0x08);
+       return True
+
+    def readData(self, NumberPoints=None):
+
+       if NumberPoints:
+              NumberPoints = NumberPoints * 2
+
+       datapoints = []
+
+       NumberPoints = 252
+
+       for ddraddr in range(0, 0x600, 0x100):
+              self.setDDRAddress(ddraddr)
+              print ddraddr
+              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, NumberPoints);
+              datapoints = datapoints + self.processDataDDR(data)
+
+       print datapoints
+
+       return datapoints
+
+    def processDataDDR(self, data):
+        fpData = []
+        lastpt = -100;
+
+        if data[0] != 0xAC:
+            print("Unexpected sync byte: 0x%x"%data[0])
+            return None
+
+        for i in range(2, len(data)-3, 4):
+            #Convert
+            temppt = (data[i + 3]<<0) | (data[i + 2]<<8) | (data[i + 1]<<16) | (data[i + 0]<<24)
+
+            #print "%x %x %x %x"%(data[i +0], data[i +1], data[i +2], data[i +3]);
+            #print "%x"%temppt
+
+            intpt1 = temppt & 0x3FF;
+            intpt2 = (temppt >> 10) & 0x3FF;
+            intpt3 = (temppt >> 20) & 0x3FF;
+	
+            #input validation test: uncomment following and use
+            #ramp input on FPGA
+            ##if (intpt != lastpt + 1) and (lastpt != 0x3ff):
+            ##    print "intpt: %x lstpt %x\n"%(intpt, lastpt)
+            ##lastpt = intpt;
+
+            print "%x %x %x"%(intpt1, intpt2, intpt3)
+            
+            fpData.append(float(intpt1) / 1024.0 - self.offset)
+            fpData.append(float(intpt2) / 1024.0 - self.offset)
+            fpData.append(float(intpt3) / 1024.0 - self.offset)
+
+        return fpData

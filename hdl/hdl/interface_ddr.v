@@ -1,24 +1,15 @@
 `include "includes.v"
-`define CHIPSCOPE
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date:    12:23:33 05/24/2010 
-// Design Name: 
-// Module Name:    interface 
-// Project Name: 
-// Target Devices: 
-// Tool versions: 
-// Description: 
-//
-// Dependencies: 
-//
-// Revision: 
-// Revision 0.01 - File Created
-// Additional Comments: 
-//
-//////////////////////////////////////////////////////////////////////////////////
+`define CHIPSCOPE 1
+/***********************************************************************
+This file is part of the OpenADC Project. See www.newae.com for more details,
+or the codebase at http://www.assembla.com/spaces/openadc .
+
+This file is the main interface.
+
+Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+This project is released under the Modified FreeBSD License. See LICENSE
+file which should have came with this code.
+*************************************************************************/
 
 module interface(
     input         reset_i,
@@ -80,6 +71,10 @@ module interface(
 	 wire       locked;
 	 wire       dcm_clk;
 	
+	wire 			adc_capture_go;
+	wire			adc_capture_done;
+	wire			armed;
+	
 	//These need pull-ups enabled to avoid screwing up parts on board
 	assign scl = 1'bz;
 	assign sda = 1'bz;
@@ -128,6 +123,7 @@ module interface(
 	wire chipscope_clk;
 	
 	reg [9:0] ADC_Data_tofifo;
+	wire [9:0] trigger_level;
 	
 	always @(posedge ADC_clk_sample) begin
 		//ADC_Data_tofifo <= ADC_Data;
@@ -163,8 +159,6 @@ module interface(
 	);
 
 	wire [7:0] 	reg_status;
-	reg 			armed;
-	reg			adc_capture_start;
 	
 `ifdef CHIPSCOPE
   wire [35:0]                          chipscope_control;
@@ -193,56 +187,35 @@ module interface(
   `endif
 	*/
 	
-	wire trigger;	
-	assign trigger = DUT_trigger_i;
-	
 	//1 = trigger on high, 0 = trigger on low
 	wire trigger_mode;
 	
 	//1 = wait for trigger to be INACTIVE before arming (e.g.: avoid triggering immediatly)
 	//0 = arm as soon as cmd_arm goes high (e.g.: if trigger is already in active state, trigger)
 	wire trigger_wait;
-	
-	wire adc_capture_done;
-	reg adc_capture_go;
-	
-	//ADC Trigger Stuff	
-	reg reset_arm;
-	always @(posedge ADC_clk_sample) begin
-		if (reset) begin
-			reset_arm <= 0;
-		end else begin
-			if ((trigger == trigger_mode) & armed) begin				
-				reset_arm <= 1;
-			end else if ((cmd_arm == 0) & (adc_capture_go == 0)) begin
-				reset_arm <= 0;
-			end
-		end
-	end	
-	
-	always @(posedge ADC_clk_sample, posedge adc_capture_done, posedge reset) begin
-		if (adc_capture_done | reset) begin
-			adc_capture_go <= 0;
-		end else begin
-			if ((trigger == trigger_mode) & armed) begin
-				adc_capture_go <= 1;
-			end
-		end
-	end
-	
-	wire resetarm;
 	wire cmd_arm;
-	assign resetarm = reset | reset_arm;
-	always @(posedge slowclock)
-	  if (resetarm) begin
-			armed <= 0;
-		end else if (cmd_arm & ((trigger != trigger_mode) | (trigger_wait == 0))) begin
-			armed <= 1;
-		end
-        
+	       
+	trigger_unit tu_inst(
+	 .reset(reset),
+	 .clk(slowclock),				
+
+    .adc_clk(ADC_clk_sample),		
+	 .adc_data(ADC_Data_tofifo),
+
+    .ext_trigger_i(DUT_trigger_i),
+	 .trigger_level_i(trigger_mode),	 
+	 .trigger_wait_i(trigger_wait),	 
+	 .trigger_adclevel_i(trigger_level),
+	 .trigger_source_i(trigger_source),
+	 .trigger_now_i(trigger_now),
+	 .arm_i(cmd_arm),
+	 .arm_o(armed),
+	 .capture_go_o(adc_capture_go),
+	 .capture_done_i(adc_capture_done));		 
+			 
 	assign reg_status[0] = armed;
    assign reg_status[1] = adcfifo_full;
-	assign reg_status[2] = trigger;
+	assign reg_status[2] = DUT_trigger_i;
 
 	wire [7:0] PWM_incr;
 
@@ -258,11 +231,10 @@ module interface(
 	wire				ddrfifo_rd_en;
 	wire				ddrfifo_rd_clk;	
 
-
 	assign cs_data[0] = armed;
-	assign cs_data[1] = reset_arm;
+	assign cs_data[1] = trigger_source;
 	assign cs_data[2] = trigger_mode;
-	assign cs_data[3] = trigger;
+	assign cs_data[3] = DUT_trigger_i;
 	assign cs_data[4] = trigger_wait;
 	assign cs_data[5] = ddr_read_req;
 	assign cs_data[6] = ddr_read_done;
@@ -285,7 +257,10 @@ module interface(
 							.fifo_rd_clk(ddrfifo_rd_clk),                     
 							.cmd_arm(cmd_arm),
 							.trigger_mode(trigger_mode),
-							.trigger_wait(trigger_wait),                     
+							.trigger_wait(trigger_wait),  
+							.trigger_source(trigger_source),
+							.trigger_level(trigger_level),
+							.trigger_now(trigger_now),
 							.extclk_frequency(extclk_frequency),							
 							.phase_o(phase_requested),
 							.phase_ld_o(phase_load),

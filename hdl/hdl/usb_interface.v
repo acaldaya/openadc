@@ -23,7 +23,7 @@
 module usb_interface(reset, clk, rx_in, tx_out, 
 							gain, hilow, status,
 							fifo_empty, fifo_data, fifo_rd_en, fifo_rd_clk,
-							cmd_arm, trigger_mode, trigger_wait,
+							cmd_arm, trigger_mode, trigger_wait, trigger_source, trigger_level, trigger_now,
 							extclk_frequency,
 							phase_o, phase_ld_o, phase_i, phase_done_i, phase_clk_o,
 							adc_clk_src_o,
@@ -49,9 +49,11 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 output							cmd_arm;
 	 
 	 //1 = Active High trigger, 0 = Active Low trigger
-	 output                    trigger_mode;
-	 
-	 output                    trigger_wait;
+	 output                    trigger_mode;	 
+	 output                    trigger_wait;	 
+	 output [9:0]					trigger_level;
+	 output							trigger_source;
+	 output							trigger_now;
 		 
 	 output [7:0]					gain;
 	 output							hilow;
@@ -172,7 +174,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 
 	 0x01 - SETTINGS
 	 
-	   [  X  C  W  P  A  T  H  R ]
+	   [  I  C  W  P  A  T  H  R ]
 	     
 		  R = (bit 0) System Reset, active high
 		  H = (bit 1) Hilo output to amplifier
@@ -192,7 +194,10 @@ module usb_interface(reset, clk, rx_in, tx_out,
 				    will also immediatly trigger
 		  C = (bit 6) Select clock source for ADC
 		      1 = External x4
-				0 = Internal 100 MHz
+				0 = Internal 100 MHz				
+		  I = (bit 7) Select trigger source: int/ext
+		      1 = Internal 
+				0 = External
 		  
 	 0x02 - STATUS
 	 
@@ -263,6 +268,9 @@ module usb_interface(reset, clk, rx_in, tx_out,
 		 0x15
 		 0x16
 		 0x17 - MSB
+		 
+	 0x18 - ADC Trigger Level Low
+	 0x19 - ADC Trigger Level High Bits
 	 
 	*/
 	 
@@ -460,8 +468,28 @@ module usb_interface(reset, clk, rx_in, tx_out,
 						ftdi_dout[1] <= phase_done;
 						extclk_locked <= 0;
 						ftdi_wr_n <= 0;
+						state <= `IDLE;					
+					end else if (address == `DDRADDR_ADDR1) begin
+						ftdi_dout <= registers_ddr_address[7:0];
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
 						state <= `IDLE;
-               end  else begin
+					end else if (address == `DDRADDR_ADDR2) begin
+						ftdi_dout <= registers_ddr_address[15:8];
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;
+					end else if (address == `DDRADDR_ADDR3) begin
+						ftdi_dout <= registers_ddr_address[23:16];
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;
+					end else if (address == `DDRADDR_ADDR4) begin
+						ftdi_dout <= registers_ddr_address[31:24];
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;						
+               end else begin
 						extclk_locked <= 0;
 						ftdi_dout <= 8'bx;						
 						ftdi_wr_n <= 1;

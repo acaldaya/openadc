@@ -272,41 +272,6 @@ class OpenADCQt():
             self.hilowmode = openadc.SETTINGS_GAIN_LOW
             self.sc.setSettings(self.sc.getSettings() & ~openadc.SETTINGS_GAIN_HIGH);
 
-    def processDataDDR(self, data):
-
-        fpData = []
-
-        lastpt = -100;
-
-        if data[0] != 0xAC:
-            self.showMessage("Unexpected sync byte: 0x%x"%data[0])
-            return None
-
-        for i in range(2, len(data)-3, 4):
-            #Convert
-            temppt = (data[i + 3]<<0) | (data[i + 2]<<8) | (data[i + 1]<<16) | (data[i + 0]<<24)
-
-            #print "%x %x %x %x"%(data[i +0], data[i +1], data[i +2], data[i +3]);
-            #print "%x"%temppt
-
-            intpt1 = temppt & 0x3FF;
-            intpt2 = (temppt >> 10) & 0x3FF;
-            intpt3 = (temppt >> 20) & 0x3FF;
-	
-            #input validation test: uncomment following and use
-            #ramp input on FPGA
-            ##if (intpt != lastpt + 1) and (lastpt != 0x3ff):
-            ##    print "intpt: %x lstpt %x\n"%(intpt, lastpt)
-            ##lastpt = intpt;
-
-            print "%x %x %x"%(intpt1, intpt2, intpt3)
-            
-            fpData.append(float(intpt1) / 1024.0 - self.offset)
-            fpData.append(float(intpt2) / 1024.0 - self.offset)
-            fpData.append(float(intpt3) / 1024.0 - self.offset)
-
-        return fpData
-
     def processData(self, data):
 
         fpData = []
@@ -337,37 +302,18 @@ class OpenADCQt():
         return fpData
 
     def ADCarm(self):
-        self.ADCsettrigmode();
-        self.sc.setSettings(self.sc.getSettings() | 0x08);
+        self.ADCsettrigmode()
+        self.sc.arm()
         
     def ADCcapture(self, update=True, NumberPoints=None):
+        self.sc.capture()  
 
-        #Wait for trigger
-        status = self.sc.getStatus()
-
-        timeout = 0;
-        while (status & openadc.STATUS_FIFO_MASK) == 0:
-            status = self.sc.getStatus()
-            time.sleep(0.05)
-
-            timeout = timeout + 1
-            if timeout > 100:
-                return False
-
-        self.sc.setSettings(self.sc.getSettings() & ~0x08);
-
-        if NumberPoints:
-            NumberPoints = NumberPoints * 2
-
-        #self.statusBar().showMessage("Reading Data")
-        data = self.sc.sendMessage(openadc.CODE_READ, openadc.ADDR_ADCDATA, None, False, NumberPoints);
-
-        #self.statusBar().showMessage("Received %d bytes"%len(data))
-
-        self.datapoints = self.processDataDDR(data)
+        self.datapoints = self.sc.readData()
 
         if update:
-            self.preview.updateData(self.datapoints)         
+            self.preview.updateData(self.datapoints)
+
+        return True
 
     def ADCsettrigmode(self):
         self.trigmode = 0;
