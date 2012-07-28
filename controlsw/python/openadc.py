@@ -259,7 +259,7 @@ class serialOpenADCInterface:
         addr = addr | (temp[0] << 16);
         temp = self.sendMessage(CODE_READ, ADDR_DDR4)
         addr = addr | (temp[0] << 24);
-        return freq
+        return addr
         
     def arm(self):
        self.setSettings(self.getSettings() | 0x08);
@@ -300,7 +300,7 @@ class serialOpenADCInterface:
        self.setDDRAddress(start)
        
        for ddraddr in range(start, start+NumberPoints, 0x100):              
-              #print ddraddr
+              self.setDDRAddress(ddraddr)
               data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, 257);
 
               #Address of DDR is auto-incremented following a read command

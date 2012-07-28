@@ -37,10 +37,15 @@ module dcm_phaseshift_interface(
 	 reg [8:0]              dcm_ps_count;
 	 reg [8:0]					dcm_ps_target;
 	 
-	 reg							dcm_psen_o;
-	 reg							dcm_psincdec_o;
-	 reg							done_o;
-	 reg [8:0]					value_o;
+	 reg							dcm_psen;
+	 reg							dcm_psincdec;
+	 reg							done;
+	 reg [8:0]					value;
+	 
+	 assign dcm_psen_o = dcm_psen;
+	 assign dcm_psincdec_o = dcm_psincdec;
+	 assign done_o = done;
+	 assign value_o = value;
 	 
 	 reg last_psincdec;
 	 
@@ -51,19 +56,19 @@ module dcm_phaseshift_interface(
       end else begin
          case (state)
             `RESET: begin
-					done_o <= 0;
-					dcm_psen_o <= 0;
-					dcm_psincdec_o <= 0;
+					done <= 0;
+					dcm_psen <= 0;
+					dcm_psincdec <= 0;
 					state <= `IDLE;
 					dcm_ps_count <= default_value_i;
-					value_o <= 0;
+					value <= 0;
 					last_psincdec <= 0;
             end
 				
 				`IDLE: begin
-					dcm_psen_o <= 0;
-					dcm_psincdec_o <= 0;
-					done_o <= 0;
+					dcm_psen <= 0;
+					dcm_psincdec <= 0;
+					done <= 0;
 					
 					if (load_i) begin
 						state <= `START;					
@@ -73,50 +78,50 @@ module dcm_phaseshift_interface(
             end
 			
 				`START: begin
-					done_o <= 0;
-					dcm_psen_o <= 0;
-					dcm_psincdec_o <= 0;
+					done <= 0;
+					dcm_psen <= 0;
+					dcm_psincdec <= 0;
 					dcm_ps_target <= value_i;
 					state <= `PULSE;
 				end
 				
 				`PULSE: begin
-					done_o <= 0;
+					done <= 0;
 					if (dcm_ps_target < dcm_ps_count) begin
 						if ((last_psincdec == 0) && (dcm_status_i[0] == 1)) begin
 							//Underflow & attempt to decrement
-							value_o <= dcm_ps_count;
+							value <= dcm_ps_count;
 							state <= `DONE;
-							dcm_psincdec_o <= 0;
-							dcm_psen_o <= 0;
+							dcm_psincdec <= 0;
+							dcm_psen <= 0;
 						end else begin
 							//Decrement
 							last_psincdec <= 0;
-							dcm_psincdec_o <= 0;
-							dcm_psen_o <= 1;
+							dcm_psincdec <= 0;
+							dcm_psen <= 1;
 							dcm_ps_count <= dcm_ps_count - 8'd1;
 							state <= `WAIT1;
 						end				
 					end else if (dcm_ps_target > dcm_ps_count) begin
 						if ((last_psincdec == 1) && (dcm_status_i[0] == 1)) begin
 							//Overflow & attempt to increment
-							value_o <= dcm_ps_count;
+							value <= dcm_ps_count;
 							state <= `DONE;
-							dcm_psincdec_o <= 0;
-							dcm_psen_o <= 0;
+							dcm_psincdec <= 0;
+							dcm_psen <= 0;
 						end else begin
 							//Increment
 							last_psincdec <= 1;
-							dcm_psincdec_o <= 1;
-							dcm_psen_o <= 1;
+							dcm_psincdec <= 1;
+							dcm_psen <= 1;
 							dcm_ps_count <= dcm_ps_count + 8'd1;
 							state <= `WAIT1;
 						end
 					end else begin
 						//Matched requested
-						dcm_psincdec_o <= 0;
-						dcm_psen_o <= 0;
-						value_o <= dcm_ps_count;
+						dcm_psincdec <= 0;
+						dcm_psen <= 0;
+						value <= dcm_ps_count;
 						state <= `DONE;						
 					end
 				end
@@ -124,13 +129,13 @@ module dcm_phaseshift_interface(
 				`WAIT1: begin
 					//Wait for PSDONE to go low from previous operation
 					state <= `WAIT2;
-					done_o <= 0;
-					dcm_psen_o <= 0;
+					done <= 0;
+					dcm_psen <= 0;
 				end					
 
 				`WAIT2: begin
-					done_o <= 0;
-					dcm_psen_o <= 0;					
+					done <= 0;
+					dcm_psen <= 0;					
 					if (dcm_psdone_i == 1'b1) begin
 						state <= `PULSE;
 					end else begin
@@ -139,16 +144,16 @@ module dcm_phaseshift_interface(
 				end
 					
 				`DONE: begin
-					done_o <= 1;
-					dcm_psen_o <= 0;
-					dcm_psincdec_o <= 0;
+					done <= 1;
+					dcm_psen <= 0;
+					dcm_psincdec <= 0;
 					state <= `IDLE;
 				end
 				
 				default: begin
-					done_o <= 0;
-					dcm_psen_o <= 0;
-					dcm_psincdec_o <= 0;
+					done <= 0;
+					dcm_psen <= 0;
+					dcm_psincdec <= 0;
 					state <= `RESET;
 				end
 			endcase

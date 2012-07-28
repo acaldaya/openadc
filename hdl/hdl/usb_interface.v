@@ -516,8 +516,7 @@ module usb_interface(
 					fifo_rd_en_reg <= 0;
 					
 					if (ddr_rd_done) begin
-						state <= `DATARD1;
-						registers_ddr_address <= registers_ddr_address + 32'h100;
+						state <= `DATARD1;						
 					end else begin
 						state <= `DATARD_DDRSTART;
 					end

@@ -114,7 +114,7 @@ module ddr_top(
 	assign			adc_capture_stop = adc_capture_stop_reg;
 	
 	always@(posedge adc_sampleclk) begin
-		if (sample_counter > 400) begin
+		if (sample_counter > 50000) begin
 				adc_capture_stop_reg <= 1;
 		end else begin
 				adc_capture_stop_reg <= 0;
