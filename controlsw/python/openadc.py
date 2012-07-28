@@ -247,8 +247,20 @@ class serialOpenADCInterface:
         cmd[0] = ((addr >> 16) & 0xFF)
         self.sendMessage(CODE_WRITE, ADDR_DDR3, cmd)
         cmd[0] = ((addr >> 24) & 0xFF)
-        self.sendMessage(CODE_WRITE, ADDR_DDR4, cmd)        
+        self.sendMessage(CODE_WRITE, ADDR_DDR4, cmd)
 
+    def getDDRAddress(self):
+        addr = 0x00000000;
+        temp = self.sendMessage(CODE_READ, ADDR_DDR1)
+        addr = addr | (temp[0] << 0);
+        temp = self.sendMessage(CODE_READ, ADDR_DDR2)
+        addr = addr | (temp[0] << 8);
+        temp = self.sendMessage(CODE_READ, ADDR_DDR3)
+        addr = addr | (temp[0] << 16);
+        temp = self.sendMessage(CODE_READ, ADDR_DDR4)
+        addr = addr | (temp[0] << 24);
+        return freq
+        
     def arm(self):
        self.setSettings(self.getSettings() | 0x08);
 
@@ -269,21 +281,36 @@ class serialOpenADCInterface:
        return True
 
     def readData(self, NumberPoints=None):
+       return self.readDataDDR(NumberPoints)
 
        if NumberPoints:
               NumberPoints = NumberPoints * 2
 
+    def flush(self):
+       #Flush output FIFO
+       self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, None)
+
+    def readDataDDR(self, NumberPoints=None):       
        datapoints = []
+       start = 0
 
-       NumberPoints = 252
+       if NumberPoints == None:
+              NumberPoints = 0x10000
 
-       for ddraddr in range(0, 0x600, 0x100):
-              self.setDDRAddress(ddraddr)
-              print ddraddr
-              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, NumberPoints);
+       self.setDDRAddress(start)
+       
+       for ddraddr in range(start, start+NumberPoints, 0x100):              
+              #print ddraddr
+              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, 257);
+
+              #Address of DDR is auto-incremented following a read command
+              #so no need to write new address
+
+              print "Address=%x"%self.getDDRAddress()
+
               datapoints = datapoints + self.processDataDDR(data)
 
-       print datapoints
+       #print datapoints
 
        return datapoints
 
@@ -312,7 +339,7 @@ class serialOpenADCInterface:
             ##    print "intpt: %x lstpt %x\n"%(intpt, lastpt)
             ##lastpt = intpt;
 
-            print "%x %x %x"%(intpt1, intpt2, intpt3)
+            #print "%x %x %x"%(intpt1, intpt2, intpt3)
             
             fpData.append(float(intpt1) / 1024.0 - self.offset)
             fpData.append(float(intpt2) / 1024.0 - self.offset)

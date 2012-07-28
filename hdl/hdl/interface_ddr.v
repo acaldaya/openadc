@@ -1,5 +1,5 @@
 `include "includes.v"
-`define CHIPSCOPE 1
+//`define CHIPSCOPE 1
 /***********************************************************************
 This file is part of the OpenADC Project. See www.newae.com for more details,
 or the codebase at http://www.assembla.com/spaces/openadc .
@@ -231,6 +231,7 @@ module interface(
 	wire				ddrfifo_rd_en;
 	wire				ddrfifo_rd_clk;	
 
+`ifdef CHIPSCOPE
 	assign cs_data[0] = armed;
 	assign cs_data[1] = trigger_source;
 	assign cs_data[2] = trigger_mode;
@@ -242,12 +243,36 @@ module interface(
 	assign cs_data[8] = adc_capture_go;
 	assign cs_data[9] = adc_capture_done;
 	assign cs_data[10] = cmd_arm;
+`endif
+	 
+	 
+	wire cmdfifo_rxf;
+	wire cmdfifo_txe;
+	wire cmdfifo_rd;
+	wire cmdfifo_wr;
+	wire [7:0] cmdfifo_din;
+	wire [7:0] cmdfifo_dout;
+	 
+	serial_reg_iface cmdfifo_serial(.reset_i(reset),
+											  .clk_i(slowclock),
+											  .rx_i(rxd),
+											  .tx_o(txd),
+											  .cmdfifo_rxf(cmdfifo_rxf),
+											  .cmdfifo_txe(cmdfifo_txe),
+											  .cmdfifo_rd(cmdfifo_rd),
+											  .cmdfifo_wr(cmdfifo_wr),
+											  .cmdfifo_din(cmdfifo_din),
+											  .cmdfifo_dout(cmdfifo_dout));
 
 `undef CHIPSCOPE
    usb_interface usb(.reset(reset),
                      .clk(slowclock),
-							.rx_in(rxd),
-                     .tx_out(txd),
+							.cmdfifo_rxf(cmdfifo_rxf),
+							.cmdfifo_txe(cmdfifo_txe),
+							.cmdfifo_rd(cmdfifo_rd),
+							.cmdfifo_wr(cmdfifo_wr),
+							.cmdfifo_din(cmdfifo_din),
+							.cmdfifo_dout(cmdfifo_dout),
 							.gain(PWM_incr),
                      .hilow(amp_hilo),
 							.status(reg_status),

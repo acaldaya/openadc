@@ -86,7 +86,7 @@ module tb_ddr_top;
 
 	// Instantiate the Unit Under Test (UUT)
 	ddr_top uut (
-		.reset(reset), 
+		.reset_i(reset), 
 		.clk_100mhz_in(clk_100mhz), 
 		.adc_datain(adc_datain), 
 		.adc_sampleclk(adc_sampleclk), 

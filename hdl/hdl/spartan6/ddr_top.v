@@ -363,7 +363,10 @@ module ddr_top(
 		.wr_en(ddrfifo_wr_en), // input wr_en
 		.rd_en(ddr_read_fifoen), // input rd_en
 		.dout(ddr_read_data), // output [7 : 0] dout
-		.full(ddrfifo_full), // output full
+		.prog_full(ddrfifo_full), // output full - we use prog_full as
+										  // we need 64-byte FIFO. But only 63 or
+										  // 127-byte available. So we use 127 with
+										  // fixed prog_full
 		.empty(ddr_read_fifoempty) // output empty
 	);
 	

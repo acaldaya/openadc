@@ -20,73 +20,71 @@
 // Additional Comments: 
 //
 //////////////////////////////////////////////////////////////////////////////////
-module usb_interface(reset, clk, rx_in, tx_out, 
-							gain, hilow, status,
-							fifo_empty, fifo_data, fifo_rd_en, fifo_rd_clk,
-							cmd_arm, trigger_mode, trigger_wait, trigger_source, trigger_level, trigger_now,
-							extclk_frequency,
-							phase_o, phase_ld_o, phase_i, phase_done_i, phase_clk_o,
-							adc_clk_src_o,
-							maxsamples
+module usb_interface(
+	input 			reset,
+	input 			clk,
+	
+	/* Interface to computer (e.g.: serial, FTDI chip, etc) */
+	input 			cmdfifo_rxf,
+	input				cmdfifo_txe,
+	output			cmdfifo_rd,
+	output			cmdfifo_wr,	
+	input [7:0]	   cmdfifo_din,
+	output [7:0]	cmdfifo_dout,
+	// Following is provided for units with half-duplex interface such as FTDI
+	output			cmdfifo_isout,
+		
+	/* Interface to gain module */
+	output [7:0]	gain,
+	output			hilow,
+	
+	/* General status stuff input */
+	input [7:0]		status,
+								
+	/* ADC Fifo Interface */
+	input				fifo_empty,
+	input [7:0]		fifo_data,
+	output			fifo_rd_en,
+	output			fifo_rd_clk,
+							
+	/* Interface to trigger unit */
+	output 			cmd_arm,
+	output 			trigger_mode,
+	output 			trigger_wait,
+	output [9:0] 	trigger_level,
+	output 			trigger_source,
+	output 			trigger_now,
+	
+	/* Measurement of external clock frequency */
+	input [31:0]	extclk_frequency,
+	
+	/* Interface to phase shift module */
+	output			phase_clk_o,
+	output [8:0]	phase_o,
+	output			phase_ld_o,
+	input  [8:0]	phase_i,
+	input				phase_done_i,
+	
+	/* Additional ADC control lines */
+	output			adc_clk_src_o,
+	output [31:0]	maxsamples
+											
+	/* If using chipscope implement ICON in top module, then ILA inside here */
 `ifdef CHIPSCOPE
-                     ,chipscope_control
+	inout [35:0]              chipscope_control
 `endif                     
 
-
+	/* If using DDR interface additional lines required */
 `ifdef USE_DDR
-							,ddr_address,
-							ddr_rd_req,
-							ddr_rd_done
+	 ,output [31:0] 				ddr_address,
+	 output							ddr_rd_req,
+	 input							ddr_rd_done
 `endif
-                     );
-        
-    input         				reset;
-    input         				rx_in;
-    output        				tx_out;
-    input         				clk;
-	 
-	 //Rising edge arms system
-	 output							cmd_arm;
-	 
-	 //1 = Active High trigger, 0 = Active Low trigger
-	 output                    trigger_mode;	 
-	 output                    trigger_wait;	 
-	 output [9:0]					trigger_level;
-	 output							trigger_source;
-	 output							trigger_now;
-		 
-	 output [7:0]					gain;
-	 output							hilow;
-	 input [7:0]					status;
-	 
-	 input							fifo_empty;
-	 input [7:0]					fifo_data;
-	 output							fifo_rd_en;
-	 output							fifo_rd_clk;
-	 
-	 input [31:0]					extclk_frequency;
-	 
-	 output							phase_clk_o;
-	 output [8:0]					phase_o;
-	 output							phase_ld_o;
-	 input  [8:0]					phase_i;
-	 input							phase_done_i;
-	 
-	 output							adc_clk_src_o;
-	 
-	 output [31:0]					maxsamples;
-	 
-	       
-`ifdef CHIPSCOPE
-    inout [35:0]              chipscope_control;
-`endif     
+    );
+
 		 
 `ifdef USE_DDR
-	 output [31:0] 				ddr_address;
-	 output							ddr_rd_req;
-	 input							ddr_rd_done;
-	 reg								ddr_rd_reg;
-	 
+	 reg								ddr_rd_reg; 
 	 assign ddr_rd_req = ddr_rd_reg;
 `endif
 	
@@ -94,9 +92,9 @@ module usb_interface(reset, clk, rx_in, tx_out,
     wire          				ftdi_txe_n;	 
     reg           				ftdi_rd_n;
     reg           				ftdi_wr_n;
-	 reg								fifo_rd_en;
-    
-	 
+	 reg								fifo_rd_en_reg;
+	 assign fifo_rd_en = fifo_rd_en_reg;
+    	 
     wire [7:0] ftdi_din;
     reg [7:0]  ftdi_dout;
     reg        ftdi_isOutput;
@@ -104,12 +102,18 @@ module usb_interface(reset, clk, rx_in, tx_out,
     wire       ftdi_rxf;
     
     assign ftdi_clk = clk;
-    assign ftdi_rxf_n = ~ftdi_rxf;
+    assign ftdi_rxf_n = ~cmdfifo_rxf;
+	 assign ftdi_txe_n = ~cmdfifo_txe;
+	 assign ftdi_din = cmdfifo_din;
+	 assign cmdfifo_dout = ftdi_dout;
+	 assign cmdfifo_rd = ~ftdi_rd_n;
+	 assign cmdfifo_wr = ~ftdi_wr_n;
+	 assign cmdfifo_isout = ftdi_isOutput;
 	 assign fifo_rd_clk = clk;
 	 
 	 assign phase_clk_o = clk;
     
-    //Reinstate following for FTDI
+    //For FTDI interface you would do e.g.:
     //assign ftdi_d = ftdi_isOutput ? ftdi_dout : 8'bZ;
     //assign ftdi_din = ftdi_d;
     
@@ -123,22 +127,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
    );
   
 `endif
-        
-    //Serial
-    wire txbusy;
-    async_transmitter AT (.clk(clk),
-                      .TxD_start(~ftdi_wr_n),
-                      .TxD_data(ftdi_dout),
-                      .TxD(tx_out),
-                      .TxD_busy(txbusy));   
-                
-   assign ftdi_txe_n = txbusy | ~ftdi_wr_n;
-                
-    async_receiver AR (.clk(clk),
-                   .RxD(rx_in),
-                   .RxD_data_ready(ftdi_rxf),
-                   .RxD_data(ftdi_din));
-		  
+        	  
     //Register definitions
     reg [7:0]  registers_gain;
     reg [7:0]  registers_settings;
@@ -149,6 +138,10 @@ module usb_interface(reset, clk, rx_in, tx_out,
 	 reg [8:0]  phase_in;
 	 reg        phase_loadout;
 	 reg			phase_done;
+	 
+`ifdef USE_DDR
+	 assign ddr_address = registers_ddr_address;
+`endif
 	 
 	 assign phase_o = phase_out;
 	 assign phase_ld_o = phase_loadout;
@@ -186,8 +179,8 @@ module usb_interface(reset, clk, rx_in, tx_out,
 				0 = No effect, but you must clear bit to 0
 				    before next trigger cycle can be started
 		  P = (bit 4) DUT Clkin PLL Reset
-		      1 = Reset PLL
-				0 = Do not reset PLL
+		      1 = Reset to PLL active (must do this when ext clock changes)
+				0 = Reset to PLL inactive
 		  W = (bit 5) Before arming wait for trigger to go inactive (e.g: edge sensitive)
 		      1 = Wait for trigger to go inactive before arming
 				0 = Arm immediatly, which if trigger line is currently in active state
@@ -196,8 +189,8 @@ module usb_interface(reset, clk, rx_in, tx_out,
 		      1 = External x4
 				0 = Internal 100 MHz				
 		  I = (bit 7) Select trigger source: int/ext
-		      1 = Internal 
-				0 = External
+		      1 = Internal (e.g.: based on ADC reading)
+				0 = External (e.g.: based on trigger-in line)
 		  
 	 0x02 - STATUS
 	 
@@ -219,10 +212,10 @@ module usb_interface(reset, clk, rx_in, tx_out,
 				0 = No error		 
 		 DC = (bit 5) DDR Calibration Done
 		      1 = Cal done OK
-				0 = Cal in progress/failed
+				0 = Cal in progress/failed		
 		
 	 0x03 - ADC Readings
-
+	 
        Data is read from this register by issuing a READ command.
 		 The entire contents of the FIFO will be dumped following
 		 that read command (e.g.: number of samples requested), or
@@ -330,7 +323,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
       end else begin
          case (state)
             `IDLE: begin
-					fifo_rd_en <= 0;
+					fifo_rd_en_reg <= 0;
                if (ftdi_rxf_n == 0) begin
                   ftdi_rd_n <= 0;
                   ftdi_wr_n <= 1;
@@ -348,7 +341,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
                address <= ftdi_din[5:0];
                ftdi_rd_n <= 1;
                ftdi_wr_n <= 1;
-					fifo_rd_en <= 0;
+					fifo_rd_en_reg <= 0;
                if (ftdi_din[7] == 1) begin
                   if (ftdi_din[6] == 1) begin
                      //MSB means WRITE
@@ -368,7 +361,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
             `DATAWR1: begin
                ftdi_isOutput <= 0;
                ftdi_wr_n <= 1;
-					fifo_rd_en <= 0;
+					fifo_rd_en_reg <= 0;
                if (ftdi_rxf_n == 0) begin
                   ftdi_rd_n <= 0;
                   state <= `DATAWR2;
@@ -382,7 +375,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
                ftdi_isOutput <= 0;
                ftdi_wr_n <= 1;
                ftdi_rd_n <= 1;
-					fifo_rd_en <= 0;
+					fifo_rd_en_reg <= 0;
                			
 					if (address == `GAIN_ADDR) begin
                   registers_gain <= ftdi_din;
@@ -407,7 +400,7 @@ module usb_interface(reset, clk, rx_in, tx_out,
             `DATARDSTART: begin
                ftdi_isOutput <= 1;               
                ftdi_rd_n <= 1;
-					fifo_rd_en <= 0;
+					fifo_rd_en_reg <= 0;
             					
 					if (address == `GAIN_ADDR) begin
                   ftdi_dout <= registers_gain;
@@ -504,15 +497,15 @@ module usb_interface(reset, clk, rx_in, tx_out,
 					if (ftdi_txe_n == 0) begin
 						ftdi_wr_n <= 0;
 						if (fifo_empty == 0) begin
-							fifo_rd_en <= 1;
+							fifo_rd_en_reg <= 1;
 							state <= `DATARD2;
 						end else begin
-							fifo_rd_en <= 0;
+							fifo_rd_en_reg <= 0;
 							state <= `IDLE;
 						end
 					end else begin
 						ftdi_wr_n <= 1;
-						fifo_rd_en <= 0;
+						fifo_rd_en_reg <= 0;
 						state <= `DATARD1;
 					end
             end
@@ -520,12 +513,14 @@ module usb_interface(reset, clk, rx_in, tx_out,
 				`DATARD_DDRSTART: begin
 					ftdi_wr_n <= 1;
 					ftdi_rd_n <= 1;
-					fifo_rd_en <= 0;
+					fifo_rd_en_reg <= 0;
 					
-					if (ddr_rd_done)
+					if (ddr_rd_done) begin
 						state <= `DATARD1;
-					else
+						registers_ddr_address <= registers_ddr_address + 32'h100;
+					end else begin
 						state <= `DATARD_DDRSTART;
+					end
 					
 				end
             
@@ -533,13 +528,13 @@ module usb_interface(reset, clk, rx_in, tx_out,
                ftdi_isOutput <= 1;
                ftdi_wr_n <= 1;
                ftdi_rd_n <= 1;               
-					fifo_rd_en <= 0;
+					fifo_rd_en_reg <= 0;
 					ftdi_dout <= fifo_data;
                state <= `DATARD1;
                end    
 						
 				default: begin
-					fifo_rd_en <= 0;
+					fifo_rd_en_reg <= 0;
 					ftdi_rd_n <= 1;
                ftdi_wr_n <= 1;
                ftdi_isOutput <= 0;

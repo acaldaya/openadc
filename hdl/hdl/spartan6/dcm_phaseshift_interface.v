@@ -1,23 +1,16 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date:    13:23:56 06/06/2012 
-// Design Name: 
-// Module Name:    dcm_phaseshift_interface 
-// Project Name: 
-// Target Devices: 
-// Tool versions: 
-// Description: 
-//
-// Dependencies: 
-//
-// Revision: 
-// Revision 0.01 - File Created
-// Additional Comments: 
-//
-//////////////////////////////////////////////////////////////////////////////////
+/***********************************************************************
+This file is part of the OpenADC Project. See www.newae.com for more details,
+or the codebase at http://www.assembla.com/spaces/openadc .
+
+This file is the 'phaseshift' interface. It interfaces with the delay module
+(e.g.: DCM for Xilinx FPGAs) and provides a simple interface to adjust the
+delay added in a line.
+
+Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+This project is released under the Modified FreeBSD License. See LICENSE
+file which should have came with this code.
+*************************************************************************/
 module dcm_phaseshift_interface(
     input clk_i,             //Clock for inputs & PCLK for DCM
 	 input reset_i,           //Reset - must also connect to DCM so this block knows when defaults are loaded

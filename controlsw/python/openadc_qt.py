@@ -196,7 +196,7 @@ class OpenADCQt():
         layout.addWidget(clocksettings)
 
         ###### Graphical Preview Window
-        self.preview = pysideGraph("Preview", 0, 5000, -0.5, 0.5)
+        self.preview = pysideGraph("Preview", 0, 100000, -0.5, 0.5)
         layout.addWidget(self.preview.getWidget())      
               
         self.masterLayout = layout
@@ -345,8 +345,11 @@ class OpenADCQt():
             self.sc.setClockSource("ext")
 
     def ADCupdate(self):
-        print self.sc.getExtFrequency()
-        print self.sc.getPhase()
+        if self.sc.getExtFrequency():
+            print "Ext Freq   = %d"%self.sc.getExtFrequency()
+        if self.sc.getPhase():
+            print "Phase      = %d"%self.sc.getPhase()
+        print "Status Reg = 0x%2x"%self.sc.getStatus()
         
     def ADCconnect(self):
 
