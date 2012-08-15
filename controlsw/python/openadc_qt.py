@@ -342,9 +342,16 @@ class OpenADCQt():
         self.sc.arm()
         
     def ADCcapture(self, update=True, NumberPoints=None):
-        self.sc.capture()  
+        self.sc.capture()
 
-        self.datapoints = self.sc.readData()
+        if NumberPoints == None:
+            NumberPoints = self.samples.value()
+
+        progress = QProgressDialog("Reading", "Abort", 0, 100)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(1000)
+
+        self.datapoints = self.sc.readData(NumberPoints, progress)
 
         if update:
             self.preview.updateData(self.datapoints)
@@ -444,4 +451,5 @@ class OpenADCQt():
     def __del__(self):
         if self.ser:
             self.ser.close()    
+
     

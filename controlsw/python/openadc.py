@@ -1,4 +1,12 @@
 # -*- coding: cp1252 -*-
+
+# This file is part of the OpenADC Project. See www.newae.com for more details,
+# or the codebase at http://www.assembla.com/spaces/openadc .
+#
+# Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+# This project is released under the Modified FreeBSD License. See LICENSE
+# file which should have came with this code.
+
 import sys
 import os
 import threading
@@ -314,8 +322,8 @@ class serialOpenADCInterface:
        self.setSettings(self.getSettings() & ~0x08);
        return True
 
-    def readData(self, NumberPoints=None):
-       return self.readDataDDR(NumberPoints)
+    def readData(self, NumberPoints=None, progressDialog=None):
+       return self.readDataDDR(NumberPoints, progressDialog)
 
        if NumberPoints:
               NumberPoints = NumberPoints * 2
@@ -324,29 +332,48 @@ class serialOpenADCInterface:
        #Flush output FIFO
        self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, None)
 
-    def readDataDDR(self, NumberPoints=None):       
+    def readDataDDR(self, NumberPoints=None, progressDialog=None):       
        datapoints = []
-       start = 0
 
        if NumberPoints == None:
-              NumberPoints = 0x10000
+              NumberPoints = 0x1000
 
-       self.setDDRAddress(start)
+       #We were passed number of samples to read. DDR interface
+       #reads 3 points per 4 bytes, and reads in blocks of
+       #256 bytes (e.g.: 192 samples)
+       NumberPackages = NumberPoints / 192
+
+       #If user requests we send extra then scale back afterwards
+       if (NumberPoints % 192) > 0:
+              NumberPackages = NumberPackages + 1
+
+       start = 0
+       self.setDDRAddress(0)
+
+       if progressDialog:
+              progressDialog.setMinimum(0)
+              progressDialog.setMaximum(NumberPackages)
        
-       for ddraddr in range(start, start+NumberPoints, 0x100):              
-              self.setDDRAddress(ddraddr)
-              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, 257);
-
+       for status in range(0, NumberPackages):        
               #Address of DDR is auto-incremented following a read command
               #so no need to write new address
+              
+              #print "Address=%x"%self.getDDRAddress()
 
-              print "Address=%x"%self.getDDRAddress()
+              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, 257);
 
               datapoints = datapoints + self.processDataDDR(data)
 
-       #print datapoints
+              if progressDialog:
+                     progressDialog.setValue(status)
 
-       return datapoints
+                     if progressDialog.wasCanceled():
+                            break              
+
+       if len(datapoints) > NumberPoints:
+              return datapoints[0:NumberPoints]
+       else:
+              return datapoints
 
     def processDataDDR(self, data):
         fpData = []

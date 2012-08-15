@@ -1,4 +1,12 @@
 # -*- coding: cp1252 -*-
+
+# This file is part of the OpenADC Project. See www.newae.com for more details,
+# or the codebase at http://www.assembla.com/spaces/openadc .
+#
+# Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+# This project is released under the Modified FreeBSD License. See LICENSE
+# file which should have came with this code.
+
 import sys
 import os
 import threading

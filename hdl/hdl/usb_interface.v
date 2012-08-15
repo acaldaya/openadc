@@ -213,7 +213,7 @@ module usb_interface(
        Data is read from this register by issuing a READ command.
 		 The entire contents of the FIFO will be dumped following
 		 that read command (e.g.: number of samples requested), or
-		 in DDR mode 196 words is dumped per read (e.g.: 392 bytes)
+		 in DDR mode a different formatting is used (described elsewhere)
 	 
 	    [  1  X  X  P OR D9 D8 D7 ]
 		 
@@ -312,7 +312,7 @@ module usb_interface(
 		end
 	 end
 	 
-    always @(posedge ftdi_clk or reset)
+    always @(posedge ftdi_clk or posedge reset)
     begin
       if (reset == 1) begin
          state <= `IDLE; 
@@ -531,6 +531,9 @@ module usb_interface(
 							state <= `DATARD2;
 						end else begin
 							fifo_rd_en_reg <= 0;
+`ifdef USE_DDR
+							registers_ddr_address <= registers_ddr_address + 32'h100;
+`endif
 							state <= `IDLE;
 						end
 					end else begin
