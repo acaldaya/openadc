@@ -1,4 +1,12 @@
 # -*- coding: cp1252 -*-
+
+# This file is part of the OpenADC Project. See www.newae.com for more details,
+# or the codebase at http://www.assembla.com/spaces/openadc .
+#
+# Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+# This project is released under the Modified FreeBSD License. See LICENSE
+# file which should have came with this code.
+
 import sys
 import os
 import threading
@@ -207,7 +215,6 @@ class OpenADCQt():
         samplelayout.addWidget(QLabel("Samples/Capture"), 1, 0)
         samplelayout.addWidget(self.samples, 1, 1)
         self.samples.valueChanged.connect(self.samplesChanged)
-        self.setMaxSample(1000)
         layout.addWidget(samplesettings)
 
         ###### Graphical Preview Window
@@ -219,12 +226,15 @@ class OpenADCQt():
         self.trigmode = 0
         self.hilowmode = 0
 
+        self.setMaxSample(1000)
+
     def getLayout(self):
         return self.masterLayout
 
     def setMaxSample(self, samples):
         self.samples.setMaximum(samples)
         self.maxSamplesLabel.setText("Max Samples: %d"%samples)
+        self.preview.xmax.setMaximum(samples)
         
     def readAllSettings(self):
 
@@ -260,7 +270,9 @@ class OpenADCQt():
         else:
             self.trigmodelow.setChecked(True)
 
-        self.setMaxSample(self.sc.getMaxSamples())
+        samps = self.sc.getMaxSamples()
+        self.setMaxSample(samps)
+        self.samples.setValue(samps)
 
     def updateGainLabel(self):
         #GAIN (dB) = 50 (dB/V) * VGAIN - 6.5 dB, (HILO = LO)
