@@ -1,23 +1,15 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date:    13:56:22 07/28/2012 
-// Design Name: 
-// Module Name:    serial_reg_iface 
-// Project Name: 
-// Target Devices: 
-// Tool versions: 
-// Description: 
-//
-// Dependencies: 
-//
-// Revision: 
-// Revision 0.01 - File Created
-// Additional Comments: 
-//
-//////////////////////////////////////////////////////////////////////////////////
+/***********************************************************************
+This file is part of the OpenADC Project. See www.newae.com for more details,
+or the codebase at http://www.assembla.com/spaces/openadc .
+
+This file is the serial interface. It can be replaced with a variety of other
+interfaces such as FTDI chip etc.
+
+Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+This project is released under the Modified FreeBSD License. See LICENSE
+file which should have came with this code.
+*************************************************************************/
 module serial_reg_iface(
     input reset_i,
     input clk_i,
@@ -55,5 +47,6 @@ module serial_reg_iface(
     async_receiver AR (.clk(clk),
                    .RxD(rx_in),
                    .RxD_data_ready(cmdfifo_rxf),
-                   .RxD_data(cmdfifo_din));
+                   .RxD_data(cmdfifo_din),
+						 .RxD_endofpacket());
 endmodule

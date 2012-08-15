@@ -195,6 +195,21 @@ class OpenADCQt():
         clocklayout.addWidget(self.phase, 1, 1)
         layout.addWidget(clocksettings)
 
+        ###### Sample Memory Setup
+        samplesettings = QGroupBox("Sample Settings")
+        samplelayout = QGridLayout()
+        samplesettings.setLayout(samplelayout)
+        self.samples = QSpinBox()
+        self.samples.setMinimum(100)
+
+        self.maxSamplesLabel = QLabel("Max Samples: ?")
+        samplelayout.addWidget(self.maxSamplesLabel, 0, 0)
+        samplelayout.addWidget(QLabel("Samples/Capture"), 1, 0)
+        samplelayout.addWidget(self.samples, 1, 1)
+        self.samples.valueChanged.connect(self.samplesChanged)
+        self.setMaxSample(1000)
+        layout.addWidget(samplesettings)
+
         ###### Graphical Preview Window
         self.preview = pysideGraph("Preview", 0, 100000, -0.5, 0.5)
         layout.addWidget(self.preview.getWidget())      
@@ -206,6 +221,10 @@ class OpenADCQt():
 
     def getLayout(self):
         return self.masterLayout
+
+    def setMaxSample(self, samples):
+        self.samples.setMaximum(samples)
+        self.maxSamplesLabel.setText("Max Samples: %d"%samples)
         
     def readAllSettings(self):
 
@@ -241,6 +260,8 @@ class OpenADCQt():
         else:
             self.trigmodelow.setChecked(True)
 
+        self.setMaxSample(self.sc.getMaxSamples())
+
     def updateGainLabel(self):
         #GAIN (dB) = 50 (dB/V) * VGAIN - 6.5 dB, (HILO = LO)
         #GAIN (dB) = 50 (dB/V) * VGAIN + 5.5 dB, (HILO = HI)        
@@ -271,6 +292,9 @@ class OpenADCQt():
         if self.gainlow.isChecked():            
             self.hilowmode = openadc.SETTINGS_GAIN_LOW
             self.sc.setSettings(self.sc.getSettings() & ~openadc.SETTINGS_GAIN_HIGH);
+
+    def samplesChanged(self, samples):
+        self.sc.setMaxSamples(samples)
 
     def processData(self, data):
 
@@ -350,6 +374,7 @@ class OpenADCQt():
         if self.sc.getPhase():
             print "Phase      = %d"%self.sc.getPhase()
         print "Status Reg = 0x%2x"%self.sc.getStatus()
+        print "Samples Captured = %d"%self.sc.getMaxSamples()
         
     def ADCconnect(self):
 

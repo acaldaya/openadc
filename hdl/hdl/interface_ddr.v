@@ -59,17 +59,10 @@ module interface(
 	assign slowclock = clk_40mhz;
 	
 	 wire       phase_clk;
-	 wire       dcm_psen;
-	 wire       dcm_psincdec;
-	 wire       dcm_psdone;
-	 wire [7:0] dcm_status;
 	 wire [8:0] phase_requested;
 	 wire [8:0] phase_actual;
 	 wire 		phase_load;
 	 wire 		phase_done;
-	 wire       clkfx;
-	 wire       locked;
-	 wire       dcm_clk;
 	
 	wire 			adc_capture_go;
 	wire			adc_capture_done;
@@ -83,9 +76,6 @@ module interface(
                       
    assign GPIO_LED1 = ~reset_i;   
   
-   //Global reset
-   //assign reset = reset_i;
-
    //Divide clock by 2^24 for heartbeat LED
 	//Divide clock by 2^25 for frequency measurement
    reg [25:0] timer_heartbeat;
@@ -137,27 +127,6 @@ module interface(
 		ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
 	end
    	
-	ODDR2 #(
-		// The following parameters specify the behavior
-		// of the component.
-		.DDR_ALIGNMENT("NONE"), // Sets output alignment
-										// to "NONE", "C0" or "C1"
-		.INIT(1'b0),    // Sets initial state of the Q 
-							 //   output to 1'b0 or 1'b1
-		.SRTYPE("SYNC") // Specifies "SYNC" or "ASYNC"
-							 //   set/reset
-	)
-	ODDR2_inst (
-		.Q(ADC_clk),   // 1-bit DDR output data
-		.C0(ADC_clk_src), // 1-bit clock input
-		.C1(~ADC_clk_src), // 1-bit clock input
-		.CE(1'b1), // 1-bit clock enable input
-		.D0(1'b1), // 1-bit data input (associated with C0)
-		.D1(1'b0), // 1-bit data input (associated with C1)
-		.R(1'b0),   // 1-bit reset input
-		.S(1'b0)    // 1-bit set input
-	);
-
 	wire [7:0] 	reg_status;
 	
 `ifdef CHIPSCOPE
@@ -172,20 +141,7 @@ module interface(
     .CLK(ADC_clk_sample), // IN
     .TRIG0(cs_data) // IN BUS [127:0]
    );
-`endif
-	
-  
-/*  
-   wire [15:0] cs_data;
-	 
-   coregen_ila ila (
-    .CONTROL(chipscope_control), // INOUT BUS [35:0]
-    .CLK(chipscope_clk), // IN
-    .TRIG0(cs_data) // IN BUS [255:0]
-   );   
-
-  `endif
-	*/
+`endif 
 	
 	//1 = trigger on high, 0 = trigger on low
 	wire trigger_mode;
@@ -219,8 +175,6 @@ module interface(
 
 	wire [7:0] PWM_incr;
 
-	wire ADC_clk_extsrc;
-	wire ADC_clk_intsrc;
 	wire ADC_clk_selection; //0=internal, 1=external
 	
 	wire				ddr_read_req;
@@ -252,7 +206,10 @@ module interface(
 	wire cmdfifo_wr;
 	wire [7:0] cmdfifo_din;
 	wire [7:0] cmdfifo_dout;
-	 
+	
+	wire [31:0] maxsamples_limit;
+	wire [31:0] maxsamples;
+	
 	serial_reg_iface cmdfifo_serial(.reset_i(reset),
 											  .clk_i(slowclock),
 											  .rx_i(rxd),
@@ -273,6 +230,7 @@ module interface(
 							.cmdfifo_wr(cmdfifo_wr),
 							.cmdfifo_din(cmdfifo_din),
 							.cmdfifo_dout(cmdfifo_dout),
+							.cmdfifo_isout(),
 							.gain(PWM_incr),
                      .hilow(amp_hilo),
 							.status(reg_status),
@@ -292,6 +250,8 @@ module interface(
 							.phase_i(phase_actual),
 							.phase_done_i(phase_done),
 							.phase_clk_o(phase_clk),
+							.maxsamples_i(maxsamples_limit),
+							.maxsamples_o(maxsamples),
 							.adc_clk_src_o(ADC_clk_selection),
 							.ddr_address(ddr_read_address),
 							.ddr_rd_req(ddr_read_req),
@@ -303,98 +263,30 @@ module interface(
 
                      );                      	 
 	
-	 dcm_phaseshift_interface dcmps(.clk_i(phase_clk),
-											  .reset_i(reset),
-											  .default_value_i(8'd0),
-											  .value_i(phase_requested),
-											  .load_i(phase_load),
-											  .value_o(phase_actual),
-											  .done_o(phase_done),
-											  .dcm_psen_o(dcm_psen),
-											  .dcm_psincdec_o(dcm_psincdec),
-											  .dcm_psdone_i(dcm_psdone),
-											  .dcm_status_i(dcm_status));	  
-	
-	
-	assign ADC_clk_intsrc = clk_100mhz_buf;		 
+	clock_managment genclocks(
+	 .reset(reset),
+    .clk_100mhz(clk_100mhz_buf),
+    .ext_clk(DUT_CLK_i),   
+	 .adc_clk(ADC_clk),
+	 .use_ext_clk(ADC_clk_selection),
+	 
+	 .systemsample_clk(ADC_clk_sample),
+
+	 .phase_clk(phase_clk),
+	 .phase_requested(phase_requested),
+	 .phase_actual(phase_actual),
+	 .phase_load(phase_load),
+	 .phase_done(phase_done)
+    );
 			 
-	// BUFGMUX: Global Clock Mux Buffer
-	// Spartan-6
-	// Xilinx HDL Libraries Guide, version 13.2
-	BUFGMUX #(
-	.CLK_SEL_TYPE("SYNC") // Glitchles ("SYNC") or fast ("ASYNC") clock switch-over
-	)
-	BUFGMUX_inst (
-	.O(ADC_clk_src), // 1-bit output: Clock buffer output
-	.I0(ADC_clk_intsrc), // 1-bit input: Clock buffer input (S=0)
-	.I1(ADC_clk_extsrc), // 1-bit input: Clock buffer input (S=1)
-	.S(ADC_clk_selection) // 1-bit input: Clock buffer select
-	);
-	// End of BUFGMUX_inst instantiation
-			 
-			 
-	/*		
-	IBUFG IBUFG_inst (
-		.O(clk_100mhz_buf),
-		.I(clk_100mhz) );
-		*/
-			 
-	// DCM_SP: Digital Clock Manager
-	// Spartan-6
-	// Xilinx HDL Libraries Guide, version 13.2
-	DCM_SP #(
-	.CLKFX_DIVIDE(1), // Divide value on CLKFX outputs - D - (1-32)
-	.CLKFX_MULTIPLY(4), // Multiply value on CLKFX outputs - M - (2-32)
-	.CLKIN_DIVIDE_BY_2("FALSE"), // CLKIN divide by two (TRUE/FALSE)
-	.CLKIN_PERIOD(10.0), // Input clock period specified in nS
-	.CLKOUT_PHASE_SHIFT("VARIABLE"), // Output phase shift (NONE, FIXED, VARIABLE)
-	.CLK_FEEDBACK("2X"), // Feedback source (NONE, 1X, 2X)
-	.DESKEW_ADJUST("SYSTEM_SYNCHRONOUS"), // SYSTEM_SYNCHRNOUS or SOURCE_SYNCHRONOUS
-	.PHASE_SHIFT(0), // Amount of fixed phase shift (-255 to 255)
-	.STARTUP_WAIT("FALSE") // Delay config DONE until DCM_SP LOCKED (TRUE/FALSE)
-	)
-	DCM_extclock_gen (
-	.CLK2X(dcm_clk),
-	.CLKFX(ADC_clk_extsrc), // 1-bit output: Digital Frequency Synthesizer output (DFS)
-	.LOCKED(locked), // 1-bit output: DCM_SP Lock Output
-	.PSDONE(dcm_psdone), // 1-bit output: Phase shift done output
-	.STATUS(dcm_status), // 8-bit output: DCM_SP status output
-	.CLKFB(dcm_clk), // 1-bit input: Clock feedback input
-	.CLKIN(DUT_CLK_i), // 1-bit input: Clock input
-	.PSCLK(phase_clk), // 1-bit input: Phase shift clock input
-	.PSEN(dcm_psen), // 1-bit input: Phase shift enable
-	.PSINCDEC(dcm_psincdec), // 1-bit input: Phase shift increment/decrement input
-	.RST(reset) // 1-bit input: Active high reset input
-	);
-	
-	// DCM_SP: Digital Clock Manager
-	// Spartan-6
-	// Xilinx HDL Libraries Guide, version 13.2
-	DCM_SP #(
-	.CLKIN_DIVIDE_BY_2("FALSE"), // CLKIN divide by two (TRUE/FALSE)
-	.CLKIN_PERIOD(10.0), // Input clock period specified in nS
-	.CLKOUT_PHASE_SHIFT("FIXED"), // Output phase shift (NONE, FIXED, VARIABLE)
-	.CLK_FEEDBACK("1X"), // Feedback source (NONE, 1X, 2X)
-	.DESKEW_ADJUST("SYSTEM_SYNCHRONOUS"), // SYSTEM_SYNCHRNOUS or SOURCE_SYNCHRONOUS
-	.PHASE_SHIFT(50), // Amount of fixed phase shift (-255 to 255)
-	.STARTUP_WAIT("FALSE") // Delay config DONE until DCM_SP LOCKED (TRUE/FALSE)
-	)
-	DCM_ADC_Sample_delay (
-	.CLK0(ADC_clk_sample), // 1-bit output: 0 degree clock output
-	//.LOCKED(locked), // 1-bit output: DCM_SP Lock Output
-	.CLKFB(ADC_clk_sample), // 1-bit input: Clock feedback input
-	.CLKIN(ADC_clk_src), // 1-bit input: Clock input
-	.RST(reset) // 1-bit input: Active high reset input
-	);		 
-	
 	reg [8:0] PWM_accumulator;
 	always @(posedge slowclock) PWM_accumulator <= PWM_accumulator[7:0] + PWM_incr;
 	
 	//assign amp_hilo = 1'b0;
 	assign amp_gain = PWM_accumulator[8];
 	
-	//wire clk_ddrusr;
-	
+
+`ifdef USE_DDR
 	ddr_top ddr(
     .reset_i(reset_i),
 	 .reset_o(reset),
@@ -408,6 +300,9 @@ module interface(
 	 .adc_trig_status(DUT_trigger_i),
 	 .adc_capture_go(adc_capture_go), //Set to '1' to start capture, keep at 1 until adc_capture_stop goes high
 	 .adc_capture_stop(adc_capture_done),
+	 
+	 .max_samples_i(maxsamples),
+	 .max_samples_o(maxsamples_limit),
 	 
 	 //DDR to USB Read Interface
 	 .ddr_read_req(ddr_read_req),
@@ -436,8 +331,16 @@ module interface(
 	 .LPDDR_WE_n(LPDDR_WE_n),
 	 .LPDDR_RZQ(LPDDR_RZQ)	 
 	 );
+`else		
+	IBUFG IBUFG_inst (
+		.O(clk_100mhz_buf),
+		.I(clk_100mhz) );
+		
+	assign reset = reset_i;
+		
+`endif
 	
-	
+			 		
 	assign adcfifo_full = ~adc_capture_go;
 	
 endmodule

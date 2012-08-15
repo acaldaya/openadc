@@ -1,24 +1,15 @@
 `include "includes.v"
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date:    12:23:33 05/24/2010 
-// Design Name: 
-// Module Name:    interface 
-// Project Name: 
-// Target Devices: 
-// Tool versions: 
-// Description: 
-//
-// Dependencies: 
-//
-// Revision: 
-// Revision 0.01 - File Created
-// Additional Comments: 
-//
-//////////////////////////////////////////////////////////////////////////////////
+/***********************************************************************
+This file is part of the OpenADC Project. See www.newae.com for more details,
+or the codebase at http://www.assembla.com/spaces/openadc .
 
+This file is the DDR interface. It provides a simple interface to the DDR
+memory on the board.
+
+Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+This project is released under the Modified FreeBSD License. See LICENSE
+file which should have came with this code.
+*************************************************************************/
 module ddr_top(
     input         reset_i,
 	 output			reset_o,
@@ -43,6 +34,9 @@ module ddr_top(
 	 output [7:0]	ddr_read_data,
 	 output			ddr_cal_done,
 	 output			ddr_error,
+	 
+	 input  [31:0]	max_samples_i,
+	 output [31:0]	max_samples_o,
 	 
 	 //DDR HW Interface
 	 output [12:0] LPDDR_A,
@@ -113,8 +107,12 @@ module ddr_top(
 	reg 				adc_capture_stop_reg;
 	assign			adc_capture_stop = adc_capture_stop_reg;
 	
+	//3 samples per 4 bytes
+	//64 MByte DDR = 48000000 samples
+	assign max_samples_o = 32'd48000000;
+	
 	always@(posedge adc_sampleclk) begin
-		if (sample_counter > 50000) begin
+		if (sample_counter < max_samples_i) begin
 				adc_capture_stop_reg <= 1;
 		end else begin
 				adc_capture_stop_reg <= 0;
@@ -363,6 +361,7 @@ module ddr_top(
 		.wr_en(ddrfifo_wr_en), // input wr_en
 		.rd_en(ddr_read_fifoen), // input rd_en
 		.dout(ddr_read_data), // output [7 : 0] dout
+		.full(),
 		.prog_full(ddrfifo_full), // output full - we use prog_full as
 										  // we need 64-byte FIFO. But only 63 or
 										  // 127-byte available. So we use 127 with

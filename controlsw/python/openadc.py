@@ -19,10 +19,15 @@ ADDR_FREQ4      = 8
 ADDR_PHASE1     = 9
 ADDR_PHASE2     = 10
 
-ADDR_DDR1       = 16
-ADDR_DDR2       = 17
-ADDR_DDR3       = 18
-ADDR_DDR4       = 19
+ADDR_SAMPLES1   = 16
+ADDR_SAMPLES2   = 17
+ADDR_SAMPLES3   = 18
+ADDR_SAMPLES4   = 19
+
+ADDR_DDR1       = 20
+ADDR_DDR2       = 21
+ADDR_DDR3       = 22
+ADDR_DDR4       = 23
 
 CODE_READ       = 0x80
 CODE_WRITE      = 0xC0
@@ -222,6 +227,35 @@ class serialOpenADCInterface:
 
         #Board samples 40E6/2^25, so convert to Hz
         return long(freq * (40E6 / pow(2,25)))
+
+    def setMaxSamples(self, samples):
+        cmd = bytearray(1)
+        cmd[0] = ((samples >> 0) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_SAMPLES1, cmd)
+        cmd[0] = ((samples >> 8) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_SAMPLES2, cmd)
+        cmd[0] = ((samples >> 16) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_SAMPLES3, cmd)
+        cmd[0] = ((samples >> 24) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_SAMPLES4, cmd)
+
+    def getMaxSamples(self):
+        '''Return the number of samples captured in one go'''
+        samples = 0x00000000;
+
+        temp = self.sendMessage(CODE_READ, ADDR_SAMPLES1)
+        samples = samples | (temp[0] << 0);
+
+        temp = self.sendMessage(CODE_READ, ADDR_SAMPLES2)
+        samples = samples | (temp[0] << 8);
+
+        temp = self.sendMessage(CODE_READ, ADDR_SAMPLES3)
+        samples = samples | (temp[0] << 16);
+
+        temp = self.sendMessage(CODE_READ, ADDR_SAMPLES4)
+        samples = samples | (temp[0] << 24);
+
+        return samples
 
     def devicePresent(self):
         msgin = bytearray([])
