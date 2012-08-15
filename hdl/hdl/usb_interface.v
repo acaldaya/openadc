@@ -312,15 +312,14 @@ module usb_interface(
 		end
 	 end
 	 
-    always @(posedge ftdi_clk or posedge reset)
+    always @(posedge ftdi_clk or reset)
     begin
       if (reset == 1) begin
          state <= `IDLE; 
          ftdi_rd_n <= 1;
          ftdi_wr_n <= 1;
          ftdi_isOutput <= 0;
-			extclk_locked <= 0;
-					
+			extclk_locked <= 0;					
 			registers_samples <= maxsamples_i;
 			
       end else begin

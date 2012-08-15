@@ -113,9 +113,9 @@ module ddr_top(
 	
 	always@(posedge adc_sampleclk) begin
 		if (sample_counter < max_samples_i) begin
-				adc_capture_stop_reg <= 1;
-		end else begin
 				adc_capture_stop_reg <= 0;
+		end else begin
+				adc_capture_stop_reg <= 1;
 		end
 	end
 		
