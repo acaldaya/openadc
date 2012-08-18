@@ -116,7 +116,7 @@ module interface(
 	wire [9:0] trigger_level;
 	
 	always @(posedge ADC_clk_sample) begin
-		//ADC_Data_tofifo <= ADC_Data;
+		ADC_Data_tofifo <= ADC_Data;
 		
 		//Input Validation Test #1: Uncomment the following
 		//ADC_Data_tofifo <= 10'hAA;
@@ -124,7 +124,7 @@ module interface(
 		//Input Validation Test #2: uncomment following, which should
 		//put a perfect ramp. Tests FIFO & USB interface for proper
 		//syncronization
-		ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
+		//ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
 	end
    	
 	wire [7:0] 	reg_status;

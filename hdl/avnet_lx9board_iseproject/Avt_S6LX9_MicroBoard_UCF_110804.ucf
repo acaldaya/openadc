@@ -75,10 +75,13 @@ TIMESPEC TS_clk_100mhz = PERIOD "clk_100mhz" 100000 KHz HIGH 50%;
 
 //NET fastclock TNM_NET = ADCClock;
 TIMESPEC TS_ADCClock = PERIOD "ADCClock" 133000 KHz HIGH 50%;
-NET "ADC_Data<0>" CLOCK_DEDICATED_ROUTE = FALSE;
-
-
+#NET "ADC_Data<0>" CLOCK_DEDICATED_ROUTE = FALSE;
 NET "DUT_CLK_i" CLOCK_DEDICATED_ROUTE = FALSE;
+
+#TODO FIX THIS
+#PIN "ddr/u_ddr_interface/memc3_infrastructure_inst/U_BUFG_CLK0.O" CLOCK_DEDICATED_ROUTE = FALSE;
+#PIN "ADC_clk_sample_BUFG.O" CLOCK_DEDICATED_ROUTE = FALSE;
+	
 ############################################################################	
 # User LEDs			
 ############################################################################	
@@ -99,7 +102,7 @@ NET SCL               LOC=P12   |IOSTANDARD = LVCMOS33 |PULLUP;    # "SCL"
 NET SDA               LOC=U13   |IOSTANDARD = LVCMOS33 |PULLUP;    # "SDA"
 
 NET DUT_CLK_i         LOC=F15   |IOSTANDARD = LVCMOS33;
-NET DUT_trigger_i     LOC=F14   |IOSTANDARD = LVCMOS33 |PULLUP;
+NET DUT_trigger_i     LOC=F14   |IOSTANDARD = LVCMOS33;
 NET ADC_Data[9]       LOC=F16   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
 NET ADC_Data[7]       LOC=C17   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
 NET ADC_Data[5]       LOC=C18   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
@@ -116,6 +119,60 @@ NET ADC_Data[2]       LOC=K13   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
 NET ADC_Data[0]       LOC=F17   |IOSTANDARD = LVCMOS33 | TNM_NET = ADCClock;
 NET amp_hilo          LOC=F18   |IOSTANDARD = LVCMOS33;
 
-//PIN "instance_name/clkout1_buf.O" CLOCK_DEDICATED_ROUTE = FALSE;
-//PIN "instance_name/clkout2_buf.O" CLOCK_DEDICATED_ROUTE = FALSE;
-
+############################################################################	
+# Micron MT46H32M16LFBF-5 LPDDR			
+############################################################################	
+CONFIG MCB_PERFORMANCE= STANDARD;
+# Addresses
+NET LPDDR_A[0]          LOC = J7  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A0"
+NET LPDDR_A[1]          LOC = J6  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A1"
+NET LPDDR_A[2]          LOC = H5  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A2"
+NET LPDDR_A[3]          LOC = L7  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A3"
+NET LPDDR_A[4]          LOC = F3  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A4"
+NET LPDDR_A[5]          LOC = H4  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A5"
+NET LPDDR_A[6]          LOC = H3  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A6"
+NET LPDDR_A[7]          LOC = H6  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A7"
+NET LPDDR_A[8]          LOC = D2  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A8"
+NET LPDDR_A[9]          LOC = D1  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A9"
+NET LPDDR_A[10]         LOC = F4  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A10"
+NET LPDDR_A[11]         LOC = D3  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A11"
+NET LPDDR_A[12]         LOC = G6  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_A12"
+NET LPDDR_BA[0]         LOC = F2  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_BA0"
+NET LPDDR_BA[1]         LOC = F1  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_BA1"
+# Data                                                                  
+NET LPDDR_DQ[0]         LOC = L2  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ0"
+NET LPDDR_DQ[1]         LOC = L1  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ1"
+NET LPDDR_DQ[2]         LOC = K2  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ2"
+NET LPDDR_DQ[3]         LOC = K1  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ3"
+NET LPDDR_DQ[4]         LOC = H2  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ4"
+NET LPDDR_DQ[5]         LOC = H1  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ5"
+NET LPDDR_DQ[6]         LOC = J3  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ6"
+NET LPDDR_DQ[7]         LOC = J1  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ7"
+NET LPDDR_DQ[8]         LOC = M3  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ8"
+NET LPDDR_DQ[9]         LOC = M1  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ9"
+NET LPDDR_DQ[10]        LOC = N2  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ10"
+NET LPDDR_DQ[11]        LOC = N1  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ11"
+NET LPDDR_DQ[12]        LOC = T2  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ12"
+NET LPDDR_DQ[13]        LOC = T1  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ13"
+NET LPDDR_DQ[14]        LOC = U2  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ14"
+NET LPDDR_DQ[15]        LOC = U1  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_DQ15"
+NET LPDDR_LDM         LOC = K3  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_LDM"
+NET LPDDR_UDM         LOC = K4  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_UDM"
+NET LPDDR_LDQS        LOC = L4  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_LDQS"
+NET LPDDR_UDQS        LOC = P2  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_UDQS"
+# Clock
+NET LPDDR_CK_N        LOC = G1  | IOSTANDARD = DIFF_MOBILE_DDR;        # "LPDDR_CK_N"
+NET LPDDR_CK_P        LOC = G3  | IOSTANDARD = DIFF_MOBILE_DDR;        # "LPDDR_CK_P"
+NET LPDDR_CKE         LOC = H7  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_CKE"
+# Control
+NET LPDDR_CAS_n       LOC = K5  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_CAS#"
+NET LPDDR_RAS_n       LOC = L5  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_RAS#"
+NET LPDDR_WE_n        LOC = E3  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_WE#"
+NET LPDDR_RZQ         LOC = N4  | IOSTANDARD = MOBILE_DDR;             # "LPDDR_RZQ"
+############################################################################	
+# All the IO resources in an IO tile which contains DQSP/UDQSP are used		
+# irrespective of a single-ended or differential DQS design. Any signal that	
+# is connected to the free pin of the same IO tile in a single-ended design	
+# will be unrouted. Hence, the IOB cannot used as general pupose IO.			
+############################################################################	
+CONFIG PROHIBIT = P1,L3;
