@@ -311,13 +311,13 @@ class serialOpenADCInterface:
        status = self.getStatus()
 
        timeout = 0;
-       while (status & STATUS_FIFO_MASK) == 0:
+       while (status & STATUS_ARM_MASK) == STATUS_ARM_MASK:
            status = self.getStatus()
            time.sleep(0.05)
-
-           timeout = timeout + 1
-           if timeout > 100:
-               return False
+           
+           #timeout = timeout + 1
+           #if timeout > 100:
+           #    return False
 
        self.setSettings(self.getSettings() & ~0x08);
        return True
