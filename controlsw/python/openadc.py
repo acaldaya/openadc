@@ -311,7 +311,7 @@ class serialOpenADCInterface:
        status = self.getStatus()
 
        timeout = 0;
-       while (status & STATUS_ARM_MASK) == STATUS_ARM_MASK:
+       while ((status & STATUS_ARM_MASK) == STATUS_ARM_MASK) | ((status & STATUS_FIFO_MASK) == 0):
            status = self.getStatus()
            time.sleep(0.05)
            
