@@ -10,6 +10,7 @@ Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
 This project is released under the Modified FreeBSD License. See LICENSE
 file which should have came with this code.
 *************************************************************************/
+`define CHIPSCOPE
 module ddr_top(
     input         reset_i,
 	 output			reset_o,
@@ -53,7 +54,11 @@ module ddr_top(
 	 output			LPDDR_RAS_n,
 	 output			LPDDR_WE_n,
 	 output			LPDDR_RZQ	 
+`ifdef CHIPSCOPE
+	 ,inout [35:0]  chipscope_control
+`endif
 	 );
+	
 	 	 
 	reg 				ddrfifo_wr_en;
 	wire 				ddrfifo_full;
@@ -103,6 +108,7 @@ module ddr_top(
 	assign			ddr_read_done = ddr_read_done_reg;
 	
 	reg [31:0]  	sample_counter; //How many 3-sample tuples gone through fifo
+	reg [31:0]     ddr_counter;
 	
 	reg 				adc_capture_stop_reg;
 	assign			adc_capture_stop = adc_capture_stop_reg;
@@ -198,11 +204,14 @@ module ddr_top(
 			ddr_fifo_datawritten <= 0;
 			c3_p3_wr_en <= 0;
 			adcfifo_rd_en <= 0;	
+			ddr_counter <= 0;
       end else begin
          case (state)
             `IDLE: begin
 					c3_p3_cmd_en <= 0;
 					ddr_write_addr <= 0;	
+					ddr_write_nextaddr <= 0;
+					ddr_counter <= 0;
 					ddr_fifo_datawritten <= 0;
 					c3_p3_wr_en <= 0;
 					adcfifo_rd_en <= 0;	
@@ -220,7 +229,9 @@ module ddr_top(
 					ddr_fifo_datawritten <= 0;
 					c3_p3_wr_en <= 0;
 					adcfifo_rd_en <= 0;
-					if (adcfifo_has64 & ~c3_p3_wr_full) begin
+					if (ddr_counter > max_samples_i) begin
+						state <= `IDLE;
+					end else if (adcfifo_has64 & ~c3_p3_wr_full) begin
 						state <= `DATA_WRITE;					
 					end else begin
 						state <= `DATA_WAIT;
@@ -253,6 +264,7 @@ module ddr_top(
 						c3_p3_cmd_en <= 1;
 						ddr_write_addr <= ddr_write_nextaddr;
 						ddr_write_nextaddr <= ddr_write_nextaddr + 256;
+						ddr_counter <= ddr_counter + 192; //64 words written, each word = 3 samples, so = 192 samples/package
 					end else begin
 						state <= `CMD_WAIT;
 						c3_p3_cmd_en <= 0;
@@ -405,4 +417,30 @@ module ddr_top(
 		endcase		
 		end
 	end
+	
+	
+`ifdef CHIPSCOPE
+
+	wire [127:0] cs_data;
+	
+	assign cs_data[0] = c3_p3_cmd_en;
+	assign cs_data[30:1] = ddr_write_addr[29:0];
+	assign cs_data[31] = c3_p3_cmd_empty;
+	assign cs_data[32] = c3_p3_cmd_full;
+	assign cs_data[33] = c3_p3_wr_en;
+	assign cs_data[41:34] = adcfifo_dout;
+	assign cs_data[42] = c3_p3_wr_full;
+	assign cs_data[49:43] = c3_p3_wr_count;
+	assign cs_data[50] = c3_p3_wr_underrun;
+	assign cs_data[51] = c3_p3_wr_error;
+    
+   coregen_ila ila (
+    .CONTROL(chipscope_control), // INOUT BUS [35:0]
+    .CLK(ddr_usrclk), // IN
+    .TRIG0(cs_data) // IN BUS [127:0]
+   );
+	
+`endif
+
+	
 endmodule
