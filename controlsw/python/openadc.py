@@ -358,9 +358,10 @@ class serialOpenADCInterface:
               #Address of DDR is auto-incremented following a read command
               #so no need to write new address
               
-              #print "Address=%x"%self.getDDRAddress()
+              print "Address=%x"%self.getDDRAddress()
 
               data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, 257);
+              #print len(data)
 
               datapoints = datapoints + self.processDataDDR(data)
 
@@ -370,7 +371,10 @@ class serialOpenADCInterface:
                      if progressDialog.wasCanceled():
                             break              
 
-       if len(datapoints) > NumberPoints:
+       #for point in datapoints:
+       #       print "%3x"%(int((point+0.5)*1024))
+
+       if len(datapoints) > NumberPoints:              
               return datapoints[0:NumberPoints]
        else:
               return datapoints
@@ -383,9 +387,11 @@ class serialOpenADCInterface:
             print("Unexpected sync byte: 0x%x"%data[0])
             return None
 
-        for i in range(2, len(data)-3, 4):
+        for i in range(1, len(data)-3, 4):            
             #Convert
             temppt = (data[i + 3]<<0) | (data[i + 2]<<8) | (data[i + 1]<<16) | (data[i + 0]<<24)
+
+            #print("%2x "%data[i])
 
             #print "%x %x %x %x"%(data[i +0], data[i +1], data[i +2], data[i +3]);
             #print "%x"%temppt
@@ -405,5 +411,7 @@ class serialOpenADCInterface:
             fpData.append(float(intpt1) / 1024.0 - self.offset)
             fpData.append(float(intpt2) / 1024.0 - self.offset)
             fpData.append(float(intpt3) / 1024.0 - self.offset)
+
+        print len(fpData)
 
         return fpData

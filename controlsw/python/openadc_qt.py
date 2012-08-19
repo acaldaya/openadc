@@ -340,10 +340,8 @@ class OpenADCQt():
     def ADCarm(self):
         self.ADCsettrigmode()
         self.sc.arm()
-        
-    def ADCcapture(self, update=True, NumberPoints=None):
-        self.sc.capture()
 
+    def ADCread(self, update=True, NumberPoints=None):
         if NumberPoints == None:
             NumberPoints = self.samples.value()
 
@@ -357,6 +355,12 @@ class OpenADCQt():
             self.preview.updateData(self.datapoints)
 
         return True
+        
+    def ADCcapture(self, update=True, NumberPoints=None):
+        self.sc.capture()
+        return self.ADCread(update, NumberPoints)
+
+
 
     def ADCsettrigmode(self):
         self.trigmode = 0;

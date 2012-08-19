@@ -131,8 +131,8 @@ module usb_interface(
 	 reg [8:0]	phase_out;
 	 reg [8:0]  phase_in;
 	 reg        phase_loadout;
-	 reg			phase_done;
-	 
+	 reg			phase_done;		
+	
 `ifdef USE_DDR
 	 assign ddr_address = registers_ddr_address;
 `endif
@@ -282,6 +282,7 @@ module usb_interface(
 	 `define DDRADDR_ADDR3  22
 	 `define DDRADDR_ADDR4  23
     
+	 `undef  IDLE
     `define IDLE            'b0000
     `define ADDR            'b0001
     `define DATAWR1         'b0010
@@ -295,6 +296,7 @@ module usb_interface(
     reg [3:0]              state = `IDLE;
     reg [5:0]              address;
 	 reg							extclk_locked;
+	 reg 							ddr_rd_done_reg;
     
 	 assign hilow = registers_settings[1];
 	 assign trigger_mode = registers_settings[2];
@@ -428,7 +430,7 @@ module usb_interface(
 						state <= `IDLE;
 						extclk_locked <= 0;
 					end else if (address == `ADCDATA_ADDR) begin						
-						ftdi_dout <= 8'hAC;
+						ftdi_dout <= 8'hAC; //Sync Byte
 						ftdi_wr_n <= 1;					
 `ifdef USE_DDR
 						state <= `DATARD_DDRSTART;
@@ -526,7 +528,7 @@ module usb_interface(
 									
 					if (ftdi_txe_n == 0) begin
 						ftdi_wr_n <= 0;
-						if (fifo_empty == 0) begin
+						if (fifo_empty == 0) begin 
 							fifo_rd_en_reg <= 1;
 							state <= `DATARD2;
 						end else begin
@@ -548,7 +550,7 @@ module usb_interface(
 					ftdi_rd_n <= 1;
 					fifo_rd_en_reg <= 0;
 					
-					if (ddr_rd_done) begin
+					if (ddr_rd_done_reg) begin
 						state <= `DATARD1;						
 					end else begin
 						state <= `DATARD_DDRSTART;
@@ -577,19 +579,23 @@ module usb_interface(
       end                  
     end 
 	 
-	 always @(posedge ftdi_clk or posedge ddr_rd_done)
-	 begin
-		if (ddr_rd_done) begin
+	 always @(posedge reset or posedge ftdi_clk or posedge ddr_rd_done) 
+		begin
+		if (reset) begin
+			ddr_rd_done_reg <= 0;
+			ddr_rd_reg <= 0;
+		end else if (ddr_rd_done) begin
+			ddr_rd_done_reg <= 1;
 			ddr_rd_reg <= 0;
 		end else begin
-			if (state == `DATARD_DDRSTART) begin
-				ddr_rd_reg <= 1;
-			end else begin
+			if (state == `IDLE) begin
+				ddr_rd_done_reg <= 0;
 				ddr_rd_reg <= 0;
+			end else if ((state == `DATARD_DDRSTART) && (ddr_rd_done_reg == 0)) begin
+				ddr_rd_reg <= 1;
 			end
 		end
-	 end
-    
+	 end    
 
     always @(posedge ftdi_clk or posedge reset)
     begin
@@ -608,9 +614,7 @@ module usb_interface(
 						
 				default: begin
 					phase_loadout <= 0;
-
-				end
-             
+				end             
          endcase
       end                  
     end 

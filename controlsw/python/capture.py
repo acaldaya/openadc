@@ -30,6 +30,9 @@ class MainWindow(QMainWindow):
 
     def ADCconnect(self):
         self.oa.ADCconnect()
+
+    def ADCread(self):
+        self.oa.ADCread();
         
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -44,6 +47,7 @@ class MainWindow(QMainWindow):
    
         self.connectButton = QPushButton("Connect to ADC Board")
         self.captureButton = QPushButton("Capture")
+        self.readButton = QPushButton("Read")
         self.updateButton = QPushButton("Get Status")
 
 
@@ -51,6 +55,7 @@ class MainWindow(QMainWindow):
         self.connect(self.connectButton, SIGNAL("clicked()"),self, SLOT("ADCconnect()"))
         self.connect(self.captureButton, SIGNAL("clicked()"),self, SLOT("ADCcapture()"))
         self.connect(self.updateButton, SIGNAL("clicked()"),self,SLOT("ADCupdate()"))
+        self.connect(self.readButton, SIGNAL("clicked()"),self,SLOT("ADCread()"))
        
         
         # Create layout and add widgets
@@ -60,6 +65,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.title)
         layout.addWidget(self.connectButton)
         layout.addWidget(self.captureButton)
+        layout.addWidget(self.readButton)
         layout.addWidget(self.updateButton)
 
         layout.addLayout(self.oa.getLayout())

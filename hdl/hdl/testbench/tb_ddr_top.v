@@ -59,6 +59,7 @@ module tb_ddr_top;
 	reg [31:0] ddr_read_address;
 	wire ddr_read_fifoclk;
 	reg ddr_read_fifoen;
+	wire [31:0] max_samples;
 
 	// Outputs
 	wire adc_capture_stop;
@@ -103,6 +104,7 @@ module tb_ddr_top;
 		.ddr_read_data(ddr_read_data), 
 		.ddr_cal_done(ddr_cal_done),
 		.ddr_error(ddr_error),
+		.max_samples_i(max_samples),
 		.LPDDR_A(LPDDR_A), 
 		.LPDDR_BA(LPDDR_BA), 
 		.LPDDR_DQ(LPDDR_DQ), 
@@ -142,6 +144,8 @@ module tb_ddr_top;
 	wire adc_ts_out;
 	
 	reg [31:0] adc_temp;
+
+	assign 		max_samples = 100;
 
 	initial begin
 		// Initialize Inputs

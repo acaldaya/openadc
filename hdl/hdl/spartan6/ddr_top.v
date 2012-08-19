@@ -66,7 +66,7 @@ module ddr_top(
    reg				c3_p2_cmd_en;
    wire				c3_p2_cmd_empty;
    wire				c3_p2_cmd_full;
-   wire				c3_p2_rd_en;
+   reg				c3_p2_rd_en;
    wire [31:0]		c3_p2_rd_data;
    wire				c3_p2_rd_full;
    wire				c3_p2_rd_empty;
@@ -360,9 +360,13 @@ module ddr_top(
 	`define DDRREAD_LOAD1   'b0010
 	reg [3:0] 		ddrread_state;	
 	
-	assign c3_p2_rd_en = ~c3_p2_rd_empty;
+	//assign c3_p2_rd_en = ~c3_p2_rd_empty;
+	
+	//We assign both at the same time - once empty goes low,
+	//new data is already at the output
 	always @(posedge ddr_usrclk) begin
-		ddrfifo_wr_en <= c3_p2_rd_en;	
+		c3_p2_rd_en <= ~c3_p2_rd_empty;
+		ddrfifo_wr_en <= ~c3_p2_rd_empty;
 	end
 	
 	ddr_read_fifo ddr_resize_fifo (
@@ -423,16 +427,25 @@ module ddr_top(
 
 	wire [127:0] cs_data;
 	
-	assign cs_data[0] = c3_p3_cmd_en;
-	assign cs_data[30:1] = ddr_write_addr[29:0];
-	assign cs_data[31] = c3_p3_cmd_empty;
-	assign cs_data[32] = c3_p3_cmd_full;
-	assign cs_data[33] = c3_p3_wr_en;
-	assign cs_data[41:34] = adcfifo_dout;
-	assign cs_data[42] = c3_p3_wr_full;
-	assign cs_data[49:43] = c3_p3_wr_count;
-	assign cs_data[50] = c3_p3_wr_underrun;
-	assign cs_data[51] = c3_p3_wr_error;
+	assign cs_data[0] = c3_p2_cmd_en;
+	assign cs_data[30:1] = ddr_read_address[29:0];
+	assign cs_data[31] = c3_p2_cmd_empty;
+	assign cs_data[32] = c3_p2_cmd_full;
+	assign cs_data[33] = c3_p2_rd_en;
+	
+	assign cs_data[42] = c3_p2_rd_full;
+	assign cs_data[49:43] = c3_p2_rd_count;
+	assign cs_data[50] = c3_p2_rd_overflow;
+	assign cs_data[51] = c3_p2_rd_error;
+	
+	assign cs_data[83:52] = c3_p2_rd_data;	
+	assign cs_data[84] = c3_p2_rd_empty;
+	assign cs_data[85] = ddrfifo_full;
+	assign cs_data[86] = ddr_read_done_reg;
+	assign cs_data[87] = ddrfifo_wr_en;
+	assign cs_data[97:88] = ddr_read_data[7:0];
+	assign cs_data[98] = ddr_read_fifoen;
+	assign cs_data[99] = ddr_read_fifoempty;
     
    coregen_ila ila (
     .CONTROL(chipscope_control), // INOUT BUS [35:0]
