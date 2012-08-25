@@ -57,6 +57,8 @@ module interface(
 	wire        slowclock;
 	wire 			clk_100mhz_buf; 	
 	
+	wire 			reset_intermediate;
+	
 	assign slowclock = clk_40mhz;
 	
 	 wire       phase_clk;
@@ -219,7 +221,8 @@ module interface(
 											  .cmdfifo_dout(cmdfifo_dout));
 
 `undef CHIPSCOPE
-   usb_interface usb(.reset(reset),
+   usb_interface usb(.reset_i(reset_i),
+							.reset_o(reset_intermediate),
                      .clk(slowclock),
 							.cmdfifo_rxf(cmdfifo_rxf),
 							.cmdfifo_txe(cmdfifo_txe),
@@ -287,7 +290,7 @@ module interface(
 `ifdef USE_DDR
 //`define CHIPSCOPE 1
 	ddr_top ddr(
-    .reset_i(reset_i),
+    .reset_i(reset_intermediate),
 	 .reset_o(reset),
     .clk_100mhz_in(clk_100mhz),
 	 .clk_100mhz_out(clk_100mhz_buf),
@@ -337,7 +340,7 @@ module interface(
 
 //`define CHIPSCOPE 1
 	fifo_top fifo_top_inst(
-    .reset_i(reset_i),
+    .reset_i(reset_intermediate),
 	 .reset_o(reset),
     .clk_100mhz_in(clk_100mhz),
 	 .clk_100mhz_out(clk_100mhz_buf),

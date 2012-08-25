@@ -40,6 +40,7 @@ ADDR_DDR4       = 23
 CODE_READ       = 0x80
 CODE_WRITE      = 0xC0
 
+SETTINGS_RESET     = 0x01
 SETTINGS_GAIN_HIGH = 0x02
 SETTINGS_GAIN_LOW  = 0x00
 SETTINGS_TRIG_HIGH = 0x04
@@ -165,6 +166,13 @@ class serialOpenADCInterface:
         else:
             raise ValueError, "Invalid Gain Mode, only 'low' or 'high' allowed"
 
+    def setReset(self, value):
+        if value:
+               self.setSettings(self.getSettings() | SETTINGS_RESET);
+        else:
+                self.setSettings(self.getSettings() | SETTINGS_RESET);
+               
+
     def setClockSource(self, source):
         if source == "int":
             self.setSettings(self.getSettings() & ~SETTINGS_CLK_EXT);
@@ -275,6 +283,10 @@ class serialOpenADCInterface:
         msgin = bytearray([])
         msgin.append(0xAC);
 
+        self.serial.flushInput()
+
+        #Reset... will automatically clear by the time we are done
+        self.setReset(True)
         self.serial.flushInput()
         
         #Send ping

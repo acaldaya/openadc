@@ -13,7 +13,8 @@ This project is released under the Modified FreeBSD License. See LICENSE
 file which should have came with this code.
 *************************************************************************/
 module usb_interface(
-	input 			reset,
+	input 			reset_i,
+	output			reset_o,
 	input 			clk,
 	
 	/* Interface to computer (e.g.: serial, FTDI chip, etc) */
@@ -87,6 +88,15 @@ module usb_interface(
     reg           				ftdi_wr_n;
 	 reg								fifo_rd_en_reg;
 	 assign fifo_rd_en = fifo_rd_en_reg;
+	 
+	 wire	  reset;
+	 reg 	  reset_latched;
+	 assign reset = reset_i | reset_latched;
+	 assign reset_o = reset;
+	 
+	 always @(posedge ftdi_clk) begin
+		reset_latched <= reset_fromreg;
+	 end
     	 
     wire [7:0] ftdi_din;
     reg [7:0]  ftdi_dout;
@@ -301,6 +311,7 @@ module usb_interface(
 	 reg							extclk_locked;
 	 reg 							ddr_rd_done_reg;
     
+	 assign reset_fromreg = registers_settings[0];
 	 assign hilow = registers_settings[1];
 	 assign trigger_mode = registers_settings[2];
 	 assign cmd_arm = registers_settings[3];
@@ -326,6 +337,7 @@ module usb_interface(
          ftdi_isOutput <= 0;
 			extclk_locked <= 0;					
 			registers_samples <= maxsamples_i;
+			registers_settings <= 0;
 			
       end else begin
          case (state)
