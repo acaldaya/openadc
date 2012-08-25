@@ -188,7 +188,7 @@ module usb_interface(
 		  
 	 0x02 - STATUS
 	 
-	    [  X  X  DC DE P  E  F  T ] 
+	    [  X  M  DC DE P  E  F  T ] 
 		 T = (bit 0) Triggered status
 		      1 = System armed
 				0 = System disarmed		
@@ -206,7 +206,10 @@ module usb_interface(
 				0 = No error		 
 		 DC = (bit 5) DDR Calibration Done
 		      1 = Cal done OK
-				0 = Cal in progress/failed		
+				0 = Cal in progress/failed	
+		 M =  (bit 6) Memory Mode
+		      1 = DDR
+				0 = FIFO
 		
 	 0x03 - ADC Readings
 	 
@@ -579,6 +582,7 @@ module usb_interface(
       end                  
     end 
 	 
+`ifdef USE_DDR
 	 always @(posedge reset or posedge ftdi_clk or posedge ddr_rd_done) 
 		begin
 		if (reset) begin
@@ -596,6 +600,7 @@ module usb_interface(
 			end
 		end
 	 end    
+`endif
 
     always @(posedge ftdi_clk or posedge reset)
     begin

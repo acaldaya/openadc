@@ -52,6 +52,10 @@ SETTINGS_CLK_EXT   = 0x40
 STATUS_ARM_MASK    = 0x01
 STATUS_FIFO_MASK   = 0x02
 STATUS_EXT_MASK    = 0x04
+STATUS_DCM_MASK    = 0x08
+STATUS_DDRCAL_MASK = 0x10
+STATUS_DDRERR_MASK = 0x20
+STATUS_DDRMODE_MASK= 0x40
 
 # sign extend b low bits in x
 # from "Bit Twiddling Hacks"
@@ -71,6 +75,8 @@ class serialOpenADCInterface:
         self.serial.write(nullmessage);
 
         self.offset = 0.5
+
+        self.ddrMode = False
     
     def sendMessage(self, mode, address, payload=None, Validate=True, maxResp=None):
         """Send a message out the serial port"""
@@ -263,11 +269,13 @@ class serialOpenADCInterface:
         temp = self.sendMessage(CODE_READ, ADDR_SAMPLES4)
         samples = samples | (temp[0] << 24);
 
-        return samples
+        return samples      
 
     def devicePresent(self):
         msgin = bytearray([])
         msgin.append(0xAC);
+
+        self.serial.flushInput()
         
         #Send ping
         self.sendMessage(CODE_WRITE, ADDR_ECHO, msgin)
@@ -275,10 +283,18 @@ class serialOpenADCInterface:
         #Pong?
         msgout = self.sendMessage(CODE_READ, ADDR_ECHO)
 
-        if (msgout == msgin):
-            return True
+        if (msgout != msgin):
+            return False         
+
+        #Init stuff
+        state = self.getStatus()
+
+        if state & STATUS_DDRMODE_MASK:
+            self.ddrMode = True
         else:
-            return False
+            self.ddrMode = False
+
+        return True
 
     def setDDRAddress(self, addr):
         cmd = bytearray(1)
@@ -322,48 +338,59 @@ class serialOpenADCInterface:
        self.setSettings(self.getSettings() & ~0x08);
        return True
 
-    def readData(self, NumberPoints=None, progressDialog=None):
-       return self.readDataDDR(NumberPoints, progressDialog)
-
-       if NumberPoints:
-              NumberPoints = NumberPoints * 2
-
     def flush(self):
        #Flush output FIFO
        self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, None)
 
-    def readDataDDR(self, NumberPoints=None, progressDialog=None):       
+    def readData(self, NumberPoints=None, progressDialog=None):     
        datapoints = []
 
        if NumberPoints == None:
               NumberPoints = 0x1000
 
-       #We were passed number of samples to read. DDR interface
-       #reads 3 points per 4 bytes, and reads in blocks of
-       #256 bytes (e.g.: 192 samples)
-       NumberPackages = NumberPoints / 192
+       if self.ddrMode:
+              #We were passed number of samples to read. DDR interface
+              #reads 3 points per 4 bytes, and reads in blocks of
+              #256 bytes (e.g.: 192 samples)
+              NumberPackages = NumberPoints / 192
 
-       #If user requests we send extra then scale back afterwards
-       if (NumberPoints % 192) > 0:
-              NumberPackages = NumberPackages + 1
+              #If user requests we send extra then scale back afterwards
+              if (NumberPoints % 192) > 0:
+                     NumberPackages = NumberPackages + 1
 
-       start = 0
-       self.setDDRAddress(0)
+              start = 0
+              self.setDDRAddress(0)
 
-       if progressDialog:
-              progressDialog.setMinimum(0)
-              progressDialog.setMaximum(NumberPackages)
+              
+              BytesPerPackage = 257
+
+              if progressDialog:
+                     progressDialog.setMinimum(0)
+                     progressDialog.setMaximum(NumberPackages)
+       else:
+              #FIFO takes 3 samples at a time... todo figure this out
+              NumberPackages = 1
+
+              #We get 3 samples in each word returned (word = 4 bytes)
+              #So need to convert samples requested to words, rounding
+              #up if we request an incomplete number
+              nwords = NumberPoints / 3
+              if NumberPoints % 3:
+                     nwords = nwords + 1
+
+              #Return 4x as many bytes as words, +1 for sync byte
+              BytesPerPackage = nwords * 4 + 1
        
        for status in range(0, NumberPackages):        
               #Address of DDR is auto-incremented following a read command
               #so no need to write new address
               
-              print "Address=%x"%self.getDDRAddress()
+              #print "Address=%x"%self.getDDRAddress()
 
-              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, 257);
+              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, BytesPerPackage);
               #print len(data)
 
-              datapoints = datapoints + self.processDataDDR(data)
+              datapoints = datapoints + self.processData(data)
 
               if progressDialog:
                      progressDialog.setValue(status)
@@ -379,7 +406,7 @@ class serialOpenADCInterface:
        else:
               return datapoints
 
-    def processDataDDR(self, data):
+    def processData(self, data):
         fpData = []
         lastpt = -100;
 
@@ -412,6 +439,6 @@ class serialOpenADCInterface:
             fpData.append(float(intpt2) / 1024.0 - self.offset)
             fpData.append(float(intpt3) / 1024.0 - self.offset)
 
-        print len(fpData)
+        #print len(fpData)
 
         return fpData

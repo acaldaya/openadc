@@ -35,7 +35,8 @@ module interface(
 	 output        amp_gain,
 	 output        amp_hilo
 	 
-`ifdef USE_DDR
+//`ifdef USE_DDR
+ /* To avoid modifying UCF file we keep these even in FIFO mode */
 	 ,output [12:0] LPDDR_A,
 	 output [1:0]  LPDDR_BA,
 	 inout  [15:0] LPDDR_DQ,
@@ -50,7 +51,7 @@ module interface(
 	 output			LPDDR_RAS_n,
 	 output			LPDDR_WE_n,
 	 output			LPDDR_RZQ
-`endif
+//`endif
     );
 
 	wire        slowclock;
@@ -134,13 +135,16 @@ module interface(
   coregen_icon icon (
     .CONTROL0(chipscope_control) // INOUT BUS [35:0]
    ); 
-   wire [127:0] cs_data;
+  
+/*
+	wire [127:0] cs_data;
     
    coregen_ila ila (
     .CONTROL(chipscope_control), // INOUT BUS [35:0]
     .CLK(ADC_clk_sample), // IN
     .TRIG0(cs_data) // IN BUS [127:0]
    );
+*/
 `endif 
 	
 	//1 = trigger on high, 0 = trigger on low
@@ -170,8 +174,16 @@ module interface(
 	 .capture_done_i(adc_capture_done));		 
 			 
 	assign reg_status[0] = armed;
-   assign reg_status[1] = adcfifo_full;
+   assign reg_status[1] = ~adc_capture_go;
 	assign reg_status[2] = DUT_trigger_i;
+	//reg_status[3]
+	//reg_status[4]
+	//reg_status[5]
+	`ifdef USE_DDR
+	assign reg_status[6] = 1'b1;
+	`else
+	assign reg_status[6] = 1'b0;
+	`endif
 
 	wire [7:0] PWM_incr;
 
@@ -183,22 +195,7 @@ module interface(
 	wire [7:0] 		ddrfifo_dout;
 	wire				ddrfifo_empty;
 	wire				ddrfifo_rd_en;
-	wire				ddrfifo_rd_clk;	
-
-`ifdef CHIPSCOPE
-	assign cs_data[0] = armed;
-	assign cs_data[1] = trigger_source;
-	assign cs_data[2] = trigger_mode;
-	assign cs_data[3] = DUT_trigger_i;
-	assign cs_data[4] = trigger_wait;
-	assign cs_data[5] = ddr_read_req;
-	assign cs_data[6] = ddr_read_done;
-	assign cs_data[7] = ddrfifo_empty;
-	assign cs_data[8] = adc_capture_go;
-	assign cs_data[9] = adc_capture_done;
-	assign cs_data[10] = cmd_arm;
-`endif
-	 
+	wire				ddrfifo_rd_clk;
 	 
 	wire cmdfifo_rxf;
 	wire cmdfifo_txe;
@@ -252,10 +249,12 @@ module interface(
 							.phase_clk_o(phase_clk),
 							.maxsamples_i(maxsamples_limit),
 							.maxsamples_o(maxsamples),
-							.adc_clk_src_o(ADC_clk_selection),
-							.ddr_address(ddr_read_address),
+							.adc_clk_src_o(ADC_clk_selection)
+`ifdef USE_DDR
+							, .ddr_address(ddr_read_address),
 							.ddr_rd_req(ddr_read_req),
 							.ddr_rd_done(ddr_read_done)
+`endif
 							
 `ifdef CHIPSCOPE                     
                      , .chipscope_control(chipscope_control)
@@ -285,8 +284,8 @@ module interface(
 	//assign amp_hilo = 1'b0;
 	assign amp_gain = PWM_accumulator[8];
 	
-
 `ifdef USE_DDR
+//`define CHIPSCOPE 1
 	ddr_top ddr(
     .reset_i(reset_i),
 	 .reset_o(reset),
@@ -329,18 +328,65 @@ module interface(
 	 .LPDDR_CAS_n(LPDDR_CAS_n),
 	 .LPDDR_RAS_n(LPDDR_RAS_n),
 	 .LPDDR_WE_n(LPDDR_WE_n),
-	 .LPDDR_RZQ(LPDDR_RZQ)	 
+	 .LPDDR_RZQ(LPDDR_RZQ)
+`ifdef CHIPSCOPE
+	 ,.chipscope_control(chipscope_control)
+`endif	 
 	 );
 `else		
-	IBUFG IBUFG_inst (
-		.O(clk_100mhz_buf),
-		.I(clk_100mhz) );
-		
-	assign reset = reset_i;
-		
+
+//`define CHIPSCOPE 1
+	fifo_top fifo_top_inst(
+    .reset_i(reset_i),
+	 .reset_o(reset),
+    .clk_100mhz_in(clk_100mhz),
+	 .clk_100mhz_out(clk_100mhz_buf),
+	 
+	 //ADC Sample Input
+	 .adc_datain(ADC_Data_tofifo),
+	 .adc_sampleclk(ADC_clk_sample),
+	 .adc_or(ADC_OR),
+	 .adc_trig_status(DUT_trigger_i),
+	 .adc_capture_go(adc_capture_go), //Set to '1' to start capture, keep at 1 until adc_capture_stop goes high
+	 .adc_capture_stop(adc_capture_done),
+	  
+	 //DDR to USB Read Interface
+	 .fifo_read_fifoclk(ddrfifo_rd_clk),
+	 .fifo_read_fifoen(ddrfifo_rd_en),
+	 .fifo_read_fifoempty(ddrfifo_empty),
+	 .fifo_read_data(ddrfifo_dout),
+
+	 .max_samples_i(maxsamples),
+	 .max_samples_o(maxsamples_limit)
+
+`ifdef CHIPSCOPE
+	 ,.chipscope_control(chipscope_control)
+`endif	 
+	 );
+
+
+	 /* To avoid modifying UCF file we keep these even in FIFO mode */
+	 assign LPDDR_A = 0;
+	 assign LPDDR_BA = 0;
+	 assign LPDDR_DQ = 'bz;
+	 assign LPDDR_LDM = 0;
+	 assign LPDDR_UDM = 0;
+	 assign LPDDR_LDQS = 'bz;
+	 assign LPDDR_UDQS = 'bz;
+	 assign LPDDR_CKE = 0;
+	 assign LPDDR_CAS_n = 1;
+	 assign LPDDR_RAS_n = 1;
+	 assign LPDDR_WE_n = 1;
+	 assign LPDDR_RZQ = 1;
+	 
+	 OBUFDS #(
+		.IOSTANDARD("DEFAULT") // Specify the output I/O standard
+		) OBUFDS_inst (
+			.O(LPDDR_CK_P), // Diff_p output (connect directly to top-level port)
+			.OB(LPDDR_CK_N), // Diff_n output (connect directly to top-level port)
+			.I(1'b1) // Buffer input
+		);
+	 
 `endif
-	
 			 		
-	assign adcfifo_full = ~adc_capture_go;
-	
 endmodule

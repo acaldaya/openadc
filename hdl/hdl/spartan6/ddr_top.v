@@ -10,7 +10,7 @@ Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
 This project is released under the Modified FreeBSD License. See LICENSE
 file which should have came with this code.
 *************************************************************************/
-`define CHIPSCOPE
+//`define CHIPSCOPE
 module ddr_top(
     input         reset_i,
 	 output			reset_o,
@@ -107,7 +107,7 @@ module ddr_top(
 	reg				ddr_read_done_reg;
 	assign			ddr_read_done = ddr_read_done_reg;
 	
-	reg [31:0]  	sample_counter; //How many 3-sample tuples gone through fifo
+	reg [31:0]  	sample_counter; //How many samples have gone through fifo
 	reg [31:0]     ddr_counter;
 	
 	reg 				adc_capture_stop_reg;
@@ -131,6 +131,8 @@ module ddr_top(
 			adcfifo_merge_cnt <= 'b001;
 			adcfifo_wr_en <= 0;
 		end else begin
+			sample_counter <= sample_counter + 1;
+		
 			if (adcfifo_merge_cnt == 'b001)
 				adcfifo_adcsample0 <= adc_datain;
 			else if (adcfifo_merge_cnt == 'b010)
@@ -143,8 +145,7 @@ module ddr_top(
 			
 			if (adcfifo_merge_cnt == 'b100) begin
 				adcfifo_merge_cnt <= 'b001;
-				adcfifo_wr_en <= 1;
-				sample_counter <= sample_counter + 1;
+				adcfifo_wr_en <= 1;				
 			end else begin
 				adcfifo_merge_cnt <= adcfifo_merge_cnt << 1;
 				adcfifo_wr_en <= 0;

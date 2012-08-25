@@ -409,7 +409,6 @@ class OpenADCQt():
             self.ser.timeout  = 0.5     # 0.5 second timeout
 
 
-
             attempts = 4
             while attempts > 0:
                 try:
@@ -436,15 +435,11 @@ class OpenADCQt():
             numTries += 1
 
             if (numTries == 5):
-                for c in msgin: print("%x")%c,
-                print("")
-                for c in msgout: print("%x")%c,
-                print("")
-
+                portname = self.ser.name
                 self.ser.close()
                 self.ser = None
 
-                raise IOError("Opened port %s but failed to find OpenADC"%self.ser.name)
+                raise IOError("Opened port %s but failed to find OpenADC"%portname)
                 #self.statusBar().showMessage("Failed to received response from USB Device")
 
 #        self.statusBar().showMessage("Connected to ADC Module on port %s" % self.ser.portstr)

@@ -8,4 +8,4 @@
 
 `define UART_BAUD 512000
 
-`define USE_DDR
+//`define USE_DDR
