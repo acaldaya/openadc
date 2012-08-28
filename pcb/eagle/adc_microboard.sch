@@ -8677,7 +8677,7 @@ distributor RS 112-3794</description>
 <wire x1="-3.2" y1="-3.2" x2="-3.1999" y2="3.1999" width="0.2032" layer="51"/>
 <circle x="0" y="0" radius="3.1999" width="0.2032" layer="51"/>
 <circle x="0" y="0" radius="1.7" width="0.2032" layer="21"/>
-<pad name="1" x="0" y="0" drill="1.27"/>
+<pad name="1" x="0" y="0" drill="1.4986"/>
 <pad name="2" x="-2.5499" y="2.5499" drill="1.778"/>
 <pad name="3" x="2.5499" y="2.5499" drill="1.778"/>
 <pad name="4" x="2.5499" y="-2.5499" drill="1.778"/>
@@ -9464,11 +9464,17 @@ distributor RS 112-3794</description>
 <part name="SUPPLY53" library="supply2" deviceset="AGND" device=""/>
 <part name="H1" library="holes" deviceset="MOUNT-PAD-ROUND" device="2.8"/>
 <part name="SUPPLY54" library="supply2" deviceset="AGND" device=""/>
+<part name="C48" library="rcl" deviceset="C-EU" device="C0603" value="22pF">
+<attribute name="DIGIKEY#" value="587-1099-1-ND"/>
+<attribute name="MANF#" value="LMK107SD183JA-T"/>
+</part>
+<part name="SUPPLY55" library="supply2" deviceset="AGND" device=""/>
 </parts>
 <sheets>
 <sheet>
 <plain>
 <text x="149.86" y="27.94" size="2.54" layer="94">Analog Portion</text>
+<text x="20.32" y="58.42" size="1.778" layer="97" rot="R90">DNM</text>
 </plain>
 <instances>
 <instance part="FRAME1" gate="G$1" x="0" y="0"/>
@@ -9663,7 +9669,7 @@ distributor RS 112-3794</description>
 </instance>
 <instance part="X2" gate="G" x="10.16" y="101.6"/>
 <instance part="L4" gate="G$1" x="20.32" y="50.8" rot="R90"/>
-<instance part="C33" gate="G$1" x="33.02" y="50.8" rot="R270"/>
+<instance part="C33" gate="G$1" x="35.56" y="50.8" rot="R270"/>
 <instance part="SUPPLY36" gate="G$1" x="12.7" y="38.1"/>
 <instance part="JP5" gate="A" x="17.78" y="91.44" rot="R180"/>
 <instance part="JP6" gate="A" x="22.86" y="91.44" rot="R180"/>
@@ -9750,6 +9756,11 @@ distributor RS 112-3794</description>
 <attribute name="PART#" x="78.74" y="10.16" size="1.778" layer="96" display="off"/>
 </instance>
 <instance part="SUPPLY53" gate="G$1" x="78.74" y="2.54"/>
+<instance part="C48" gate="G$1" x="35.56" y="40.64" rot="R270">
+<attribute name="DIGIKEY#" x="35.56" y="40.64" size="1.778" layer="96" rot="R270" display="off"/>
+<attribute name="MANF#" x="35.56" y="40.64" size="1.778" layer="96" rot="R270" display="off"/>
+</instance>
+<instance part="SUPPLY55" gate="G$1" x="27.94" y="40.64" rot="R270"/>
 </instances>
 <busses>
 <bus name="ADC[0..9],ADC_OR">
@@ -10092,6 +10103,10 @@ distributor RS 112-3794</description>
 <pinref part="C47" gate="G$1" pin="2"/>
 <pinref part="SUPPLY53" gate="G$1" pin="AGND"/>
 </segment>
+<segment>
+<pinref part="C48" gate="G$1" pin="2"/>
+<pinref part="SUPPLY55" gate="G$1" pin="AGND"/>
+</segment>
 </net>
 <net name="ADC_OR" class="0">
 <segment>
@@ -10258,12 +10273,16 @@ distributor RS 112-3794</description>
 <net name="N$16" class="0">
 <segment>
 <wire x1="38.1" y1="53.34" x2="38.1" y2="50.8" width="0.1524" layer="91"/>
-<wire x1="38.1" y1="50.8" x2="43.18" y2="50.8" width="0.1524" layer="91"/>
-<wire x1="35.56" y1="50.8" x2="38.1" y2="50.8" width="0.1524" layer="91"/>
+<wire x1="38.1" y1="50.8" x2="40.64" y2="50.8" width="0.1524" layer="91"/>
 <junction x="38.1" y="50.8"/>
 <pinref part="C10" gate="G$1" pin="1"/>
 <pinref part="U2" gate="G$1" pin="INH"/>
 <pinref part="C33" gate="G$1" pin="1"/>
+<pinref part="C48" gate="G$1" pin="1"/>
+<wire x1="40.64" y1="50.8" x2="43.18" y2="50.8" width="0.1524" layer="91"/>
+<wire x1="38.1" y1="40.64" x2="40.64" y2="40.64" width="0.1524" layer="91"/>
+<wire x1="40.64" y1="40.64" x2="40.64" y2="50.8" width="0.1524" layer="91"/>
+<junction x="40.64" y="50.8"/>
 </segment>
 </net>
 <net name="N$14" class="0">
@@ -10512,12 +10531,6 @@ distributor RS 112-3794</description>
 <pinref part="L4" gate="G$1" pin="1"/>
 </segment>
 </net>
-<net name="N$22" class="0">
-<segment>
-<pinref part="L4" gate="G$1" pin="2"/>
-<pinref part="C33" gate="G$1" pin="2"/>
-</segment>
-</net>
 <net name="N$33" class="0">
 <segment>
 <pinref part="U4" gate="G$1" pin="C-"/>
@@ -10697,6 +10710,13 @@ distributor RS 112-3794</description>
 <pinref part="U4" gate="G$1" pin="!SHDN"/>
 <pinref part="L6" gate="G$1" pin="1"/>
 <junction x="15.24" y="149.86"/>
+</segment>
+</net>
+<net name="N$46" class="0">
+<segment>
+<pinref part="L4" gate="G$1" pin="2"/>
+<pinref part="C33" gate="G$1" pin="2"/>
+<wire x1="30.48" y1="50.8" x2="27.94" y2="50.8" width="0.1524" layer="91"/>
 </segment>
 </net>
 </nets>
