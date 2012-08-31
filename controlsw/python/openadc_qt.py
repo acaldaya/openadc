@@ -109,9 +109,8 @@ class OpenADCQt():
         self.setupLayout(parent)
 
     def setupLayout(self, parent):
-
-        layout = QVBoxLayout()
-
+        vlayout = QVBoxLayout()
+        layout = QGridLayout()
         ###### Gain Setup
         self.gain = QSpinBox()
         self.gain.setMinimum(0)
@@ -142,7 +141,7 @@ class OpenADCQt():
         gainlayout.addWidget(QLabel("Setting: "), 0, 3);
         gainlayout.addWidget(self.gain, 0, 4)
         gainlayout.addWidget(self.gainresults, 1, 0)
-        layout.addWidget(gainsettings)
+        layout.addWidget(gainsettings, 1, 0)
 
         #Set default
         self.gainlow.setChecked(True)
@@ -165,13 +164,13 @@ class OpenADCQt():
         
         #Add to layout
         triggersettings = QGroupBox("Trigger Mode")
-        triglayout = QHBoxLayout()
+        triglayout = QGridLayout()
         triggersettings.setLayout(triglayout)
-        triglayout.addWidget(self.trigmoderising);
-        triglayout.addWidget(self.trigmodefalling);
-        triglayout.addWidget(self.trigmodehigh);
-        triglayout.addWidget(self.trigmodelow);
-        layout.addWidget(triggersettings)
+        triglayout.addWidget(self.trigmoderising, 0, 0);
+        triglayout.addWidget(self.trigmodefalling, 0, 1);
+        triglayout.addWidget(self.trigmodehigh, 1, 0);
+        triglayout.addWidget(self.trigmodelow, 1, 1);
+        layout.addWidget(triggersettings, 1, 1)
 
         #Set default
         self.trigmodelow.setChecked(True)
@@ -201,7 +200,7 @@ class OpenADCQt():
         clocklayout.addWidget(self.clockExternal, 0, 2)
         clocklayout.addWidget(QLabel("Ext Phase Adjust"), 1, 0)
         clocklayout.addWidget(self.phase, 1, 1)
-        layout.addWidget(clocksettings)
+        layout.addWidget(clocksettings, 2, 0)
 
         ###### Sample Memory Setup
         samplesettings = QGroupBox("Sample Settings")
@@ -215,13 +214,16 @@ class OpenADCQt():
         samplelayout.addWidget(QLabel("Samples/Capture"), 1, 0)
         samplelayout.addWidget(self.samples, 1, 1)
         self.samples.valueChanged.connect(self.samplesChanged)
-        layout.addWidget(samplesettings)
+        layout.addWidget(samplesettings, 2, 1)
 
         ###### Graphical Preview Window
         self.preview = pysideGraph("Preview", 0, 100000, -0.5, 0.5)
-        layout.addWidget(self.preview.getWidget())      
+        vlayout.addWidget(self.preview.getWidget())      
+#        self.preview.getWidget().setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
+        
+        vlayout.addLayout(layout)
               
-        self.masterLayout = layout
+        self.masterLayout = vlayout
 
         self.trigmode = 0
         self.hilowmode = 0
@@ -399,25 +401,9 @@ class OpenADCQt():
         print "Status Reg = 0x%2x"%self.sc.getStatus()
         print "Samples Captured = %d"%self.sc.getMaxSamples()
         
-    def ADCconnect(self):
+    def ADCconnect(self, ser):
 
-        if self.ser == None:        
-            # Open serial port if not already
-            self.ser = serial.Serial()
-            self.ser.port     = "com6"
-            self.ser.baudrate = 512000;
-            self.ser.timeout  = 0.5     # 0.5 second timeout
-
-
-            attempts = 4
-            while attempts > 0:
-                try:
-                    self.ser.open()
-                    attempts = 0
-                except serial.SerialException, e:
-                    attempts = attempts - 1
-                    if attempts == 0:
-                        raise IOError("Could not open %s"%self.ser.name)
+        self.ser = ser
 
         #See if device seems to be attached
         self.sc = openadc.serialOpenADCInterface(self.ser)

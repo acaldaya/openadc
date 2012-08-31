@@ -16,6 +16,8 @@ import math
 import numpy
 import openadc
 import openadc_qt
+import serial
+import scan
 from PySide.QtCore import *
 from PySide.QtGui import *
   
@@ -29,25 +31,54 @@ class MainWindow(QMainWindow):
         self.oa.ADCupdate()
 
     def ADCconnect(self):
-        self.oa.ADCconnect()
+
+        if self.ser == None:        
+            # Open serial port if not already
+            self.ser = serial.Serial()
+            self.ser.port     = self.serialList.currentText()
+            self.ser.baudrate = 512000;
+            self.ser.timeout  = 0.5     # 0.5 second timeout
+
+
+            attempts = 4
+            while attempts > 0:
+                try:
+                    self.ser.open()
+                    attempts = 0
+                except serial.SerialException, e:
+                    attempts = attempts - 1
+                    if attempts == 0:
+                        raise IOError("Could not open %s"%self.ser.name)
+        
+        self.oa.ADCconnect(self.ser)
 
     def ADCread(self):
         self.oa.ADCread();
+
+    def serialRefresh(self):
+        serialnames = scan.scan()
+        for i in range(0, 255):
+            self.serialList.removeItem(i)
+        self.serialList.addItems(serialnames)
         
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
 
+        self.ser = None
+
         self.statusBar()
-        self.setWindowTitle("ADC Capture App")
-        self.title = QLabel("ADC Capture App")
+        self.setWindowTitle("OpenADC Capture App")
+        self.title = QLabel("OpenADC Capture App")
         self.title.setAlignment(Qt.AlignCenter)
         flabel = self.title.font()
         flabel.setPointSize(24)
         self.title.setFont(flabel)
    
-        self.connectButton = QPushButton("Connect to ADC Board")
+
+        self.serialList = QComboBox()
+        self.connectButton = QPushButton("Connect")
         self.captureButton = QPushButton("Capture")
-        self.readButton = QPushButton("Read")
+        self.readButton = QPushButton("Re-Read")
         self.updateButton = QPushButton("Get Status")
 
 
@@ -60,14 +91,19 @@ class MainWindow(QMainWindow):
         
         # Create layout and add widgets
         self.mw = QWidget()
+
+        glayout = QGridLayout()
+        
         layout = QVBoxLayout()
         
         layout.addWidget(self.title)
-        layout.addWidget(self.connectButton)
-        layout.addWidget(self.captureButton)
-        layout.addWidget(self.readButton)
-        layout.addWidget(self.updateButton)
+        glayout.addWidget(self.serialList, 0, 0)
+        glayout.addWidget(self.connectButton, 0, 1)
+        glayout.addWidget(self.captureButton, 1, 0)
+        glayout.addWidget(self.readButton, 1, 1)
+        glayout.addWidget(self.updateButton, 2, 0)
 
+        layout.addLayout(glayout)
         layout.addLayout(self.oa.getLayout())
               
         # Set dialog layout
@@ -77,6 +113,8 @@ class MainWindow(QMainWindow):
 
         self.trigmode = 0
         self.hilowmode = 0
+
+        self.serialRefresh()
   
 if __name__ == '__main__':
     
