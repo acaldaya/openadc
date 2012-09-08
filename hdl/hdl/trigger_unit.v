@@ -29,6 +29,8 @@ module trigger_unit(
 												  //    arm_o goes high before doing this, otherwise the arm won't take effect.
 	 output			arm_o,				  //Status of internal arm logic
 	 
+	 input [31:0]  trigger_offset_i,   //Delays the capture_go_o by this many ADC clock cycles
+	 
 	 output        capture_go_o,		  //1 = trigger conditions met, stays high until 'capture_done_i' goes high
 	 input         capture_done_i		  //1 = capture done
     );

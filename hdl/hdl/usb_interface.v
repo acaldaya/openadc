@@ -47,6 +47,7 @@ module usb_interface(
 	output [9:0] 	trigger_level,
 	output 			trigger_source,
 	output 			trigger_now,
+	output [31:0]  trigger_offset,
 	
 	/* Measurement of external clock frequency */
 	input [31:0]	extclk_frequency,
@@ -138,6 +139,7 @@ module usb_interface(
 	 reg [31:0] registers_extclk_frequency;
 	 reg [31:0] registers_ddr_address;
 	 reg [31:0] registers_samples;
+	 reg [31:0] registers_offset;
 	 reg [8:0]	phase_out;
 	 reg [8:0]  phase_in;
 	 reg        phase_loadout;
@@ -146,6 +148,8 @@ module usb_interface(
 `ifdef USE_DDR
 	 assign ddr_address = registers_ddr_address;
 `endif
+
+	 assign trigger_offset = registers_offset;
 	 
 	 assign phase_o = phase_out;
 	 assign phase_ld_o = phase_loadout;
@@ -273,6 +277,13 @@ module usb_interface(
 	 0x18 - ADC Trigger Level Low
 	 0x19 - ADC Trigger Level High Bits
 	 
+	 0x1A - 0x1D - Offset of trigger to start of capture
+	   
+		 0x1A - LSB
+		 0x1B
+		 0x1C
+		 0x1D - MSB
+	 
 	*/
 	 
     `define GAIN_ADDR    	0
@@ -294,6 +305,11 @@ module usb_interface(
 	 `define DDRADDR_ADDR2  21
 	 `define DDRADDR_ADDR3  22
 	 `define DDRADDR_ADDR4  23
+	 
+	 `define OFFSET_ADDR1   26
+	 `define OFFSET_ADDR2   27
+	 `define OFFSET_ADDR3   28
+	 `define OFFSET_ADDR4   29
     
 	 `undef  IDLE
     `define IDLE            'b0000
@@ -336,8 +352,11 @@ module usb_interface(
          ftdi_wr_n <= 1;
          ftdi_isOutput <= 0;
 			extclk_locked <= 0;					
+			
+			/* Load Default Values */
 			registers_samples <= maxsamples_i;
 			registers_settings <= 0;
+			registers_offset <= 0;
 			
       end else begin
          case (state)
@@ -418,6 +437,14 @@ module usb_interface(
 						registers_ddr_address[23:16] <= ftdi_din;
 					end else if (address == `DDRADDR_ADDR4) begin
 						registers_ddr_address[31:24] <= ftdi_din;
+					end else if (address == `OFFSET_ADDR1) begin
+						registers_offset[7:0] <= ftdi_din;
+					end else if (address == `OFFSET_ADDR2) begin
+						registers_offset[15:8] <= ftdi_din;
+					end else if (address == `OFFSET_ADDR3) begin
+						registers_offset[23:16] <= ftdi_din;
+					end else if (address == `OFFSET_ADDR4) begin
+						registers_offset[31:24] <= ftdi_din;
 					end
 					
                state <= `IDLE;                         
@@ -528,7 +555,27 @@ module usb_interface(
 						ftdi_dout <= registers_ddr_address[31:24];
 						extclk_locked <= 0;
 						ftdi_wr_n <= 0;
-						state <= `IDLE;						
+						state <= `IDLE;	
+					end else if (address == `OFFSET_ADDR1) begin
+						ftdi_dout <= registers_offset[7:0];
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;
+					end else if (address == `OFFSET_ADDR2) begin
+						ftdi_dout <= registers_offset[15:8];
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;
+					end else if (address == `OFFSET_ADDR3) begin
+						ftdi_dout <= registers_offset[23:16];
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;
+					end else if (address == `OFFSET_ADDR4) begin
+						ftdi_dout <= registers_offset[31:24];
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;							
                end else begin
 						extclk_locked <= 0;
 						ftdi_dout <= 8'bx;						
