@@ -19,7 +19,7 @@
 //
 //////////////////////////////////////////////////////////////////////////////////
 
-module dumb_eth(
+module eth_phydirect(
 	 input		 reset_i,
 
     input 		 eth_col,
@@ -36,8 +36,18 @@ module dumb_eth(
 	 
 	 input       eth_tx_clk,
 	 output[3:0] eth_tx_data,
-	 output      eth_tx_en
+	 output      eth_tx_en,
 	 
+	 output		  usr_clk_o,
+	 input		  usr_start_i,
+	 input [47:0] usr_ethsrc_i,
+	 input [47:0] usr_ethdst_i,
+	 input [31:0] usr_ipsrc_i,
+	 input [31:0] usr_ipdst_i,
+	 input [15:0] usr_data_len_i,
+	 input [15:0] usr_udpport_i,	 
+	 output		  usr_datard_o,	 
+	 input [7:0]  usr_data_i 
     );
 	 
 	 wire [3:0] eth_tx_data_reg;
@@ -48,14 +58,16 @@ module dumb_eth(
 	 assign tx_clk = eth_tx_clk;
 	 	 
 	 assign eth_reset_n = ~reset_i;	 
-	 
+	 	 
+	 reg usr_datard;
+	 assign usr_datard_o = usr_datard;
 	   
 	 assign eth_mdc = 1'b0;
 	 assign eth_mdio = 1'bZ;
 	 
 	 reg [7:0] tx_data;
 	 reg tx_nibble_cnt;
-	 
+	 	 
 	 /* Follow EN logic is designed to ensure EN stays high until final
        nibble is transmitted over the wire */
 	 reg tx_en;	 
@@ -81,18 +93,8 @@ module dumb_eth(
 	 
 	 assign eth_tx_data_reg = tx_nibble_cnt ? tx_data[7:4] : tx_data[3:0];
 	 
-	 /*
-	 always @(negedge tx_clk) begin
-		if(tx_nibble_cnt) begin
-			eth_tx_data_reg <= tx_data[7:4];
-		end else begin
-			eth_tx_data_reg <= tx_data[3:0];
-		end
-	 end
-	 */
-	 
+ 
 	 assign eth_tx_data = eth_tx_data_reg;
-
 	 
 	 wire [7:0] dest_address [0:5];
 	 wire [7:0] src_address [0:5];
@@ -110,15 +112,80 @@ module dumb_eth(
 	 assign src_address[2] = 8'h03;
 	 assign src_address[3] = 8'h04;
 	 assign src_address[4] = 8'h05;
-	 assign src_address[5] = 8'h06;	 
+	 assign src_address[5] = 8'h06;	
 	 
 	 `define PHY_IDLE            'b0000
-	 `define PHY_PREAMBLE		  'b0001
-	 `define MAC_DST				  'b0010
-	 `define MAC_SRC				  'b0011
-	 `define MAC_TYPE				  'b0100
-	 `define MAC_PAYLOAD         'b0101
-	 `define MAC_FCS             'b0110
+	 `define PHY_WAIT            'b0001
+	 `define PHY_PREAMBLE		  'b0010
+	 `define MAC_DST				  'b0011
+	 `define MAC_SRC				  'b0100
+	 `define MAC_TYPE				  'b0101
+	 `define MAC_PAYLOAD         'b0110
+	 `define MAC_FCS             'b0111
+	 
+	 
+	 /* UDP Header */
+	 wire [7:0] udp_hdr [0:7];
+	 wire [15:0] udp_total_len;
+	 assign udp_total_len = usr_data_len_i + 16'd8;
+	 assign udp_hdr[0] = 8'h00; //source port unused
+	 assign udp_hdr[1] = 8'h00; //source port unused
+	 assign udp_hdr[2] = usr_udpport_i[15:8];
+	 assign udp_hdr[3] = usr_udpport_i[7:0];
+	 assign udp_hdr[4] = udp_total_len[15:8];
+	 assign udp_hdr[5] = udp_total_len[7:0];
+	 assign udp_hdr[6] = 8'h00; //checksum unused
+	 assign udp_hdr[7] = 8'h00;
+
+	 /* IPv4 Header */
+	 wire [7:0] ip_hdr [0:19];
+	 wire [15:0] ip_total_len;
+	 wire [15:0] ip_hdr_checksum;
+	 assign ip_total_len = udp_total_len + 16'd20; 	 
+	 assign ip_hdr[0] = 8'h45;
+	 assign ip_hdr[1] = 8'h00;
+	 assign ip_hdr[2] = ip_total_len[15:8];
+	 assign ip_hdr[3] = ip_total_len[7:0];
+	 assign ip_hdr[4] = 8'h00;
+	 assign ip_hdr[5] = 8'h00;
+	 assign ip_hdr[6] = 8'h00;
+	 assign ip_hdr[7] = 8'h00;
+	 assign ip_hdr[8] = 8'h80;
+	 assign ip_hdr[9] = 8'h11;
+	 assign ip_hdr[10] = ip_hdr_checksum[15:8]; //Checksum MSB
+	 assign ip_hdr[11] = ip_hdr_checksum[7:0]; //Checksum LSB
+	 assign ip_hdr[12] = usr_ipsrc_i[31:24];
+	 assign ip_hdr[13] = usr_ipsrc_i[23:16];
+	 assign ip_hdr[14] = usr_ipsrc_i[15:8];
+	 assign ip_hdr[15] = usr_ipsrc_i[7:0];
+	 assign ip_hdr[16] = usr_ipdst_i[31:24];
+	 assign ip_hdr[17] = usr_ipdst_i[23:16];
+	 assign ip_hdr[18] = usr_ipdst_i[15:8];
+	 assign ip_hdr[19] = usr_ipdst_i[7:0];
+	 
+	 /* IPv4 Header Checksum Calculation */
+	 reg [23:0] ip_chksum_int1;
+	 reg [5:0]  ip_chksum_cnt;
+	 
+	 always @(posedge tx_clk) begin
+		if (crc_init) begin
+			ip_chksum_int1 <= 24'h000000;
+			ip_chksum_cnt <= 6'd0;
+		end else begin		
+			if (ip_chksum_cnt == 6'd20) begin
+				ip_chksum_cnt <= 6'd20;
+			end else begin
+				ip_chksum_cnt <= ip_chksum_cnt + 6'd2;
+				ip_chksum_int1 <= ip_chksum_int1 + {ip_hdr[ip_chksum_cnt], ip_hdr[ip_chksum_cnt+1]};
+			end			
+		end
+	 end
+	 
+	 assign ip_hdr_checksum = (ip_chksum_cnt == 6'd20) ? ~(ip_chksum_int1[23:16] + ip_chksum_int1[15:0]) : 16'h0000;
+	 
+	 `define IP_HDR				  'b1000
+	 `define UDP_HDR             'b1001
+	 `define UDP_PAYLOAD         'b1010
 	 
 	 reg [3:0] state;
 	 reg [15:0] stcnt;
@@ -133,14 +200,26 @@ module dumb_eth(
 			case (state) 
 				`PHY_IDLE: begin
 					tx_data <= 8'h55; /* 0x55 Preamble */
-					if (stcnt == 16'd30000) begin
-						state <= `PHY_PREAMBLE;
+					if (stcnt == 16'd45) begin
+						state <= `PHY_WAIT;
 						stcnt <= 16'd0;
-						tx_en <= 1'b1;
 					end else begin
 						stcnt <= stcnt + 16'd1;
+					end	
+					tx_en <= 1'b0;					
+					crc_calc <= 1'b0;
+					crc_init <= 1'b1;
+				end
+				
+				`PHY_WAIT: begin
+					tx_data <= 8'h55; /* 0x55 Preamble */
+					if (usr_start_i == 1'b1) begin
+						state <= `PHY_PREAMBLE;
+						tx_en <= 1'b1;
+					end else begin
 						tx_en <= 1'b0;
-					end		
+					end	
+					stcnt <= 16'd0;					
 					crc_calc <= 1'b0;
 					crc_init <= 1'b1;
 				end
@@ -192,7 +271,7 @@ module dumb_eth(
 					if (stcnt == 16'd1) begin
 						stcnt <= 16'd0;
 						tx_data <= 8'h00;
-						state <= `MAC_PAYLOAD;
+						state <= `IP_HDR; /* `MAC_PAYLOAD; */
 					end else begin					
 						stcnt <= stcnt + 16'd1;
 						tx_data <= 8'h08;
@@ -203,18 +282,58 @@ module dumb_eth(
 					crc_init <= 1'b0;					
 				end
 				
+				/*
 				`MAC_PAYLOAD: begin
 					if (stcnt == 16'd99) begin
 						stcnt <= 16'd0;
 						state <= `MAC_FCS;
 					end else begin					
 						stcnt <= stcnt + 16'd1;
-						state <= `MAC_PAYLOAD;
 					end
 					tx_data <= 8'hCC;
 					tx_en <= 1'b1;		
 					crc_calc <= 1'b1;
 					crc_init <= 1'b0;						
+				end
+				*/
+				
+				`IP_HDR: begin
+					if (stcnt == 16'd19) begin
+						stcnt <= 16'd0;
+						state <= `UDP_HDR;
+					end else begin
+						stcnt <= stcnt + 16'd1;
+					end
+					tx_data <= ip_hdr[stcnt];
+					tx_en <= 1'b1;
+					crc_calc <= 1'b1;
+					crc_init <= 1'b0;
+				end
+				
+				`UDP_HDR: begin
+					if (stcnt == 16'd7) begin
+						stcnt <= 16'd0;
+						state <= `UDP_PAYLOAD;
+					end else begin
+						stcnt <= stcnt + 16'd1;
+					end
+					tx_data <= udp_hdr[stcnt];
+					tx_en <= 1'b1;
+					crc_calc <= 1'b1;
+					crc_init <= 1'b0;
+				end
+				
+				`UDP_PAYLOAD: begin
+					if (stcnt == (usr_data_len_i - 1)) begin
+						stcnt <= 16'd0;
+						state <= `MAC_FCS;
+					end else begin
+						stcnt <= stcnt + 16'd1;
+					end
+					tx_data <= 8'hAB;
+					tx_en <= 1'b1;
+					crc_calc <= 1'b1;
+					crc_init <= 1'b0;
 				end
 				
 				`MAC_FCS: begin
