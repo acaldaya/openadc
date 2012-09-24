@@ -8,4 +8,6 @@
 
 `define UART_BAUD 512000
 
+`define USE_ETH
+
 //`define USE_DDR

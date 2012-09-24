@@ -50,8 +50,26 @@ module interface(
 	 output			LPDDR_CAS_n,
 	 output			LPDDR_RAS_n,
 	 output			LPDDR_WE_n,
-	 output			LPDDR_RZQ
+	 output			LPDDR_RZQ,
 //`endif
+
+ /* To avoid modifying UCF file we keep these even without Ethernet */
+	 input 		   eth_col,
+    input 		   eth_crc,
+	 output 		   eth_mdc,
+	 inout  		   eth_mdio,
+	 
+	 output        eth_reset_n,
+	 
+	 input 		   eth_rx_clk,
+	 input [3:0]   eth_rx_data,
+	 input         eth_rx_dv,
+	 input         eth_rx_er,
+	 
+	 input         eth_tx_clk,
+	 output[3:0]   eth_tx_data,
+	 output        eth_tx_en
+
     );
 
 	wire        slowclock;
@@ -128,6 +146,8 @@ module interface(
 		//put a perfect ramp. Tests FIFO & USB interface for proper
 		//syncronization
 		//ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
+		
+		//Input Validation Test #3: 
 	end
    	
 	wire [7:0] 	reg_status;
@@ -257,6 +277,14 @@ module interface(
 							, .ddr_address(ddr_read_address),
 							.ddr_rd_req(ddr_read_req),
 							.ddr_rd_done(ddr_read_done)
+`endif
+
+`ifdef USE_ETH
+							, .eth_clk(usr_clk),
+							.eth_clken(usr_clken),
+							.eth_start(usr_start),
+							.eth_datalen(usr_datalen),
+							.eth_data(usr_data)
 `endif
 							
 `ifdef CHIPSCOPE                     
@@ -390,6 +418,44 @@ module interface(
 			.I(1'b1) // Buffer input
 		);
 	 
+`endif
+
+`ifdef USE_ETH
+	wire [7:0]  usr_data;
+	wire        usr_clken;
+	wire        usr_start;
+	wire        usr_clk;
+	wire [15:0] usr_datalen;
+
+	eth_phydirect phy(
+	  .reset_i(reset),
+
+     .eth_col(eth_col),
+     .eth_crc(eth_crc),
+	  .eth_mdc(eth_mdc),
+	  .eth_mdio(eth_mdio),
+	 
+	  .eth_reset_n(eth_reset_n),
+	  .eth_rx_clk(eth_rx_clk),
+	  .eth_rx_data(eth_rx_data),
+	  .eth_rx_dv(eth_rx_dv),
+	  .eth_rx_er(eth_rx_er),
+	 
+	  .eth_tx_clk(eth_tx_clk),
+	  .eth_tx_data(eth_tx_data),
+	  .eth_tx_en(eth_tx_en),
+	  
+	  .usr_clk_o(usr_clk),
+	  .usr_clken_o(usr_clken),
+	  .usr_start_i(usr_start),
+	  .usr_ethsrc_i(48'h000102030405),
+	  .usr_ethdst_i(48'hD067E5455171),
+	  .usr_ipsrc_i(32'hC0A8020A),
+	  .usr_ipdst_i(32'hC0A80201),
+	  .usr_data_len_i(usr_datalen),
+	  .usr_udpport_i(16'd17209),
+	  .usr_data_i(usr_data)
+    );
 `endif
 			 		
 endmodule

@@ -40,10 +40,22 @@ module dumb_eth_test(
     );
 	 
 
-	wire [7:0] usr_data;
-	wire       usr_datard;
-	wire       usr_start;
+	reg [7:0] usr_data;
+	wire       usr_clken;
+	reg       usr_start;
 	wire       usr_clk;
+	
+	always @(posedge usr_clk) begin
+		if(reset_i) begin
+			usr_start <= 1'b0;
+			usr_data <= 8'd0;
+		end else if (usr_clken)  begin
+			usr_start <= 1'b0;
+			usr_data <= usr_data + 8'd1;
+		end else if (usr_data == 8'd0) begin
+			usr_start <= 1'b1;
+		end
+	end
 
 	eth_phydirect phy(
 	  .reset_i(1'b0),
@@ -64,14 +76,14 @@ module dumb_eth_test(
 	  .eth_tx_en(eth_tx_en),
 	  
 	  .usr_clk_o(usr_clk),
-	  .usr_start_i(reset_i),
+	  .usr_clken_o(usr_clken),
+	  .usr_start_i(usr_start),
 	  .usr_ethsrc_i(48'h000102030405),
 	  .usr_ethdst_i(48'hD067E5455171),
 	  .usr_ipsrc_i(32'hC0A8020A),
 	  .usr_ipdst_i(32'hC0A80201),
 	  .usr_data_len_i(16'd64),
-	  .usr_udpport_i(16'd4000),
-	  .usr_datard_o(usr_datard),
+	  .usr_udpport_i(16'd17209),
 	  .usr_data_i(usr_data)
     );
 

@@ -1,52 +1,54 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date:    13:50:45 09/09/2012 
-// Design Name: 
-// Module Name:    dumb_eth 
-// Project Name: 
-// Target Devices: 
-// Tool versions: 
-// Description: 
-//
-// Dependencies: 
-//
-// Revision: 
-// Revision 0.01 - File Created
-// Additional Comments: 
-//
-//////////////////////////////////////////////////////////////////////////////////
+/***********************************************************************
+This file is part of the OpenADC Project. See www.newae.com for more details,
+or the codebase at http://www.assembla.com/spaces/openadc .
+
+This file is the UDP interface. There is three main parts to this interface:
+
+1) The PHY interface lines
+2) The high-level data interface
+3) Configuration information
+
+This is a very dumb module. It doesn't configure the PHY, and assumes you've
+used bootstrapping pins to get everything set up properly.
+
+Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+This project is released under the Modified FreeBSD License. See LICENSE
+file which should have came with this code.
+*************************************************************************/
 
 module eth_phydirect(
-	 input		 reset_i,
+	 input		 reset_i,      //Active high reset input
 
-    input 		 eth_col,
-    input 		 eth_crc,
-	 output 		 eth_mdc,
-	 inout  		 eth_mdio,
+    input 		 eth_col,      //Connect to PHY
+    input 		 eth_crc,      //Connect to PHY
+	 output 		 eth_mdc,      //Connect to PHY
+	 inout  		 eth_mdio,     //Connect to PHY
 	 
-	 output      eth_reset_n,
+	 output      eth_reset_n,  //Connect to PHY
 	 
-	 input 		 eth_rx_clk,
-	 input [3:0] eth_rx_data,
-	 input       eth_rx_dv,
-	 input       eth_rx_er,
+	 input 		 eth_rx_clk,   //Connect to PHY
+	 input [3:0] eth_rx_data,  //Connect to PHY
+	 input       eth_rx_dv,    //Connect to PHY
+	 input       eth_rx_er,    //Connect to PHY
 	 
-	 input       eth_tx_clk,
-	 output[3:0] eth_tx_data,
-	 output      eth_tx_en,
+	 input       eth_tx_clk,   //Connect to PHY
+	 output[3:0] eth_tx_data,  //Connect to PHY
+	 output      eth_tx_en,    //Connect to PHY
 	 
-	 output		  usr_clk_o,
-	 input		  usr_start_i,
+	 output		  usr_clk_o,   //Data at usr_data_i must be valid on falling edge
+									   //You can just use the rising edge to clock new data out
+	 output		  usr_clken_o, //Valid on rising edge of usr_clk_o
+	 input		  usr_start_i, //Set this to '1' to start a new capture, some time later
+										//usr_clken_o will be high when your payload should be sent.
+										//Before setting this high be sure everything else has already
+										//been configured or bad things happen!
 	 input [47:0] usr_ethsrc_i,
 	 input [47:0] usr_ethdst_i,
 	 input [31:0] usr_ipsrc_i,
 	 input [31:0] usr_ipdst_i,
 	 input [15:0] usr_data_len_i,
-	 input [15:0] usr_udpport_i,	 
-	 output		  usr_datard_o,	 
+	 input [15:0] usr_udpport_i,	  
 	 input [7:0]  usr_data_i 
     );
 	 
@@ -67,7 +69,7 @@ module eth_phydirect(
 	 
 	 reg [7:0] tx_data;
 	 reg tx_nibble_cnt;
-	 	 
+	  	 
 	 /* Follow EN logic is designed to ensure EN stays high until final
        nibble is transmitted over the wire */
 	 reg tx_en;	 
@@ -92,8 +94,6 @@ module eth_phydirect(
 	 end
 	 
 	 assign eth_tx_data_reg = tx_nibble_cnt ? tx_data[7:4] : tx_data[3:0];
-	 
- 
 	 assign eth_tx_data = eth_tx_data_reg;
 	 
 	 wire [7:0] dest_address [0:5];
@@ -186,9 +186,9 @@ module eth_phydirect(
 	 `define IP_HDR				  'b1000
 	 `define UDP_HDR             'b1001
 	 `define UDP_PAYLOAD         'b1010
-	 
+	  
 	 reg [3:0] state;
-	 reg [15:0] stcnt;
+	 reg [15:0] stcnt;	
 	 
 	 //State machine
 	 always @(negedge tx_clk) begin
@@ -209,6 +209,7 @@ module eth_phydirect(
 					tx_en <= 1'b0;					
 					crc_calc <= 1'b0;
 					crc_init <= 1'b1;
+					usr_clken_reg <= 1'b0;
 				end
 				
 				`PHY_WAIT: begin
@@ -222,6 +223,7 @@ module eth_phydirect(
 					stcnt <= 16'd0;					
 					crc_calc <= 1'b0;
 					crc_init <= 1'b1;
+					usr_clken_reg <= 1'b0;
 				end
 				
 				`PHY_PREAMBLE: begin
@@ -237,6 +239,7 @@ module eth_phydirect(
 					tx_en <= 1'b1;
 					crc_calc <= 1'b0;
 					crc_init <= 1'b0;
+					usr_clken_reg <= 1'b0;
 				end
 				
 				`MAC_DST: begin
@@ -250,7 +253,8 @@ module eth_phydirect(
 					tx_data <= dest_address[stcnt];
 					tx_en <= 1'b1;	
 					crc_calc <= 1'b1;
-					crc_init <= 1'b0;					
+					crc_init <= 1'b0;		
+					usr_clken_reg <= 1'b0;
 				end
 				
 				`MAC_SRC: begin
@@ -264,7 +268,8 @@ module eth_phydirect(
 					tx_data <= src_address[stcnt];
 					tx_en <= 1'b1;	
 					crc_calc <= 1'b1;
-					crc_init <= 1'b0;					
+					crc_init <= 1'b0;		
+					usr_clken_reg <= 1'b0;
 				end
 				
 				`MAC_TYPE: begin
@@ -279,7 +284,8 @@ module eth_phydirect(
 					end					
 					tx_en <= 1'b1;
 					crc_calc <= 1'b1;
-					crc_init <= 1'b0;					
+					crc_init <= 1'b0;	
+					usr_clken_reg <= 1'b0;					
 				end
 				
 				/*
@@ -308,14 +314,17 @@ module eth_phydirect(
 					tx_en <= 1'b1;
 					crc_calc <= 1'b1;
 					crc_init <= 1'b0;
+					usr_clken_reg <= 1'b0;
 				end
 				
 				`UDP_HDR: begin
 					if (stcnt == 16'd7) begin
 						stcnt <= 16'd0;
 						state <= `UDP_PAYLOAD;
+						usr_clken_reg <= 1'b1;
 					end else begin
 						stcnt <= stcnt + 16'd1;
+						usr_clken_reg <= 1'b0;
 					end
 					tx_data <= udp_hdr[stcnt];
 					tx_en <= 1'b1;
@@ -327,10 +336,12 @@ module eth_phydirect(
 					if (stcnt == (usr_data_len_i - 1)) begin
 						stcnt <= 16'd0;
 						state <= `MAC_FCS;
+						usr_clken_reg <= 1'b0;
 					end else begin
 						stcnt <= stcnt + 16'd1;
+						usr_clken_reg <= 1'b1;
 					end
-					tx_data <= 8'hAB;
+					tx_data <= usr_data_i;
 					tx_en <= 1'b1;
 					crc_calc <= 1'b1;
 					crc_init <= 1'b0;
@@ -347,18 +358,20 @@ module eth_phydirect(
 					tx_data <= fcs;
 					tx_en <= 1'b1;	
 					crc_calc <= 1'b0;
-					crc_init <= 1'b0;						
+					crc_init <= 1'b0;	
+					usr_clken_reg <= 1'b0;					
 				end
 				
 				default: begin
 					state <= `PHY_IDLE;
 					tx_data <= 8'd0;
 					tx_en <= 1'b0;
-					stcnt <= 16'd0;				
+					stcnt <= 16'd0;
+					usr_clken_reg <= 1'b0;					
 				end
 			endcase
 		end
-	 end
+	 end	 
 	 
 	 reg crc_calc;
 	 reg crc_init;
@@ -372,7 +385,15 @@ module eth_phydirect(
 		.clk(tx_clk),
 		.reset(reset_i)
    );
-	 	 
+	 
+	 reg usr_clken_reg;
+	 reg usr_clken_reg2;
+	 always @(negedge tx_clk) begin
+		usr_clken_reg2 <= usr_clken_reg & tx_nibble_cnt;
+	 end
+	 assign usr_clken_o = usr_clken_reg2;
+	 assign usr_clk_o = tx_clk;
+	 
 	wire [35:0]                          chipscope_control;
 	coregen_icon icon (
     .CONTROL0(chipscope_control) // INOUT BUS [35:0]

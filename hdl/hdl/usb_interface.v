@@ -75,6 +75,15 @@ module usb_interface(
 	 output							ddr_rd_req,
 	 input							ddr_rd_done
 `endif
+
+`ifdef USE_ETH
+	 ,input			eth_clk,
+	 input			eth_clken,
+	 output			eth_start,
+	 output [15:0] eth_datalen,
+	 output [7:0]  eth_data
+`endif
+
     );
 
 		 
