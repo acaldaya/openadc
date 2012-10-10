@@ -80,6 +80,7 @@ module usb_interface(
 	 ,input			eth_clk,
 	 input			eth_clken,
 	 output			eth_start,
+	 input			eth_done,
 	 output [15:0] eth_datalen,
 	 output [7:0]  eth_data
 `endif
@@ -103,10 +104,6 @@ module usb_interface(
 	 reg 	  reset_latched;
 	 assign reset = reset_i | reset_latched;
 	 assign reset_o = reset;
-	 
-	 always @(posedge ftdi_clk) begin
-		reset_latched <= reset_fromreg;
-	 end
     	 
     wire [7:0] ftdi_din;
     reg [7:0]  ftdi_dout;
@@ -345,6 +342,10 @@ module usb_interface(
 	 
 	 assign gain = registers_gain;
 	 assign maxsamples_o = registers_samples;
+	  
+	 always @(posedge ftdi_clk) begin
+		reset_latched <= reset_fromreg;
+	 end
 	  
 	 always @(posedge ftdi_clk)
 	 begin
@@ -668,6 +669,65 @@ module usb_interface(
 			end
 		end
 	 end    
+`endif
+
+`ifdef USE_ETH
+	
+	reg [31:0] eth_samplecount;
+	reg [15:0] eth_udpsize;
+	assign eth_datalen = eth_udpsize;
+	
+	reg eth_start_reg;
+	assign eth_start = eth_start_reg;
+	
+	`define ETH_MAXSAMPLES 32'd1400
+
+	reg [4:0] eth_state;
+	`define ETH_IDLE 	4'b0000
+	`define ETH_START	4'b0001
+	`define ETH_SIZE  4'b0010
+	`define ETH_SEND  4'b0011
+
+	always @(posedge eth_clk or posedge reset) begin
+		if (reset) begin
+			eth_state <= `ETH_IDLE;
+		end else begin
+			case(eth_state)
+				`ETH_IDLE: begin
+					eth_samplecount <= registers_samples;
+					eth_start_reg <= 1'b0;
+					if ((state == `DATARD1) || (state == `DATARD2)) begin
+						eth_state <= `ETH_SIZE;
+					end
+				end
+				
+				`ETH_SIZE: begin
+					eth_start_reg <= 1'b0;
+					if (eth_samplecount > `ETH_MAXSAMPLES) begin
+						eth_samplecount <= eth_samplecount - `ETH_MAXSAMPLES;
+						eth_udpsize <= `ETH_MAXSAMPLES;
+						eth_state <= `ETH_START;
+					end else if (eth_samplecount > 32'd0) begin
+						eth_udpsize <= eth_samplecount;
+						eth_samplecount <= 32'd0;		
+						eth_state <= `ETH_START;						
+					end else begin
+						eth_state <= `ETH_IDLE;
+					end
+				end
+				
+				`ETH_START: begin
+					if (eth_done) begin
+						eth_state <= `ETH_IDLE;
+						eth_start_reg <= 1'b0;
+					end else begin
+						eth_start_reg <= 1'b1;
+					end
+				end
+
+			endcase
+		end
+	end
 `endif
 
     always @(posedge ftdi_clk or posedge reset)

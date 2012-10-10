@@ -67,7 +67,7 @@ module fifo_top(
 	
 	//3 samples per 4 bytes
 	//64 MByte DDR = 3072 samples
-	assign max_samples_o = 32'd49150;
+	assign max_samples_o = 32'd24573;
 	
 	always@(posedge adc_sampleclk) begin
 		if ((sample_counter < max_samples_i) && (adcfifo_full == 0)) begin

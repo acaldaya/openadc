@@ -35,7 +35,7 @@ module interface(
 	 output        amp_gain,
 	 output        amp_hilo
 	 
-//`ifdef USE_DDR
+`ifdef OPT_DDR
  /* To avoid modifying UCF file we keep these even in FIFO mode */
 	 ,output [12:0] LPDDR_A,
 	 output [1:0]  LPDDR_BA,
@@ -50,12 +50,13 @@ module interface(
 	 output			LPDDR_CAS_n,
 	 output			LPDDR_RAS_n,
 	 output			LPDDR_WE_n,
-	 output			LPDDR_RZQ,
-//`endif
+	 output			LPDDR_RZQ
+`endif
 
  /* To avoid modifying UCF file we keep these even without Ethernet */
-	 input 		   eth_col,
-    input 		   eth_crc,
+`ifdef OPT_ETH
+	 input 		   ,eth_col,
+    input 		   eth_crs,
 	 output 		   eth_mdc,
 	 inout  		   eth_mdio,
 	 
@@ -69,12 +70,12 @@ module interface(
 	 input         eth_tx_clk,
 	 output[3:0]   eth_tx_data,
 	 output        eth_tx_en
-
+`endif
     );
 
 	wire        slowclock;
 	wire 			clk_100mhz_buf; 	
-	
+	wire			dcm_locked;
 	wire 			reset_intermediate;
 	
 	assign slowclock = clk_40mhz;
@@ -198,7 +199,7 @@ module interface(
 	assign reg_status[0] = armed;
    assign reg_status[1] = ~adc_capture_go;
 	assign reg_status[2] = DUT_trigger_i;
-	//reg_status[3]
+	assign reg_status[3] = dcm_locked;
 	//reg_status[4]
 	//reg_status[5]
 	`ifdef USE_DDR
@@ -240,6 +241,53 @@ module interface(
 											  .cmdfifo_din(cmdfifo_din),
 											  .cmdfifo_dout(cmdfifo_dout));
 
+
+`ifdef USE_ETH
+	wire [7:0]  ethusr_data;
+	wire        ethusr_clken;
+	wire        ethusr_start;
+	wire        ethusr_clk;
+	wire [15:0] ethusr_datalen;
+	wire        ethusr_done;
+
+	eth_phydirect phy(
+	  .reset_i(reset),
+
+     .eth_col(eth_col),
+     .eth_crs(eth_crs),
+	  .eth_mdc(eth_mdc),
+	  .eth_mdio(eth_mdio),
+	 
+	  .eth_reset_n(eth_reset_n),
+	  .eth_rx_clk(eth_rx_clk),
+	  .eth_rx_data(eth_rx_data),
+	  .eth_rx_dv(eth_rx_dv),
+	  .eth_rx_er(eth_rx_er),
+	 
+	  .eth_tx_clk(eth_tx_clk),
+	  .eth_tx_data(eth_tx_data),
+	  .eth_tx_en(eth_tx_en),
+	  
+	  .usr_clk_o(ethusr_clk),
+	  .usr_clken_o(ethusr_clken),
+	  .usr_start_i(ethusr_start),
+	  .usr_done_o(ethusr_done),
+	  .usr_ethsrc_i(48'h000102030405),
+	  .usr_ethdst_i(48'hD067E5455171),
+	  .usr_ipsrc_i(32'hC0A8020A),
+	  .usr_ipdst_i(32'hC0A80201),
+	  .usr_data_len_i(ethusr_datalen),
+	  .usr_udpport_i(16'd17209),
+	  .usr_data_i(ethusr_data)
+    );
+`else
+	 assign eth_mdc = 1'b0;
+	 assign eth_mdio = 1'bZ;	 
+	 assign eth_reset_n = 1'b0;
+	 assign eth_tx_data = 4'd0;
+	 assign eth_tx_en = 1'b0;
+`endif
+
 `undef CHIPSCOPE
    usb_interface usb(.reset_i(reset_i),
 							.reset_o(reset_intermediate),
@@ -280,11 +328,12 @@ module interface(
 `endif
 
 `ifdef USE_ETH
-							, .eth_clk(usr_clk),
-							.eth_clken(usr_clken),
-							.eth_start(usr_start),
-							.eth_datalen(usr_datalen),
-							.eth_data(usr_data)
+							, .eth_clk(ethusr_clk),
+							.eth_clken(ethusr_clken),
+							.eth_start(ethusr_start),
+							.eth_done(ethusr_done),
+							.eth_datalen(ethusr_datalen),
+							.eth_data(ethusr_data)
 `endif
 							
 `ifdef CHIPSCOPE                     
@@ -306,7 +355,9 @@ module interface(
 	 .phase_requested(phase_requested),
 	 .phase_actual(phase_actual),
 	 .phase_load(phase_load),
-	 .phase_done(phase_done)
+	 .phase_done(phase_done),
+	 
+	 .dcm_locked(dcm_locked)
     );
 			 
 	reg [8:0] PWM_accumulator;
@@ -418,44 +469,6 @@ module interface(
 			.I(1'b1) // Buffer input
 		);
 	 
-`endif
-
-`ifdef USE_ETH
-	wire [7:0]  usr_data;
-	wire        usr_clken;
-	wire        usr_start;
-	wire        usr_clk;
-	wire [15:0] usr_datalen;
-
-	eth_phydirect phy(
-	  .reset_i(reset),
-
-     .eth_col(eth_col),
-     .eth_crc(eth_crc),
-	  .eth_mdc(eth_mdc),
-	  .eth_mdio(eth_mdio),
-	 
-	  .eth_reset_n(eth_reset_n),
-	  .eth_rx_clk(eth_rx_clk),
-	  .eth_rx_data(eth_rx_data),
-	  .eth_rx_dv(eth_rx_dv),
-	  .eth_rx_er(eth_rx_er),
-	 
-	  .eth_tx_clk(eth_tx_clk),
-	  .eth_tx_data(eth_tx_data),
-	  .eth_tx_en(eth_tx_en),
-	  
-	  .usr_clk_o(usr_clk),
-	  .usr_clken_o(usr_clken),
-	  .usr_start_i(usr_start),
-	  .usr_ethsrc_i(48'h000102030405),
-	  .usr_ethdst_i(48'hD067E5455171),
-	  .usr_ipsrc_i(32'hC0A8020A),
-	  .usr_ipdst_i(32'hC0A80201),
-	  .usr_data_len_i(usr_datalen),
-	  .usr_udpport_i(16'd17209),
-	  .usr_data_i(usr_data)
-    );
 `endif
 			 		
 endmodule

@@ -21,7 +21,7 @@ module eth_phydirect(
 	 input		 reset_i,      //Active high reset input
 
     input 		 eth_col,      //Connect to PHY
-    input 		 eth_crc,      //Connect to PHY
+    input 		 eth_crs,      //Connect to PHY
 	 output 		 eth_mdc,      //Connect to PHY
 	 inout  		 eth_mdio,     //Connect to PHY
 	 
@@ -43,6 +43,7 @@ module eth_phydirect(
 										//usr_clken_o will be high when your payload should be sent.
 										//Before setting this high be sure everything else has already
 										//been configured or bad things happen!
+	 output       usr_done_o,
 	 input [47:0] usr_ethsrc_i,
 	 input [47:0] usr_ethdst_i,
 	 input [31:0] usr_ipsrc_i,
@@ -63,6 +64,9 @@ module eth_phydirect(
 	 	 
 	 reg usr_datard;
 	 assign usr_datard_o = usr_datard;
+	 
+	 reg usr_done_reg;
+	 assign usr_done_o = usr_done_reg;
 	   
 	 assign eth_mdc = 1'b0;
 	 assign eth_mdio = 1'bZ;
@@ -196,6 +200,8 @@ module eth_phydirect(
 			state <= `PHY_IDLE;
 			stcnt <= 16'd0;
 			tx_en <= 1'b0;
+			usr_clken_reg <= 1'b0;
+			usr_done_reg <= 1'b0;
 		end else if (tx_nibble_cnt) begin
 			case (state) 
 				`PHY_IDLE: begin
@@ -210,6 +216,7 @@ module eth_phydirect(
 					crc_calc <= 1'b0;
 					crc_init <= 1'b1;
 					usr_clken_reg <= 1'b0;
+					usr_done_reg <= 1'b0;
 				end
 				
 				`PHY_WAIT: begin
@@ -224,6 +231,7 @@ module eth_phydirect(
 					crc_calc <= 1'b0;
 					crc_init <= 1'b1;
 					usr_clken_reg <= 1'b0;
+					usr_done_reg <= 1'b0;
 				end
 				
 				`PHY_PREAMBLE: begin
@@ -240,6 +248,7 @@ module eth_phydirect(
 					crc_calc <= 1'b0;
 					crc_init <= 1'b0;
 					usr_clken_reg <= 1'b0;
+					usr_done_reg <= 1'b0;
 				end
 				
 				`MAC_DST: begin
@@ -255,6 +264,7 @@ module eth_phydirect(
 					crc_calc <= 1'b1;
 					crc_init <= 1'b0;		
 					usr_clken_reg <= 1'b0;
+					usr_done_reg <= 1'b0;
 				end
 				
 				`MAC_SRC: begin
@@ -270,6 +280,7 @@ module eth_phydirect(
 					crc_calc <= 1'b1;
 					crc_init <= 1'b0;		
 					usr_clken_reg <= 1'b0;
+					usr_done_reg <= 1'b0;
 				end
 				
 				`MAC_TYPE: begin
@@ -285,7 +296,8 @@ module eth_phydirect(
 					tx_en <= 1'b1;
 					crc_calc <= 1'b1;
 					crc_init <= 1'b0;	
-					usr_clken_reg <= 1'b0;					
+					usr_clken_reg <= 1'b0;
+					usr_done_reg <= 1'b0;					
 				end
 				
 				/*
@@ -315,6 +327,7 @@ module eth_phydirect(
 					crc_calc <= 1'b1;
 					crc_init <= 1'b0;
 					usr_clken_reg <= 1'b0;
+					usr_done_reg <= 1'b0;
 				end
 				
 				`UDP_HDR: begin
@@ -330,6 +343,7 @@ module eth_phydirect(
 					tx_en <= 1'b1;
 					crc_calc <= 1'b1;
 					crc_init <= 1'b0;
+					usr_done_reg <= 1'b0;
 				end
 				
 				`UDP_PAYLOAD: begin
@@ -345,6 +359,7 @@ module eth_phydirect(
 					tx_en <= 1'b1;
 					crc_calc <= 1'b1;
 					crc_init <= 1'b0;
+					usr_done_reg <= 1'b0;
 				end
 				
 				`MAC_FCS: begin
@@ -359,7 +374,8 @@ module eth_phydirect(
 					tx_en <= 1'b1;	
 					crc_calc <= 1'b0;
 					crc_init <= 1'b0;	
-					usr_clken_reg <= 1'b0;					
+					usr_clken_reg <= 1'b0;	
+					usr_done_reg <= 1'b1;
 				end
 				
 				default: begin
@@ -367,7 +383,8 @@ module eth_phydirect(
 					tx_data <= 8'd0;
 					tx_en <= 1'b0;
 					stcnt <= 16'd0;
-					usr_clken_reg <= 1'b0;					
+					usr_clken_reg <= 1'b0;
+					usr_done_reg <= 1'b0;					
 				end
 			endcase
 		end
