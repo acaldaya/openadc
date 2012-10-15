@@ -68,8 +68,11 @@ module trigger_unit(
 		end
 	end	
 	
-	always @(posedge adc_clk, posedge adc_capture_done, posedge reset) begin
-		if (adc_capture_done | reset) begin
+	wire int_reset_capture;
+	assign int_reset_capture = adc_capture_done | reset;
+	
+	always @(posedge adc_clk or posedge int_reset_capture) begin
+		if (int_reset_capture) begin
 			adc_capture_go <= 0;
 		end else begin
 			if ((trigger == trigger_level_i) & armed) begin
