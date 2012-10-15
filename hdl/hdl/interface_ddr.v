@@ -14,10 +14,16 @@ file which should have came with this code.
 module interface(
     input         reset_i,
     
+`ifdef AVNET
     input         clk_40mhz,
     input         clk_100mhz,
 	 inout			sda,
 	 inout			scl,
+`endif
+
+`ifdef DLP_HS_FPGA
+	 input			clk_66mhz,
+`endif
 	 
     input         rxd,
     output        txd,
@@ -78,22 +84,28 @@ module interface(
 	wire			dcm_locked;
 	wire 			reset_intermediate;
 	
+`ifdef AVNET
 	assign slowclock = clk_40mhz;
-	
-	 wire       phase_clk;
-	 wire [8:0] phase_requested;
-	 wire [8:0] phase_actual;
-	 wire 		phase_load;
-	 wire 		phase_done;
-	
-	wire 			adc_capture_go;
-	wire			adc_capture_done;
-	wire			armed;
-	
 	//These need pull-ups enabled to avoid screwing up parts on board
 	assign scl = 1'bz;
 	assign sda = 1'bz;
-  
+`endif
+
+`ifdef DLP_HS_FPGA
+	wire clk_100mhz;
+	assign clk_100mhz = clk_66mhz;
+	assign slowclock = clk_100mhz_buf;
+`endif
+	
+	wire       phase_clk;
+	wire [8:0] phase_requested;
+	wire [8:0] phase_actual;
+	wire 		phase_load;
+	wire 		phase_done;
+	
+	wire 			adc_capture_go;
+	wire			adc_capture_done;
+	wire			armed;	  
    wire        reset;
                       
    assign GPIO_LED1 = ~reset_i;   
@@ -229,6 +241,7 @@ module interface(
 	
 	wire [31:0] maxsamples_limit;
 	wire [31:0] maxsamples;
+	
 	
 	serial_reg_iface cmdfifo_serial(.reset_i(reset),
 											  .clk_i(slowclock),

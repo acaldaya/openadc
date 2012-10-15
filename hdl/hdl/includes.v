@@ -4,13 +4,26 @@
 //`define CHIPSCOPE
 
 //Define the board in use
-`define AVNET
+//`define AVNET
+`define DLP_HS_FPGA
 
 //Clock frequency input to the UART, used for calculating the baud rate
+`ifdef AVNET
 `define UART_CLK 40000000
-
 //Baud rate of the UART
 `define UART_BAUD 512000
+`endif
+
+`ifdef DLP_HS_FPGA
+`define UART_CLK 66666000
+//Baud rate of the UART
+`define UART_BAUD 115200
+`endif
+
+//Baud rate of the UART
+`ifndef UART_BAUD
+`define UART_BAUD 512000
+`endif
 
 //`define USE_ETH
 
