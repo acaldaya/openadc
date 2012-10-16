@@ -109,7 +109,6 @@ module usb_interface(
     reg [7:0]  ftdi_dout;
     reg        ftdi_isOutput;
     wire       ftdi_clk;
-    wire       ftdi_rxf;
     
     assign ftdi_clk = clk;
     assign ftdi_rxf_n = ~cmdfifo_rxf;
@@ -618,6 +617,7 @@ module usb_interface(
             end
 				
 				`DATARD_DDRSTART: begin
+					ftdi_isOutput <= 0;
 					ftdi_wr_n <= 1;
 					ftdi_rd_n <= 1;
 					fifo_rd_en_reg <= 0;
@@ -639,7 +639,7 @@ module usb_interface(
                state <= `DATARD1;
                end    
 						
-				default: begin
+				default: begin				
 					fifo_rd_en_reg <= 0;
 					ftdi_rd_n <= 1;
                ftdi_wr_n <= 1;

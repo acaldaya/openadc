@@ -5,7 +5,8 @@
 
 //Define the board in use
 //`define AVNET
-`define DLP_HS_FPGA
+//`define DLP_HS_FPGA
+`define NEXYS2
 
 //Clock frequency input to the UART, used for calculating the baud rate
 `ifdef AVNET
@@ -20,6 +21,12 @@
 	//Baud rate of the UART
 	`define UART_BAUD 115200
 	`define MAX_SAMPLES 6141
+`endif
+
+`ifdef NEXYS2
+	`define UART_CLK 50000000
+	`define UART_BAUD 115200
+	`define MAX_SAMPLES 11285
 `endif
 
 //Baud rate of the UART

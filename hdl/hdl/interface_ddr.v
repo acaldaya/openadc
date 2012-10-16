@@ -24,6 +24,10 @@ module interface(
 `ifdef DLP_HS_FPGA
 	 input			clk_66mhz,
 `endif
+
+`ifdef NEXYS2
+	 input			clk_50mhz,
+`endif
 	 
     input         rxd,
     output        txd,
@@ -94,6 +98,12 @@ module interface(
 `ifdef DLP_HS_FPGA
 	wire clk_100mhz;
 	assign clk_100mhz = clk_66mhz;
+	assign slowclock = clk_100mhz_buf;
+`endif
+	
+`ifdef NEXYS2
+	wire clk_100mhz;
+	assign clk_100mhz = clk_50mhz;
 	assign slowclock = clk_100mhz_buf;
 `endif
 	
