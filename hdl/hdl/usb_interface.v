@@ -1,5 +1,5 @@
 `include "includes.v"
-`undef CHIPSCOPE
+//`define CHIPSCOPE
 
 /***********************************************************************
 This file is part of the OpenADC Project. See www.newae.com for more details,
@@ -66,7 +66,7 @@ module usb_interface(
 											
 	/* If using chipscope implement ICON in top module, then ILA inside here */
 `ifdef CHIPSCOPE
-	inout [35:0]              chipscope_control
+	,inout [35:0]              chipscope_control
 `endif                     
 
 	/* If using DDR interface additional lines required */
@@ -353,7 +353,7 @@ module usb_interface(
 		end
 	 end
 	 
-    always @(posedge ftdi_clk or posedge reset)
+    always @(posedge ftdi_clk)
     begin
       if (reset == 1) begin
          state <= `IDLE; 
@@ -760,7 +760,9 @@ module usb_interface(
    assign cs_data[23:16] = registers_echo[7:0]; 
 	assign cs_data[24] = ftdi_wr_n;
 	assign cs_data[32:25] = ftdi_dout;
-	assign cs_data[33] = txbusy;
+	assign cs_data[34] = fifo_empty;
+	assign cs_data[35] = fifo_rd_en;
+	assign cs_data[43:36] = fifo_data;
  `endif
  
 endmodule

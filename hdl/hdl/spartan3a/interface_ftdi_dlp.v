@@ -14,30 +14,17 @@ file which should have came with this code.
 module interface(
     input         reset_i,
     
-`ifdef AVNET
-    input         clk_40mhz,
-    input         clk_100mhz,
-	 inout			sda,
-	 inout			scl,
-`endif
-
-`ifdef DLP_HS_FPGA
 	 input			clk_66mhz,
-`endif
-
-`ifdef NEXYS2
-	 input			clk_50mhz,
-`endif
-
-`ifdef SASEBOW
-	 input         clk_100mhz,
-	 input			clk_24mhz,
-	 input			ADC_clk_feedback,
-`endif
 	 
-    input         rxd,
-    output        txd,
-       
+    //input         rxd,
+    //output        txd,
+ 
+	 input 			cmdfifo_rxf_n,
+	 input			cmdfifo_txe_n,
+	 output			cmdfifo_rd_n,
+	 output			cmdfifo_wr_n,	
+	 inout [7:0]	cmdfifo_data,
+		 
     output        GPIO_LED1,
     output        GPIO_LED2,
     output        GPIO_LED3,
@@ -69,54 +56,18 @@ module interface(
 	 output			LPDDR_RZQ
 `endif
 
- /* To avoid modifying UCF file we keep these even without Ethernet */
-`ifdef OPT_ETH
-	 input 		   ,eth_col,
-    input 		   eth_crs,
-	 output 		   eth_mdc,
-	 inout  		   eth_mdio,
-	 
-	 output        eth_reset_n,
-	 
-	 input 		   eth_rx_clk,
-	 input [3:0]   eth_rx_data,
-	 input         eth_rx_dv,
-	 input         eth_rx_er,
-	 
-	 input         eth_tx_clk,
-	 output[3:0]   eth_tx_data,
-	 output        eth_tx_en
-`endif
+
     );
 
 	wire        slowclock;
 	wire 			clk_100mhz_buf; 	
 	wire			dcm_locked;
 	wire 			reset_intermediate;
-	
-`ifdef AVNET
-	assign slowclock = clk_40mhz;
-	//These need pull-ups enabled to avoid screwing up parts on board
-	assign scl = 1'bz;
-	assign sda = 1'bz;
-`endif
 
-`ifdef DLP_HS_FPGA
+   reg [25:0] timer_heartbeat;
 	wire clk_100mhz;
 	assign clk_100mhz = clk_66mhz;
-	assign slowclock = clk_100mhz_buf;
-`endif
-
-`ifdef SASEBOW
-	assign slowclock = clk_24mhz;
-	assign clk_100mhz_buf = clk_100mhz;
-`endif
-	
-`ifdef NEXYS2
-	wire clk_100mhz;
-	assign clk_100mhz = clk_50mhz;
-	assign slowclock = clk_100mhz_buf;
-`endif
+	assign slowclock = timer_heartbeat[8];
 	
 	wire       phase_clk;
 	wire [8:0] phase_requested;
@@ -129,15 +80,12 @@ module interface(
 	wire			armed;	  
    wire        reset;
                       
-   assign GPIO_LED1 = ~reset_i;   
+   assign GPIO_LED1 = reset_i;   
   
    //Divide clock by 2^24 for heartbeat LED
 	//Divide clock by 2^25 for frequency measurement
-   reg [25:0] timer_heartbeat;
-   always @(posedge slowclock)
-      if (reset) begin
-         timer_heartbeat <= 26'b0;
-      end else begin
+   always @(posedge clk_100mhz_buf)
+      begin
          timer_heartbeat <= timer_heartbeat +  26'd1;
       end	
       
@@ -186,22 +134,6 @@ module interface(
    	
 	wire [7:0] 	reg_status;
 	
-`ifdef CHIPSCOPE
-  wire [35:0]                          chipscope_control;
-  coregen_icon icon (
-    .CONTROL0(chipscope_control) // INOUT BUS [35:0]
-   ); 
-  
-/*
-	wire [127:0] cs_data;
-    
-   coregen_ila ila (
-    .CONTROL(chipscope_control), // INOUT BUS [35:0]
-    .CLK(ADC_clk_sample), // IN
-    .TRIG0(cs_data) // IN BUS [127:0]
-   );
-*/
-`endif 
 	
 	//1 = trigger on high, 0 = trigger on low
 	wire trigger_mode;
@@ -253,17 +185,30 @@ module interface(
 	wire				ddrfifo_rd_en;
 	wire				ddrfifo_rd_clk;
 	 
-	wire cmdfifo_rxf;
-	wire cmdfifo_txe;
-	wire cmdfifo_rd;
-	wire cmdfifo_wr;
+	wire       cmdfifo_rxf;
+	wire       cmdfifo_txe;
+	wire       cmdfifo_wr;
+	wire       cmdfifo_rd;
 	wire [7:0] cmdfifo_din;
 	wire [7:0] cmdfifo_dout;
+	wire       cmdfifo_isout;
+	
+	reg reg_cmdfifo_wr_n;
+	
+	assign cmdfifo_rxf = ~cmdfifo_rxf_n;
+	assign cmdfifo_txe = ~cmdfifo_txe_n;
+	assign cmdfifo_wr_n = reg_cmdfifo_wr_n;
+	assign cmdfifo_rd_n = ~cmdfifo_rd;
+	
+	always @(posedge slowclock) begin
+		reg_cmdfifo_wr_n <= ~cmdfifo_wr;
+	end
 	
 	wire [31:0] maxsamples_limit;
 	wire [31:0] maxsamples;
 	
 	
+	/*
 	serial_reg_iface cmdfifo_serial(.reset_i(reset),
 											  .clk_i(slowclock),
 											  .rx_i(rxd),
@@ -274,56 +219,13 @@ module interface(
 											  .cmdfifo_wr(cmdfifo_wr),
 											  .cmdfifo_din(cmdfifo_din),
 											  .cmdfifo_dout(cmdfifo_dout));
+	*/
+	
+	assign cmdfifo_data = cmdfifo_isout ? cmdfifo_dout : 8'bZ;
+   assign cmdfifo_din = cmdfifo_data;
 
-
-`ifdef USE_ETH
-	wire [7:0]  ethusr_data;
-	wire        ethusr_clken;
-	wire        ethusr_start;
-	wire        ethusr_clk;
-	wire [15:0] ethusr_datalen;
-	wire        ethusr_done;
-
-	eth_phydirect phy(
-	  .reset_i(reset),
-
-     .eth_col(eth_col),
-     .eth_crs(eth_crs),
-	  .eth_mdc(eth_mdc),
-	  .eth_mdio(eth_mdio),
-	 
-	  .eth_reset_n(eth_reset_n),
-	  .eth_rx_clk(eth_rx_clk),
-	  .eth_rx_data(eth_rx_data),
-	  .eth_rx_dv(eth_rx_dv),
-	  .eth_rx_er(eth_rx_er),
-	 
-	  .eth_tx_clk(eth_tx_clk),
-	  .eth_tx_data(eth_tx_data),
-	  .eth_tx_en(eth_tx_en),
-	  
-	  .usr_clk_o(ethusr_clk),
-	  .usr_clken_o(ethusr_clken),
-	  .usr_start_i(ethusr_start),
-	  .usr_done_o(ethusr_done),
-	  .usr_ethsrc_i(48'h000102030405),
-	  .usr_ethdst_i(48'hD067E5455171),
-	  .usr_ipsrc_i(32'hC0A8020A),
-	  .usr_ipdst_i(32'hC0A80201),
-	  .usr_data_len_i(ethusr_datalen),
-	  .usr_udpport_i(16'd17209),
-	  .usr_data_i(ethusr_data)
-    );
-`else
-	 assign eth_mdc = 1'b0;
-	 assign eth_mdio = 1'bZ;	 
-	 assign eth_reset_n = 1'b0;
-	 assign eth_tx_data = 4'd0;
-	 assign eth_tx_en = 1'b0;
-`endif
-
-//`undef CHIPSCOPE
-   usb_interface usb(.reset_i(reset_i),
+`undef CHIPSCOPE
+   usb_interface usb(.reset_i(1'b0),
 							.reset_o(reset_intermediate),
                      .clk(slowclock),
 							.cmdfifo_rxf(cmdfifo_rxf),
@@ -332,7 +234,7 @@ module interface(
 							.cmdfifo_wr(cmdfifo_wr),
 							.cmdfifo_din(cmdfifo_din),
 							.cmdfifo_dout(cmdfifo_dout),
-							.cmdfifo_isout(),
+							.cmdfifo_isout(cmdfifo_isout),
 							.gain(PWM_incr),
                      .hilow(amp_hilo),
 							.status(reg_status),
@@ -361,30 +263,18 @@ module interface(
 							.ddr_rd_done(ddr_read_done)
 `endif
 
-`ifdef USE_ETH
-							, .eth_clk(ethusr_clk),
-							.eth_clken(ethusr_clken),
-							.eth_start(ethusr_start),
-							.eth_done(ethusr_done),
-							.eth_datalen(ethusr_datalen),
-							.eth_data(ethusr_data)
-`endif
-							
+						
 `ifdef CHIPSCOPE                     
                      , .chipscope_control(chipscope_control)
 `endif
 
                      );                      	 
 	
-`undef CHIPSCOPE
 	clock_managment genclocks(
 	 .reset(reset),
     .clk_100mhz(clk_100mhz_buf),
     .ext_clk(DUT_CLK_i),   
 	 .adc_clk(ADC_clk),
-`ifdef SASEBOW
-	 .adc_clk_feedback(ADC_clk_feedback),
-`endif
 	 .use_ext_clk(ADC_clk_selection),
 	 
 	 .systemsample_clk(ADC_clk_sample),
@@ -409,7 +299,7 @@ module interface(
 	ddr_top ddr(
     .reset_i(reset_intermediate),
 	 .reset_o(reset),
-	 .clk_100mhz_in(clk_100mhz),
+    .clk_100mhz_in(clk_100mhz),
 	 .clk_100mhz_out(clk_100mhz_buf),
 	 
 	 //ADC Sample Input
@@ -455,16 +345,12 @@ module interface(
 	 );
 `else		
 
-
 //`define CHIPSCOPE 1
 	fifo_top fifo_top_inst(
     .reset_i(reset_intermediate),
 	 .reset_o(reset),
-
-`ifndef SASEBOW
     .clk_100mhz_in(clk_100mhz),
 	 .clk_100mhz_out(clk_100mhz_buf),
-`endif
 	 
 	 //ADC Sample Input
 	 .adc_datain(ADC_Data_tofifo),
@@ -488,7 +374,8 @@ module interface(
 `endif	 
 	 );
 
-//`undef CHIPSCOPE
+
+`ifdef OPT_DDR
 	 /* To avoid modifying UCF file we keep these even in FIFO mode */
 	 assign LPDDR_A = 0;
 	 assign LPDDR_BA = 0;
@@ -510,6 +397,7 @@ module interface(
 			.OB(LPDDR_CK_N), // Diff_n output (connect directly to top-level port)
 			.I(1'b1) // Buffer input
 		);
+`endif
 	 
 `endif
 			 		

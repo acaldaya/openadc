@@ -125,29 +125,17 @@ module fifo_top(
 `ifdef CHIPSCOPE
 	wire [127:0] cs_data;
 	
-	assign cs_data[0] = c3_p2_cmd_en;
-	assign cs_data[30:1] = ddr_read_address[29:0];
-	assign cs_data[31] = c3_p2_cmd_empty;
-	assign cs_data[32] = c3_p2_cmd_full;
-	assign cs_data[33] = c3_p2_rd_en;
-	
-	assign cs_data[42] = c3_p2_rd_full;
-	assign cs_data[49:43] = c3_p2_rd_count;
-	assign cs_data[50] = c3_p2_rd_overflow;
-	assign cs_data[51] = c3_p2_rd_error;
-	
-	assign cs_data[83:52] = c3_p2_rd_data;	
-	assign cs_data[84] = c3_p2_rd_empty;
-	assign cs_data[85] = ddrfifo_full;
-	assign cs_data[86] = ddr_read_done_reg;
-	assign cs_data[87] = ddrfifo_wr_en;
-	assign cs_data[97:88] = ddr_read_data[7:0];
-	assign cs_data[98] = ddr_read_fifoen;
-	assign cs_data[99] = ddr_read_fifoempty;
-    
+	assign cs_data[31:0] = max_samples_o;
+	assign cs_data[63:32] = max_samples_i;
+	assign cs_data[95:64] = sample_counter;
+	assign cs_data[96] = adcfifo_full;
+	assign cs_data[97] = adc_capture_go;
+	assign cs_data[98] = fifo_read_fifoempty;
+	assign cs_data[99] = fifo_read_fifoen;
+	    
    coregen_ila ila (
     .CONTROL(chipscope_control), // INOUT BUS [35:0]
-    .CLK(ddr_usrclk), // IN
+    .CLK(adc_sampleclk), // IN
     .TRIG0(cs_data) // IN BUS [127:0]
    );
 	
