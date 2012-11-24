@@ -31,9 +31,12 @@
 `endif
 
 `ifdef SASEBOW
-	`define UART_CLK 24000000
+	`define FAST_FTDI
+	//`define UART_CLK 24000000
+	`define UART_CLK 60000000
 	`define UART_BAUD 512000
 	`define MAX_SAMPLES 49149
+	`define USE_SCARD
 `endif
 
 //Baud rate of the UART

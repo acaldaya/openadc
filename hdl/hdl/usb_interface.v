@@ -26,6 +26,10 @@ module usb_interface(
 	output [7:0]	cmdfifo_dout,
 	// Following is provided for units with half-duplex interface such as FTDI
 	output			cmdfifo_isout,
+	// Following is a hint that complete packet is ready in output FIFO, can be
+	// completely ignored. Mostly used in USB mode.
+	// *** NOT CURRENTLY IMPLEMENTED ***
+	output			cmdfifo_ready,
 		
 	/* Interface to gain module */
 	output [7:0]	gain,
@@ -62,12 +66,7 @@ module usb_interface(
 	/* Additional ADC control lines */
 	output			adc_clk_src_o,
 	output [31:0]	maxsamples_o,
-	input  [31:0]  maxsamples_i
-											
-	/* If using chipscope implement ICON in top module, then ILA inside here */
-`ifdef CHIPSCOPE
-	,inout [35:0]              chipscope_control
-`endif                     
+	input  [31:0]  maxsamples_i										              
 
 	/* If using DDR interface additional lines required */
 `ifdef USE_DDR
@@ -85,6 +84,21 @@ module usb_interface(
 	 output [7:0]  eth_data
 `endif
 
+`ifdef USE_SCARD
+	 ,output [7:0] scard_datao,
+	 output        scard_dataovalid,
+	 input			scard_dataofull,
+	 input  [7:0]  scard_datai,
+	 output        scard_dataird,
+    input			scard_dataiempty,
+	 input			scard_present,
+	 output		   scard_reset
+`endif
+
+	/* If using chipscope implement ICON in top module, then ILA inside here */
+`ifdef CHIPSCOPE
+	,inout [35:0]              chipscope_control
+`endif  
     );
 
 		 
@@ -152,6 +166,20 @@ module usb_interface(
 	
 `ifdef USE_DDR
 	 assign ddr_address = registers_ddr_address;
+`endif
+
+`ifdef USE_SCARD
+	reg [7:0]	registers_scardin;
+	reg [7:0]	registers_scardout;
+	reg [7:0]	registers_scardctrl;
+	wire [7:0]  registers_scardctrl_read;
+		
+	assign scard_reset = registers_scardctrl[0];
+	assign scard_datao = registers_scardout;
+	assign registers_scardctrl_read[0] = registers_scardctrl[0];
+	assign registers_scardctrl_read[1] = scard_present;
+	assign registers_scardctrl_read[2] = scard_dataofull;
+	assign registers_scardctrl_read[3] = scard_dataiempty;		
 `endif
 
 	 assign trigger_offset = registers_offset;
@@ -288,7 +316,32 @@ module usb_interface(
 		 0x1B
 		 0x1C
 		 0x1D - MSB
+
+
+	 0x1E - Smartcard Control/Status Register
+	    [ X X X X ER EW C R ]
+		 	 
+		 ER = (bit 3) Read Fifo Empty (e.g.: can read more data from 0x1F) (R)
+		      1 = Empty, do not read
+				0 = Read one byte
+		
+		 EW = (bit 2) Write Fifo Full (e.g.: can write more data to 0x20) (R)
+		      1 = Full, do not write
+				0 = Write one byte
+		
+		 C = (bit 1) Card Present (R)
+		      1 = Card Inserted
+				0 = No Card Present
+				
+		 R = (bit 0) Card Reset (R/W)
+				1 = Reset Asserted (low)
+				0 = Reset Deasserted (high)
+	 	 
+	 0x1F - Smartcard Read Register
 	 
+	 0x20 - Smartcard Write Register
+	 
+		 
 	*/
 	 
     `define GAIN_ADDR    	0
@@ -315,7 +368,13 @@ module usb_interface(
 	 `define OFFSET_ADDR2   27
 	 `define OFFSET_ADDR3   28
 	 `define OFFSET_ADDR4   29
-    
+	 	 
+`ifdef USE_SCARD
+	 `define SCARDCTRL_ADDR	30
+	 `define SCARDRD_ADDR	31
+	 `define SCARDWR_ADDR	32
+`endif
+	 
 	 `undef  IDLE
     `define IDLE            'b0000
     `define ADDR            'b0001
@@ -326,6 +385,8 @@ module usb_interface(
     `define DATARD1         'b1001
     `define DATARD2         'b1010
 	 `define DATARD_DDRSTART 'b1011         
+	 `define SCARDRD1			 'b1100
+	 `define SCARDRD2			 'b1101
 
     reg [3:0]              state = `IDLE;
     reg [5:0]              address;
@@ -352,6 +413,41 @@ module usb_interface(
 			registers_extclk_frequency <= extclk_frequency;
 		end
 	 end
+	 
+`ifdef USE_SCARD
+	 reg scard_dataird_reg;
+	 reg scard_dataovalid_reg;
+	 	 
+	 assign scard_dataird = scard_dataird_reg;
+	 assign scard_dataovalid = scard_dataovalid_reg;
+	 
+	 always @(posedge ftdi_clk) begin
+	  if ((state == `DATARDSTART) & (address == `SCARDRD_ADDR)) begin
+			scard_dataird_reg <= 1'b1;
+	  end else begin
+			scard_dataird_reg <= 1'b0;
+	  end
+	 end
+	 
+	 always @(posedge ftdi_clk) begin
+	  if ((state == `DATAWR2) & (address == `SCARDWR_ADDR)) begin
+			scard_dataovalid_reg <= 1'b1;
+	  end else begin
+			scard_dataovalid_reg <= 1'b0;
+	  end
+	 end			 
+`endif
+	 /*
+	 always @(posedge cmdfifo_ready)
+	 begin
+		if (state == `DATARDSTART) & (addr != `ADCDATA_ADDR) begin
+			cmdfifo_ready_int <= 1'b1;
+		end else begin
+			cmdfifo_ready_int <= 1'b0;
+		end
+	 end
+	 */
+	 assign cmdfifo_ready = 1'b0;
 	 
     always @(posedge ftdi_clk)
     begin
@@ -454,6 +550,12 @@ module usb_interface(
 						registers_offset[23:16] <= ftdi_din;
 					end else if (address == `OFFSET_ADDR4) begin
 						registers_offset[31:24] <= ftdi_din;
+`ifdef USE_SCARD 
+					end else if (address == `SCARDCTRL_ADDR) begin
+						registers_scardctrl <= ftdi_din;
+					end else if (address == `SCARDWR_ADDR) begin
+						registers_scardout <= ftdi_din;
+`endif
 					end
 					
                state <= `IDLE;                         
@@ -585,6 +687,25 @@ module usb_interface(
 						extclk_locked <= 0;
 						ftdi_wr_n <= 0;
 						state <= `IDLE;							
+`ifdef USE_SCARD
+					end else if (address == `SCARDCTRL_ADDR) begin
+						ftdi_dout <= registers_scardctrl_read;
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;	
+						
+					end else if (address == `SCARDWR_ADDR) begin
+						ftdi_dout <= registers_scardout;
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;	
+						
+					end else if (address == `SCARDRD_ADDR) begin
+						ftdi_dout <= scard_datai;
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						state <= `IDLE;	
+`endif
                end else begin
 						extclk_locked <= 0;
 						ftdi_dout <= 8'bx;						

@@ -33,6 +33,18 @@ module interface(
 	 input         clk_100mhz,
 	 input			clk_24mhz,
 	 input			ADC_clk_feedback,
+	 
+`ifdef FAST_FTDI
+	 input			ftdi_clk,	 
+	 inout [7:0]  	ftdi_data,
+	 input			ftdi_rxfn,
+	 input			ftdi_txen,
+	 output		 	ftdi_rdn,
+	 output		 	ftdi_wrn,
+	 output		 	ftdi_oen,	
+	 output			ftdi_siwua,
+`endif
+	 
 `endif
 	 
     input         rxd,
@@ -87,8 +99,36 @@ module interface(
 	 output[3:0]   eth_tx_data,
 	 output        eth_tx_en
 `endif
+
+`ifdef USE_SCARD
+	,input			scard_present,
+	output			scard_rst,
+	inout 			scard_io
+`endif
+
     );
 
+/*
+  wire [35:0]                          chipscope_control;
+  coregen_icon icon (
+    .CONTROL0(chipscope_control) // INOUT BUS [35:0]
+   ); 
+
+   wire [127:0] cs_data;
+    
+   coregen_ila ila (
+    .CONTROL(chipscope_control), // INOUT BUS [35:0]
+    .CLK(ftdi_clk), // IN
+    .TRIG0(cs_data) // IN BUS [127:0]
+   );
+	
+	assign cs_data[7:0] = ftdi_data;
+	assign cs_data[8] = ftdi_rxfn;
+	assign cs_data[9] = ftdi_txen;
+	assign cs_data[10] = ftdi_rdn;
+	assign cs_data[11] = ftdi_wrn;
+	assign cs_data[12] = ftdi_oen;
+*/
 	wire        slowclock;
 	wire 			clk_100mhz_buf; 	
 	wire			dcm_locked;
@@ -108,7 +148,12 @@ module interface(
 `endif
 
 `ifdef SASEBOW
+
+`ifdef FAST_FTDI
+	assign slowclock = ftdi_clk;
+`else
 	assign slowclock = clk_24mhz;
+`endif
 	assign clk_100mhz_buf = clk_100mhz;
 `endif
 	
@@ -148,8 +193,10 @@ module interface(
  
 	//Frequency Measurement
 	wire freq_measure;
+	//BUFG buf_freqmeasure (.I(timer_heartbeat[25]), .O(freq_measure));
 	assign freq_measure = timer_heartbeat[25];
 	reg [31:0] extclk_frequency_int;
+	
 	always @(posedge DUT_CLK_i or negedge freq_measure) begin
 		if (freq_measure == 1'b0) begin
 			extclk_frequency_int <= 32'd0;
@@ -157,6 +204,7 @@ module interface(
 			extclk_frequency_int <= extclk_frequency_int + 32'd1;
 		end
 	end
+	
 		
 	reg [31:0] extclk_frequency;
 	always @(negedge freq_measure) begin
@@ -257,23 +305,55 @@ module interface(
 	wire cmdfifo_txe;
 	wire cmdfifo_rd;
 	wire cmdfifo_wr;
+	wire cmdfifo_isout;
+	wire cmdfifo_ready;
 	wire [7:0] cmdfifo_din;
 	wire [7:0] cmdfifo_dout;
 	
 	wire [31:0] maxsamples_limit;
 	wire [31:0] maxsamples;
 	
-	
-	serial_reg_iface cmdfifo_serial(.reset_i(reset),
-											  .clk_i(slowclock),
-											  .rx_i(rxd),
-											  .tx_o(txd),
-											  .cmdfifo_rxf(cmdfifo_rxf),
-											  .cmdfifo_txe(cmdfifo_txe),
-											  .cmdfifo_rd(cmdfifo_rd),
-											  .cmdfifo_wr(cmdfifo_wr),
-											  .cmdfifo_din(cmdfifo_din),
-											  .cmdfifo_dout(cmdfifo_dout));
+`ifdef FAST_FTDI	 	
+    assign ftdi_data = cmdfifo_isout ? cmdfifo_dout : 8'bZ;
+	 assign cmdfifo_din = ftdi_data;
+	 assign cmdfifo_rxf = ~ftdi_rxfn;
+	 assign cmdfifo_txe = ~ftdi_txen;
+	 assign ftdi_rdn = ~cmdfifo_rd;
+	 assign ftdi_wrn = ~cmdfifo_wr;
+	 assign ftdi_oen = cmdfifo_isout;
+	 assign ftdi_siwua = ~cmdfifo_ready;
+`else	
+	 serial_reg_iface cmdfifo_serial(.reset_i(reset),
+										  .clk_i(slowclock),
+										  .rx_i(rxd),
+										  .tx_o(txd),
+										  .cmdfifo_rxf(cmdfifo_rxf),
+										  .cmdfifo_txe(cmdfifo_txe),
+										  .cmdfifo_rd(cmdfifo_rd),
+										  .cmdfifo_wr(cmdfifo_wr),
+										  .cmdfifo_din(cmdfifo_din),
+										  .cmdfifo_dout(cmdfifo_dout));	
+`endif
+											  
+`ifdef USE_SCARD
+
+	wire scardfifo_rxe;
+	wire scardfifo_txf;
+	wire scardfifo_rd;
+	wire scardfifo_wr;
+	wire [7:0] scardfifo_din;
+	wire [7:0] scardfifo_dout;
+
+	 serial_scard_iface serial_scard(.reset_i(reset),
+													.clk_i(slowclock),
+													.scard_io(scard_io),
+													.scardfifo_rxe(scardfifo_rxe),
+													.scardfifo_txf(scardfifo_txf),
+													.scardfifo_rd(scardfifo_rd),
+													.scardfifo_wr(scardfifo_wr),
+													.scardfifo_din(scardfifo_din),
+													.scardfifo_dout(scardfifo_dout));	
+`endif
 
 
 `ifdef USE_ETH
@@ -332,7 +412,8 @@ module interface(
 							.cmdfifo_wr(cmdfifo_wr),
 							.cmdfifo_din(cmdfifo_din),
 							.cmdfifo_dout(cmdfifo_dout),
-							.cmdfifo_isout(),
+							.cmdfifo_isout(cmdfifo_isout),
+							.cmdfifo_ready(cmdfifo_ready),
 							.gain(PWM_incr),
                      .hilow(amp_hilo),
 							.status(reg_status),
@@ -370,6 +451,17 @@ module interface(
 							.eth_data(ethusr_data)
 `endif
 							
+`ifdef USE_SCARD
+							,.scard_datao(scardfifo_dout),
+							.scard_dataovalid(scardfifo_wr),
+							.scard_dataofull(scardfifo_txf),
+							.scard_datai(scardfifo_din),
+							.scard_dataird(scardfifo_rd),
+							.scard_dataiempty(scardfifo_rxe),
+							.scard_present(scard_present),
+							.scard_reset(scard_rst)
+`endif
+
 `ifdef CHIPSCOPE                     
                      , .chipscope_control(chipscope_control)
 `endif

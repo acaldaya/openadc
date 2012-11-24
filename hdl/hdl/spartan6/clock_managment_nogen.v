@@ -64,7 +64,7 @@ module clock_managment(
 	// Spartan-6
 	// Xilinx HDL Libraries Guide, version 13.2
 	BUFGMUX #(
-	.CLK_SEL_TYPE("SYNC") // Glitchles ("SYNC") or fast ("ASYNC") clock switch-over
+	.CLK_SEL_TYPE("ASYNC") // Glitchles ("SYNC") or fast ("ASYNC") clock switch-over
 	)
 	BUFGMUX_inst (
 	.O(ADC_clk_src), // 1-bit output: Clock buffer output

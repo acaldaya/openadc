@@ -8,7 +8,7 @@ NET reset_i      LOC = R13  |IOSTANDARD = LVCMOS33;  # "USER_RESET"
 NET reset_i      TIG;
 
 NET clk_66mhz        LOC = R9 | IOSTANDARD = LVCMOS33;
-NET clk_66mhz TNM_NET = clk_66mhz;
+NET clk_66mhz 			TNM_NET = clk_66mhz;
 TIMESPEC TS_CLOCK_R9 = PERIOD clk_66mhz 66666.7 kHz;
 
 NET "DUT_CLK_i" CLOCK_DEDICATED_ROUTE = FALSE;
@@ -27,8 +27,21 @@ NET GPIO_LED3         LOC = T9  |IOSTANDARD = LVCMOS33;               # "GPIO_LE
 NET GPIO_LED4         LOC = N2  |IOSTANDARD = LVCMOS33;               # "GPIO_LED4"
 
 
-NET RXD     LOC = C12  |IOSTANDARD = LVCMOS33;               # "USB_RS232_RXD"
-NET TXD     LOC = D11  |IOSTANDARD = LVCMOS33;               # "USB_RS232_TXD"
+#NET RXD     LOC = C12  |IOSTANDARD = LVCMOS33;               # "USB_RS232_RXD"
+#NET TXD     LOC = D11  |IOSTANDARD = LVCMOS33;               # "USB_RS232_TXD"
+ 
+NET cmdfifo_rxf_n		 LOC=P9   |IOSTANDARD = LVCMOS33;
+NET cmdfifo_txe_n		 LOC=N9	 |IOSTANDARD = LVCMOS33;
+NET cmdfifo_rd_n		 LOC=P8   |IOSTANDARD = LVCMOS33;
+NET cmdfifo_wr_n		 LOC=T8   |IOSTANDARD = LVCMOS33;
+NET cmdfifo_data[7]	 LOC=N8   |IOSTANDARD = LVCMOS33;
+NET cmdfifo_data[6]	 LOC=P7   |IOSTANDARD = LVCMOS33;
+NET cmdfifo_data[5]	 LOC=P6   |IOSTANDARD = LVCMOS33;
+NET cmdfifo_data[4]	 LOC=N7   |IOSTANDARD = LVCMOS33;
+NET cmdfifo_data[3]	 LOC=T6   |IOSTANDARD = LVCMOS33;
+NET cmdfifo_data[2]	 LOC=T5   |IOSTANDARD = LVCMOS33;
+NET cmdfifo_data[1]	 LOC=R5   |IOSTANDARD = LVCMOS33;
+NET cmdfifo_data[0]	 LOC=T4   |IOSTANDARD = LVCMOS33;
 
 NET DUT_CLK_i         LOC=C10  |IOSTANDARD = LVCMOS33;
 NET DUT_trigger_i     LOC=D9   |IOSTANDARD = LVCMOS33;
