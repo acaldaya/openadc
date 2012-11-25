@@ -20,12 +20,66 @@ import serial
 import scan
 from PySide.QtCore import *
 from PySide.QtGui import *
+
+import ftd2xx as ft
+
+import numpy as np
+import scipy as sp
+import matplotlib as mp
+import pylab as pl
+
+class FTDIOpenADC():
+    def __init__(self, name):
+        self.adc = ft.openEx(name)
+        self.adc.setTimeouts(1000, 1000)
+    
+    def write(self, a):
+        self.adc.write(str(a))
+
+    def read(self, n):
+        return self.adc.read(n)
+
+    def flushInput(self):
+        return
   
 class MainWindow(QMainWindow):
+
+    def plotSpectrum(self,y,Fs):
+        """
+        Plots a Single-Sided Amplitude Spectrum of y(t)
+        """
+        n = len(y) # length of the signal
+        k = np.arange(n)
+        T = n/Fs
+        frq = k/T # two sides frequency range
+        frq = frq[range(n/2)] # one side frequency range
+
+        Y = sp.fft(y)/n # fft computing and normalization
+        Y = Y[range(n/2)]
+
+        pl.clf()
+            
+        pl.plot(frq,abs(Y),'r') # plotting the spectrum
+        pl.xlabel('Freq (Hz)')
+        pl.ylabel('|Y(freq)|')
+        pl.show()
+        pl.draw()
+
+        if self.base == None:
+            self.base = max(abs(Y))
+
+        print "%f"%(10.0*np.log10(max(abs(Y[1:-1]))/self.base))
                      
     def ADCcapture(self):
         self.oa.ADCarm()
         self.oa.ADCcapture()
+
+        #freq = sp.fft(self.oa.datapoints)
+        #pl.plot(freq)
+        #pl.show()
+        #self.plotSpectrum(self.oa.datapoints, 40000000.0)
+
+        #print "%f (3dB = %f)"%(max(self.oa.datapoints), 0.707*max(self.oa.datapoints))
               
     def ADCupdate(self):
         self.oa.ADCupdate()
@@ -36,12 +90,14 @@ class MainWindow(QMainWindow):
             # Open serial port if not already
             self.ser = serial.Serial()
             self.ser.port     = self.serialList.currentText()
-            self.ser.baudrate = 512000;
-            self.ser.timeout  = 0.5     # 0.5 second timeout
+            self.ser.baudrate = 512000
+            self.ser.timeout  = 1.0     # 0.5 second timeout
 
 
             attempts = 4
             while attempts > 0:
+                #if attempts > 2:
+                #    self.ser.baudrate = 115200
                 try:
                     self.ser.open()
                     attempts = 0
@@ -52,6 +108,9 @@ class MainWindow(QMainWindow):
         
         self.oa.ADCconnect(self.ser)
 
+#        self.ser = FTDIOpenADC("12345678B")
+#        self.oa.ADCconnect(self.ser)
+
     def ADCread(self):
         self.oa.ADCread();
 
@@ -60,11 +119,19 @@ class MainWindow(QMainWindow):
         for i in range(0, 255):
             self.serialList.removeItem(i)
         self.serialList.addItems(serialnames)
+
+    def ADCloop(self):
+        while True:
+            self.ADCcapture()
+            QCoreApplication.processEvents()
+            time.sleep(0.1)
         
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
 
         self.ser = None
+        self.base = None
+        self.plot = None
 
         self.statusBar()
         self.setWindowTitle("OpenADC Capture App")
@@ -78,16 +145,17 @@ class MainWindow(QMainWindow):
         self.serialList = QComboBox()
         self.connectButton = QPushButton("Connect")
         self.captureButton = QPushButton("Capture")
-        self.readButton = QPushButton("Re-Read")
+        #self.readButton = QPushButton("Re-Read")
         self.updateButton = QPushButton("Get Status")
+        self.startButton = QPushButton("Start Inf")
 
 
         self.oa = openadc_qt.OpenADCQt();
         self.connect(self.connectButton, SIGNAL("clicked()"),self, SLOT("ADCconnect()"))
         self.connect(self.captureButton, SIGNAL("clicked()"),self, SLOT("ADCcapture()"))
         self.connect(self.updateButton, SIGNAL("clicked()"),self,SLOT("ADCupdate()"))
-        self.connect(self.readButton, SIGNAL("clicked()"),self,SLOT("ADCread()"))
-       
+        #self.connect(self.readButton, SIGNAL("clicked()"),self,SLOT("ADCread()"))
+        self.connect(self.startButton, SIGNAL("clicked()"),self,SLOT("ADCloop()"))
         
         # Create layout and add widgets
         self.mw = QWidget()
@@ -100,8 +168,9 @@ class MainWindow(QMainWindow):
         glayout.addWidget(self.serialList, 0, 0)
         glayout.addWidget(self.connectButton, 0, 1)
         glayout.addWidget(self.captureButton, 1, 0)
-        glayout.addWidget(self.readButton, 1, 1)
-        glayout.addWidget(self.updateButton, 2, 0)
+        #glayout.addWidget(self.readButton, 1, 1)
+        glayout.addWidget(self.updateButton, 1, 1)
+        glayout.addWidget(self.startButton, 2, 0)
 
         layout.addLayout(glayout)
         layout.addLayout(self.oa.getLayout())

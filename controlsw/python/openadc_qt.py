@@ -101,16 +101,31 @@ class pysideGraph():
 
 class OpenADCQt():
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, includePreview=True):
         self.offset = 0.5
         self.ser = None
         self.sc = None
+        self.setupLayout(parent, includePreview)
 
-        self.setupLayout(parent)
+    def setEnabled(self, mode):        
+        self.gainlow.setEnabled(mode)
+        self.gainhigh.setEnabled(mode)
+        self.gain.setEnabled(mode)
 
-    def setupLayout(self, parent):
+        self.trigmoderising.setEnabled(mode)
+        self.trigmodefalling.setEnabled(mode)
+        self.trigmodehigh.setEnabled(mode)
+        self.trigmodelow.setEnabled(mode)
+
+        self.phase.setEnabled(mode)
+        self.clockInternal.setEnabled(mode)
+        self.clockExternal.setEnabled(mode)
+        
+
+    def setupLayout(self, parent, includePreview=True):
         vlayout = QVBoxLayout()
         layout = QGridLayout()
+        
         ###### Gain Setup
         self.gain = QSpinBox()
         self.gain.setMinimum(0)
@@ -122,7 +137,7 @@ class OpenADCQt():
         self.gainhigh = QRadioButton("High");
         gainModeGroup.addButton(self.gainlow)
         gainModeGroup.addButton(self.gainhigh)
-
+        
         #Output gain
         self.gainresults = QLabel("")
         self.updateGainLabel()
@@ -216,9 +231,27 @@ class OpenADCQt():
         self.samples.valueChanged.connect(self.samplesChanged)
         layout.addWidget(samplesettings, 2, 1)
 
+        ###### Status Information
+        status = QGroupBox("Status")
+        statuslayout = QGridLayout()
+        status.setLayout(statuslayout)
+        self.freqDisp = QLCDNumber(9)
+        self.lockLabel = QLabel("DCM Locked: ?")
+        statuslayout.addWidget(QLabel("Ext Freq:"),0,0)
+        statuslayout.addWidget(self.freqDisp, 0, 1)
+        statuslayout.addWidget(self.lockLabel,1,0)
+        statusRefreshPB = QPushButton("Refresh")
+        statusRefreshPB.clicked.connect(self.statusRefresh)
+        statuslayout.addWidget(statusRefreshPB,1,1)
+        self.freqDisp.setSegmentStyle(QLCDNumber.Flat)
+        layout.addWidget(status, 3, 0)    
+
         ###### Graphical Preview Window
-        self.preview = pysideGraph("Preview", 0, 100000, -0.5, 0.5)
-        vlayout.addWidget(self.preview.getWidget())      
+        if includePreview:
+            self.preview = pysideGraph("Preview", 0, 100000, -0.5, 0.5)
+            vlayout.addWidget(self.preview.getWidget())
+        else:
+            self.preview = None
 #        self.preview.getWidget().setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
         
         vlayout.addLayout(layout)
@@ -230,13 +263,16 @@ class OpenADCQt():
 
         self.setMaxSample(1000)
 
+        self.setEnabled(False)
+
     def getLayout(self):
         return self.masterLayout
 
     def setMaxSample(self, samples):
         self.samples.setMaximum(samples)
         self.maxSamplesLabel.setText("Max Samples: %d"%samples)
-        self.preview.xmax.setMaximum(samples)
+        if self.preview:
+            self.preview.xmax.setMaximum(samples)
         
     def readAllSettings(self):
 
@@ -275,6 +311,8 @@ class OpenADCQt():
         samps = self.sc.getMaxSamples()
         self.setMaxSample(samps)
         self.samples.setValue(samps)
+
+        self.statusRefresh()
 
     def updateGainLabel(self):
         #GAIN (dB) = 50 (dB/V) * VGAIN - 6.5 dB, (HILO = LO)
@@ -353,7 +391,7 @@ class OpenADCQt():
 
         self.datapoints = self.sc.readData(NumberPoints, progress)
 
-        if update:
+        if update & (self.preview != None):
             self.preview.updateData(self.datapoints)
 
         return True
@@ -361,8 +399,6 @@ class OpenADCQt():
     def ADCcapture(self, update=True, NumberPoints=None):
         self.sc.capture()
         return self.ADCread(update, NumberPoints)
-
-
 
     def ADCsettrigmode(self):
         self.trigmode = 0;
@@ -393,13 +429,30 @@ class OpenADCQt():
         if self.clockExternal.isChecked():
             self.sc.setClockSource("ext")
 
+    def statusRefresh(self):
+        self.freqDisp.display(self.sc.getExtFrequency())
+        status = self.sc.getStatus()
+        
+        if status & 0x08 == 0x00:
+            self.lockLabel.setText("DCM Locked: FALSE")
+            self.dcmLocked = False
+        else:
+            self.lockLabel.setText("DCM Locked: True")
+            self.dcmLocked = True
+
+    def reset(self):
+        self.sc.setReset(True)
+        self.readAllSettings()
+
     def ADCupdate(self):
         if self.sc.getExtFrequency():
             print "Ext Freq   = %d"%self.sc.getExtFrequency()
         if self.sc.getPhase():
             print "Phase      = %d"%self.sc.getPhase()
         print "Status Reg = 0x%2x"%self.sc.getStatus()
-        print "Samples Captured = %d"%self.sc.getMaxSamples()
+        #print "Samples Captured = %d"%self.sc.getMaxSamples()
+
+        #print "SCard = 0x%2x"%self.sc.scGetStatus()
         
     def ADCconnect(self, ser):
 
@@ -431,10 +484,12 @@ class OpenADCQt():
 #        self.statusBar().showMessage("Connected to ADC Module on port %s" % self.ser.portstr)
 
         self.readAllSettings()
+        self.setEnabled(True)
 
+    def close(self):
+        if self.ser:
+            self.ser.close()
+            self.ser = None
 
     def __del__(self):
-        if self.ser:
-            self.ser.close()    
-
-    
+        self.close()

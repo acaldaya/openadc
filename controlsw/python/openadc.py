@@ -73,7 +73,7 @@ class serialOpenADCInterface:
         #Send clearing function
         nullmessage = bytearray([20])
         
-        self.serial.write(nullmessage);
+        self.serial.write(str(nullmessage));
 
         self.offset = 0.5
 
@@ -93,7 +93,7 @@ class serialOpenADCInterface:
             return None
 
         if mode == CODE_READ:
-              self.serial.flushInput()
+              self.flushInput()
 
         #Flip payload around
         pba = bytearray(payload)
@@ -106,7 +106,7 @@ class serialOpenADCInterface:
         message = message + pba
 
         ### Send out serial port
-        self.serial.write(message)
+        self.serial.write(str(message))
 
         ### Wait Response (if requested)
         if (mode == CODE_READ):
@@ -123,7 +123,7 @@ class serialOpenADCInterface:
 
             #Check for timeout, if so abort
             if len(result) < 1:
-                self.serial.flushInput()
+                self.flushInput()
                 self.log.error("Timeout: %d"%len(result))
                 return None
 
@@ -277,17 +277,23 @@ class serialOpenADCInterface:
         temp = self.sendMessage(CODE_READ, ADDR_SAMPLES4)
         samples = samples | (temp[0] << 24);
 
-        return samples      
+        return samples
 
+    def flushInput(self):
+        try:
+           self.serial.flushInput()
+        except AttributeError:
+           return
+              
     def devicePresent(self):
         msgin = bytearray([])
         msgin.append(0xAC);
 
-        self.serial.flushInput()
+        self.flushInput()
 
         #Reset... will automatically clear by the time we are done
         self.setReset(True)
-        self.serial.flushInput()
+        self.flushInput()
         
         #Send ping
         self.sendMessage(CODE_WRITE, ADDR_ECHO, msgin)
@@ -454,3 +460,12 @@ class serialOpenADCInterface:
         #print len(fpData)
 
         return fpData
+
+#Following Extensions for SASEBO-W Only
+    def scGetStatus(self):
+        sets = self.sendMessage(CODE_READ, 30)
+        if sets:
+            return sets[0]
+        else:
+            return 0
+
