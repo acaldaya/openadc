@@ -83,7 +83,7 @@ module interface(
 
  /* To avoid modifying UCF file we keep these even without Ethernet */
 `ifdef OPT_ETH
-	 input 		   ,eth_col,
+	 ,input 		   eth_col,
     input 		   eth_crs,
 	 output 		   eth_mdc,
 	 inout  		   eth_mdio,
