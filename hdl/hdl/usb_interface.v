@@ -182,7 +182,7 @@ module usb_interface(
 	assign registers_scardctrl_read[3] = scard_dataiempty;		
 `endif
 
-	 assign trigger_offset = registers_offset;
+    assign trigger_offset = registers_offset;
 	 
 	 assign phase_o = phase_out;
 	 assign phase_ld_o = phase_loadout;
@@ -373,7 +373,10 @@ module usb_interface(
 	 `define SCARDCTRL_ADDR	30
 	 `define SCARDRD_ADDR	31
 	 `define SCARDWR_ADDR	32
+	 `define SCARDHDR_ADDR  33
 `endif
+
+	 `define MULTIECHO_ADDR	34
 	 
 	 `undef  IDLE
     `define IDLE            'b0000
@@ -385,13 +388,21 @@ module usb_interface(
     `define DATARD1         'b1001
     `define DATARD2         'b1010
 	 `define DATARD_DDRSTART 'b1011         
+	 
 	 `define SCARDRD1			 'b1100
 	 `define SCARDRD2			 'b1101
 
+	 reg [8:0]					write_bytes;
+	 reg [8:0]					read_bytes;
     reg [3:0]              state = `IDLE;
     reg [5:0]              address;
 	 reg							extclk_locked;
 	 reg 							ddr_rd_done_reg;
+
+	 wire 						multiecho_empty;
+	 wire [7:0]					multiecho_data;
+	 reg [7:0] registers_multiecho;
+
     
 	 assign reset_fromreg = registers_settings[0];
 	 assign hilow = registers_settings[1];
@@ -430,7 +441,7 @@ module usb_interface(
 	 end
 	 
 	 always @(posedge ftdi_clk) begin
-	  if ((state == `DATAWR2) & (address == `SCARDWR_ADDR)) begin
+	  if ((state == `DATAWR2) & ((address == `SCARDWR_ADDR) | (address == `SCARDHDR_ADDR))) begin
 			scard_dataovalid_reg <= 1'b1;
 	  end else begin
 			scard_dataovalid_reg <= 1'b0;
@@ -480,7 +491,14 @@ module usb_interface(
                end
             end
 
-            `ADDR: begin
+            `ADDR: begin					
+					read_bytes <= 1;					
+					case(ftdi_din[5:0])
+						`SCARDHDR_ADDR: write_bytes <= 5;	
+						`MULTIECHO_ADDR: write_bytes <= 500;
+						default: write_bytes <= 1;						
+					endcase				
+										
                address <= ftdi_din[5:0];
                ftdi_rd_n <= 1;
                ftdi_wr_n <= 1;
@@ -505,6 +523,7 @@ module usb_interface(
                ftdi_isOutput <= 0;
                ftdi_wr_n <= 1;
 					fifo_rd_en_reg <= 0;
+					write_bytes <= write_bytes - 1;
                if (ftdi_rxf_n == 0) begin
                   ftdi_rd_n <= 0;
                   state <= `DATAWR2;
@@ -555,10 +574,18 @@ module usb_interface(
 						registers_scardctrl <= ftdi_din;
 					end else if (address == `SCARDWR_ADDR) begin
 						registers_scardout <= ftdi_din;
+					end else if (address == `SCARDHDR_ADDR) begin
+						registers_scardout <= ftdi_din;
 `endif
+					end else if (address == `MULTIECHO_ADDR) begin
+						registers_multiecho <= ftdi_din;
 					end
 					
-               state <= `IDLE;                         
+					if (write_bytes == 0) begin
+						state <= `IDLE;         
+					end else begin
+						state <= `DATAWR1;
+					end
              end
 
             
@@ -706,6 +733,15 @@ module usb_interface(
 						ftdi_wr_n <= 0;
 						state <= `IDLE;	
 `endif
+					end else if (address == `MULTIECHO_ADDR) begin
+						ftdi_dout <= multiecho_data;
+						extclk_locked <= 0;
+						ftdi_wr_n <= 0;
+						if (multiecho_empty == 1'b1) begin
+							state <= `IDLE;
+						end else begin
+							state <= `DATARDSTART;
+						end
                end else begin
 						extclk_locked <= 0;
 						ftdi_dout <= 8'bx;						
@@ -791,6 +827,36 @@ module usb_interface(
 		end
 	 end    
 `endif
+
+
+	reg multiecho_wr;
+	reg multiecho_rd;
+   always @(posedge ftdi_clk) begin
+	if ((state == `DATARDSTART) & (address == `MULTIECHO_ADDR) & (multiecho_empty == 1'b0)) begin
+			multiecho_rd <= 1'b1;
+	  end else begin
+			multiecho_rd <= 1'b0;
+	  end
+	 end
+	 
+	 always @(posedge ftdi_clk) begin
+	  if ((state == `DATAWR2) & (address == `MULTIECHO_ADDR)) begin
+			multiecho_wr <= 1'b1;			
+	  end else begin
+			multiecho_wr <= 1'b0;
+	  end
+	 end	
+
+	fifo_usb_echo fifo_usb_echo_inst (
+	  .clk(ftdi_clk), // input clk
+	  .rst(reset), // input rst
+	  .din(registers_multiecho), // input [7 : 0] din
+	  .wr_en(multiecho_wr), // input wr_en
+	  .rd_en(multiecho_rd), // input rd_en
+	  .dout(multiecho_data), // output [7 : 0] dout
+	  //.full(full), // output full
+	  .empty(multiecho_empty) // output empty
+	);
 
 `ifdef USE_ETH
 	
