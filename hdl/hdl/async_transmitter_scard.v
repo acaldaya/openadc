@@ -5,8 +5,8 @@
 
 `include "includes.v"
 
-module async_transmitter_scard(clk, TxD_start, TxD_data, TxD, TxD_busy);
-input clk, TxD_start;
+module async_transmitter_scard(clk, rst, TxD_start, TxD_data, TxD, TxD_busy);
+input clk, rst, TxD_start;
 input [7:0] TxD_data;
 output TxD, TxD_busy;
 
@@ -22,7 +22,10 @@ wire [BaudGeneratorAccWidth:0] BaudGeneratorInc = ((Baud<<(BaudGeneratorAccWidth
 
 wire BaudTick = BaudGeneratorAcc[BaudGeneratorAccWidth];
 wire TxD_busy;
-always @(posedge clk) if(TxD_busy) BaudGeneratorAcc <= BaudGeneratorAcc[BaudGeneratorAccWidth-1:0] + BaudGeneratorInc;
+always @(posedge clk)
+	if (rst)
+		BaudGeneratorAcc <= 0;
+	else if(TxD_busy) BaudGeneratorAcc <= BaudGeneratorAcc[BaudGeneratorAccWidth-1:0] + BaudGeneratorInc;
 
 // Transmitter state machine
 reg [3:0] state;
@@ -34,23 +37,27 @@ always @(posedge clk) if(TxD_ready & TxD_start) TxD_dataReg <= TxD_data;
 wire [7:0] TxD_dataD = RegisterInputData ? TxD_dataReg : TxD_data;
 
 always @(posedge clk)
-case(state)
-	4'b0000: if(TxD_start) state <= 4'b0001;
-	4'b0001: if(BaudTick) state <= 4'b0111;
-	4'b0111: if(BaudTick) state <= 4'b1000;  // start
-	4'b1000: if(BaudTick) state <= 4'b1001;  // bit 0
-	4'b1001: if(BaudTick) state <= 4'b1010;  // bit 1
-	4'b1010: if(BaudTick) state <= 4'b1011;  // bit 2
-	4'b1011: if(BaudTick) state <= 4'b1100;  // bit 3
-	4'b1100: if(BaudTick) state <= 4'b1101;  // bit 4
-	4'b1101: if(BaudTick) state <= 4'b1110;  // bit 5
-	4'b1110: if(BaudTick) state <= 4'b1111;  // bit 6
-	4'b1111: if(BaudTick) state <= 4'b0110;  // bit 7
-	4'b0110: if(BaudTick) state <= 4'b0100;  // parity bit
-	4'b0100: if(BaudTick) state <= 4'b0101;  // stop1
-	4'b0101: if(BaudTick) state <= 4'b0000;  // stop2
-	default: if(BaudTick) state <= 4'b0000;
-endcase
+if (rst) begin
+	state <= 4'b0000;
+end else begin
+	case(state)
+		4'b0000: if(TxD_start) state <= 4'b0001;
+		4'b0001: if(BaudTick) state <= 4'b0111;
+		4'b0111: if(BaudTick) state <= 4'b1000;  // start
+		4'b1000: if(BaudTick) state <= 4'b1001;  // bit 0
+		4'b1001: if(BaudTick) state <= 4'b1010;  // bit 1
+		4'b1010: if(BaudTick) state <= 4'b1011;  // bit 2
+		4'b1011: if(BaudTick) state <= 4'b1100;  // bit 3
+		4'b1100: if(BaudTick) state <= 4'b1101;  // bit 4
+		4'b1101: if(BaudTick) state <= 4'b1110;  // bit 5
+		4'b1110: if(BaudTick) state <= 4'b1111;  // bit 6
+		4'b1111: if(BaudTick) state <= 4'b0110;  // bit 7
+		4'b0110: if(BaudTick) state <= 4'b0100;  // parity bit
+		4'b0100: if(BaudTick) state <= 4'b0101;  // stop1
+		4'b0101: if(BaudTick) state <= 4'b0000;  // stop2
+		default: if(BaudTick) state <= 4'b0000;
+	endcase
+end
 
 // Output mux
 reg muxbit;

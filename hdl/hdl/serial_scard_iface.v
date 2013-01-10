@@ -21,7 +21,7 @@ module serial_scard_iface(
 	 input			scardfifo_rd,
 	 input			scardfifo_wr,	
 	 output [7:0]	scardfifo_din,
-	 input [7:0]	scardfifo_dout
+	 input [7:0]	scardfifo_dout	 
     );
 
 	wire clk;
@@ -80,12 +80,13 @@ module serial_scard_iface(
 	  .full(scardfifo_txf), // output full
 	  .empty(scardfifo_txe) // output empty
 	);
-
+	reg [13:0] state;
+	
 	always @(posedge clk)
-		if (state == 5'b00010) begin
+		if (state == 14'b000010) begin
 			txfifo_rd <= 1'b0;
 			txstart <= 1'b1;
-		end else if (state == 5'b00011) begin
+		end else if (state == 14'b000011) begin
 			txfifo_rd <= 1'b1;
 			txstart <= 1'b0;
 		end else begin
@@ -93,15 +94,14 @@ module serial_scard_iface(
 			txstart <= 1'b0;
 		end
 
-	reg [4:0] state;
 	always @(posedge clk)
 	case(state)
-		5'b00000: if(~scardfifo_txe & ~txbusy) state <= 5'b00001;
-		5'b00001: state <= 5'b00010; //Transmit current byte
-		5'b00010: state <= 5'b00011; //Load next byte
-		5'b00011: if (~txbusy) state <= 5'b00100; //Wait for TX to finish
-		5'b11111: state <= 5'b00000; //Wait for inter-symbol time
-		default:  state <= state +5'b0001;
+		14'b00000000000000: if(~scardfifo_txe & ~txbusy) state <= 14'b000001; else state <= 14'b0;
+		14'b00000000000001: state <= 14'b000010; //Transmit current byte
+		14'b00000000000010: state <= 14'b000011; //Load next byte
+		14'b00000000000011: if (~txbusy) state <= 14'b000100; else state <= 14'b11; //Wait for TX to finish
+		14'b11111111111111: state <= 14'b000000; //Wait for inter-symbol time
+		default:  state <= state +14'b000001;
 	endcase
 
 
@@ -126,5 +126,6 @@ module serial_scard_iface(
 	assign cs_data[18] = scardfifo_txf;
 	assign cs_data[19] = scardfifo_wr;
 */
+
 
 endmodule

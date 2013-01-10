@@ -444,6 +444,9 @@ class OpenADCQt():
         self.sc.setReset(True)
         self.readAllSettings()
 
+    def test(self):
+        self.sc.testAndTime()
+
     def ADCupdate(self):
         if self.sc.getExtFrequency():
             print "Ext Freq   = %d"%self.sc.getExtFrequency()

@@ -337,22 +337,30 @@ module interface(
 											  
 `ifdef USE_SCARD
 
-	wire scardfifo_rxe;
-	wire scardfifo_txf;
-	wire scardfifo_rd;
-	wire scardfifo_wr;
-	wire [7:0] scardfifo_din;
-	wire [7:0] scardfifo_dout;
+	 
+	 wire [7:0] scard_cla, scard_ins, scard_p1, scard_p2, scard_async_data;
+	 wire [5:0] scard_len_command, scard_len_response;
+	 wire [127:0] scard_command, scard_response;
+    wire scard_docmd, scard_busy, scard_async_datardy, scard_status;
+	 wire [15:0] scard_resp_code;
 
-	 serial_scard_iface serial_scard(.reset_i(reset),
+	 serial_scard_hls_iface scard_inst(.reset_i(reset),
 													.clk_i(slowclock),
 													.scard_io(scard_io),
-													.scardfifo_rxe(scardfifo_rxe),
-													.scardfifo_txf(scardfifo_txf),
-													.scardfifo_rd(scardfifo_rd),
-													.scardfifo_wr(scardfifo_wr),
-													.scardfifo_din(scardfifo_din),
-													.scardfifo_dout(scardfifo_dout));	
+													.scard_cla(scard_cla),
+													.scard_ins(scard_ins),
+													.scard_p1(scard_p1),
+													.scard_p2(scard_p2),
+													.scard_len_command(scard_len_command),
+													.scard_command(scard_command),
+													.scard_len_response(scard_len_response),
+													.scard_response(scard_response),
+													.scard_status(scard_status),
+													.scard_resp_code(scard_resp_code),	
+													.async_data(scard_async_data),
+													.async_datardy(scard_async_datardy),
+													.do_cmd(scard_docmd),
+													.busy(scard_busy));	
 `endif
 
 
@@ -452,14 +460,22 @@ module interface(
 `endif
 							
 `ifdef USE_SCARD
-							,.scard_datao(scardfifo_dout),
-							.scard_dataovalid(scardfifo_wr),
-							.scard_dataofull(scardfifo_txf),
-							.scard_datai(scardfifo_din),
-							.scard_dataird(scardfifo_rd),
-							.scard_dataiempty(scardfifo_rxe),
+							,.scard_cla(scard_cla),
+							.scard_ins(scard_ins),
+							.scard_p1(scard_p1),
+							.scard_p2(scard_p2),
+							.scard_len_command(scard_len_command),
+							.scard_command(scard_command),
+							.scard_len_response(scard_len_response),
+							.scard_response(scard_response),
+							.scard_status(scard_status),
+							.scard_resp_code(scard_resp_code),
+							.scard_async_data(scard_async_data),
+							.scard_async_datardy(scard_async_datardy),							
 							.scard_present(scard_present),
-							.scard_reset(scard_rst)
+							.scard_reset(scard_rst),
+							.scard_docmd(scard_docmd),
+							.scard_busy(scard_busy)
 `endif
 
 `ifdef CHIPSCOPE                     

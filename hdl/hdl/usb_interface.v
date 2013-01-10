@@ -85,14 +85,22 @@ module usb_interface(
 `endif
 
 `ifdef USE_SCARD
-	 ,output [7:0] scard_datao,
-	 output        scard_dataovalid,
-	 input			scard_dataofull,
-	 input  [7:0]  scard_datai,
-	 output        scard_dataird,
-    input			scard_dataiempty,
-	 input			scard_present,
-	 output		   scard_reset
+	 ,output [7:0] scard_cla,
+	 output [7:0]  scard_ins,
+	 output [7:0]  scard_p1,
+	 output [7:0]  scard_p2,
+	 output [5:0]  scard_len_command,
+	 output [127:0]scard_command,
+	 output [5:0]  scard_len_response,
+	 input  [127:0]scard_response,
+	 input         scard_status,
+	 input  [15:0] scard_resp_code,
+	 input  [7:0]  scard_async_data,
+	 input         scard_async_datardy,
+	 input			scard_present,	 
+	 output		   scard_reset,
+	 output			scard_docmd,
+	 input			scard_busy 
 `endif
 
 	/* If using chipscope implement ICON in top module, then ILA inside here */
@@ -169,17 +177,36 @@ module usb_interface(
 `endif
 
 `ifdef USE_SCARD
-	reg [7:0]	registers_scardin;
-	reg [7:0]	registers_scardout;
+
+	reg [7:0] scard_cla_reg;
+	reg [7:0]  scard_ins_reg;
+	reg [7:0]  scard_p1_reg;
+	reg [7:0]  scard_p2_reg;
+	reg [5:0]  scard_len_command_reg;
+	reg [127:0] scard_command_reg;
+	reg [5:0]  scard_len_response_reg;
+
 	reg [7:0]	registers_scardctrl;
 	wire [7:0]  registers_scardctrl_read;
-		
+	reg			scard_docmd_reg;
+	wire        scard_async_en;
+	
+	assign scard_docmd = scard_docmd_reg;		
 	assign scard_reset = registers_scardctrl[0];
-	assign scard_datao = registers_scardout;
+	assign scard_async_en = registers_scardctrl[2];
 	assign registers_scardctrl_read[0] = registers_scardctrl[0];
 	assign registers_scardctrl_read[1] = scard_present;
-	assign registers_scardctrl_read[2] = scard_dataofull;
-	assign registers_scardctrl_read[3] = scard_dataiempty;		
+	assign registers_scardctrl_read[3] = scard_busy;
+	assign registers_scardctrl_read[4] = scard_status;
+
+	assign scard_cla = scard_cla_reg;
+	assign scard_ins = scard_ins_reg;
+	assign scard_p1 = scard_p1_reg;
+	assign scard_p2 = scard_p2_reg;
+	assign scard_len_command = scard_len_command_reg;
+	assign scard_command = scard_command_reg;
+	assign scard_len_response = scard_len_response_reg;
+	
 `endif
 
     assign trigger_offset = registers_offset;
@@ -319,15 +346,19 @@ module usb_interface(
 
 
 	 0x1E - Smartcard Control/Status Register
-	    [ X X X X ER EW C R ]
-		 	 
-		 ER = (bit 3) Read Fifo Empty (e.g.: can read more data from 0x1F) (R)
-		      1 = Empty, do not read
-				0 = Read one byte
+	    [ X X X S D PT C R ]	 	 
 		
-		 EW = (bit 2) Write Fifo Full (e.g.: can write more data to 0x20) (R)
-		      1 = Full, do not write
-				0 = Write one byte
+		 S  = (bit 4) ACK Status (R)
+		      1 = Last transaction successful
+				0 = Last transaction had wrong ack
+		
+		 B  = (bit 3) Smartcard Core Busy (R)
+		      1 = Busy
+				0 = Not Busy (done)
+		
+		 PT = (bit 2) Pass Through( R/W)
+		      1 = Pass any received data to bus - done in ASYNC fasion, be careful
+				0 = Pass thru disabled
 		
 		 C = (bit 1) Card Present (R)
 		      1 = Card Inserted
@@ -337,9 +368,15 @@ module usb_interface(
 				1 = Reset Asserted (low)
 				0 = Reset Deasserted (high)
 	 	 
-	 0x1F - Smartcard Read Register
+	 0x1F - Smartcard Header Register (W)
+	     Always write 6 bytes here.
+		    
 	 
-	 0x20 - Smartcard Write Register
+	 0x20 - Smartcard Payload Register (R/W)
+	     Always write 16 bytes here. If actual
+		  payload is less than 16 bytes, this will
+		  be determined by numbers written into
+		  the smartcard header register
 	 
 		 
 	*/
@@ -371,9 +408,8 @@ module usb_interface(
 	 	 
 `ifdef USE_SCARD
 	 `define SCARDCTRL_ADDR	30
-	 `define SCARDRD_ADDR	31
-	 `define SCARDWR_ADDR	32
-	 `define SCARDHDR_ADDR  33
+	 `define SCARDHDR_ADDR	31
+	 `define SCARDPLD_ADDR	32
 `endif
 
 	 `define MULTIECHO_ADDR	34
@@ -394,6 +430,7 @@ module usb_interface(
 
 	 reg [8:0]					write_bytes;
 	 reg [8:0]					read_bytes;
+	 reg [8:0]					bytecnt;
     reg [3:0]              state = `IDLE;
     reg [5:0]              address;
 	 reg							extclk_locked;
@@ -402,7 +439,6 @@ module usb_interface(
 	 wire 						multiecho_empty;
 	 wire [7:0]					multiecho_data;
 	 reg [7:0] registers_multiecho;
-
     
 	 assign reset_fromreg = registers_settings[0];
 	 assign hilow = registers_settings[1];
@@ -426,12 +462,7 @@ module usb_interface(
 	 end
 	 
 `ifdef USE_SCARD
-	 reg scard_dataird_reg;
-	 reg scard_dataovalid_reg;
-	 	 
-	 assign scard_dataird = scard_dataird_reg;
-	 assign scard_dataovalid = scard_dataovalid_reg;
-	 
+	 /*
 	 always @(posedge ftdi_clk) begin
 	  if ((state == `DATARDSTART) & (address == `SCARDRD_ADDR)) begin
 			scard_dataird_reg <= 1'b1;
@@ -439,14 +470,17 @@ module usb_interface(
 			scard_dataird_reg <= 1'b0;
 	  end
 	 end
+	 */
 	 
 	 always @(posedge ftdi_clk) begin
-	  if ((state == `DATAWR2) & ((address == `SCARDWR_ADDR) | (address == `SCARDHDR_ADDR))) begin
-			scard_dataovalid_reg <= 1'b1;
+	  if ((state == `DATAWR2) & (address == `SCARDPLD_ADDR) & (write_bytes == 0)) begin
+			scard_docmd_reg <= 1'b1;
 	  end else begin
-			scard_dataovalid_reg <= 1'b0;
+			scard_docmd_reg <= 1'b0;
 	  end
-	 end			 
+	 end	
+	 
+	 
 `endif
 	 /*
 	 always @(posedge cmdfifo_ready)
@@ -484,19 +518,32 @@ module usb_interface(
                   ftdi_isOutput <= 0;
                   state <= `ADDR;
                end else begin
+					`ifdef USE_SCARD
+						if(scard_async_datardy & scard_async_en) begin
+							ftdi_wr_n <= 0;
+							ftdi_rd_n <= 1;
+							ftdi_isOutput <= 1;
+							ftdi_dout <= scard_async_data;
+							state <= `IDLE;
+						end else begin
+					 `endif
                   ftdi_rd_n <= 1;
                   ftdi_wr_n <= 1;
                   ftdi_isOutput <= 0;
                   state <= `IDLE;
+					 `ifdef USE_SCARD
+					  end
+					  `endif
                end
             end
 
-            `ADDR: begin					
-					read_bytes <= 1;					
+            `ADDR: begin	
+					bytecnt <= 0;										
 					case(ftdi_din[5:0])
-						`SCARDHDR_ADDR: write_bytes <= 5;	
-						`MULTIECHO_ADDR: write_bytes <= 500;
-						default: write_bytes <= 1;						
+						`SCARDHDR_ADDR: begin write_bytes <= 6; end
+						`SCARDPLD_ADDR: begin write_bytes <= 16; read_bytes <= 18; end
+						`MULTIECHO_ADDR: begin write_bytes <= 500; end
+						default: begin write_bytes <= 1; read_bytes <= 1; end
 					endcase				
 										
                address <= ftdi_din[5:0];
@@ -572,10 +619,38 @@ module usb_interface(
 `ifdef USE_SCARD 
 					end else if (address == `SCARDCTRL_ADDR) begin
 						registers_scardctrl <= ftdi_din;
-					end else if (address == `SCARDWR_ADDR) begin
-						registers_scardout <= ftdi_din;
-					end else if (address == `SCARDHDR_ADDR) begin
-						registers_scardout <= ftdi_din;
+					end else if (address == `SCARDHDR_ADDR) begin					
+						case(bytecnt)
+							0: scard_cla_reg <= ftdi_din;
+							1: scard_ins_reg <= ftdi_din;
+							2: scard_p1_reg <= ftdi_din;
+							3: scard_p2_reg <= ftdi_din;							
+							4: scard_len_command_reg <= ftdi_din;
+							5: scard_len_response_reg <= ftdi_din;
+							default: ;				
+						endcase							
+						 
+					end else if (address == `SCARDPLD_ADDR) begin				
+						case(bytecnt)
+							0: scard_command_reg[127:120] <= ftdi_din;
+							1: scard_command_reg[119:112] <= ftdi_din;
+							2: scard_command_reg[111:104] <= ftdi_din;
+							3: scard_command_reg[103:96] <= ftdi_din;
+							4: scard_command_reg[95:88] <= ftdi_din;
+							5: scard_command_reg[87:80] <= ftdi_din;
+							6: scard_command_reg[79:72] <= ftdi_din;
+							7: scard_command_reg[71:64] <= ftdi_din;
+							8: scard_command_reg[63:56] <= ftdi_din;
+							9: scard_command_reg[55:48] <= ftdi_din;
+							10: scard_command_reg[47:40] <= ftdi_din;
+							11: scard_command_reg[39:32] <= ftdi_din;
+							12: scard_command_reg[31:24] <= ftdi_din;
+							13: scard_command_reg[23:16] <= ftdi_din;
+							14: scard_command_reg[15:8] <= ftdi_din;
+							15: scard_command_reg[7:0] <= ftdi_din;
+							default: ;
+						endcase
+
 `endif
 					end else if (address == `MULTIECHO_ADDR) begin
 						registers_multiecho <= ftdi_din;
@@ -586,6 +661,9 @@ module usb_interface(
 					end else begin
 						state <= `DATAWR1;
 					end
+					
+					bytecnt <= bytecnt + 1;
+					
              end
 
             
@@ -593,6 +671,8 @@ module usb_interface(
                ftdi_isOutput <= 1;               
                ftdi_rd_n <= 1;
 					fifo_rd_en_reg <= 0;
+					
+					bytecnt <= bytecnt + 1;
             					
 					if (address == `GAIN_ADDR) begin
                   ftdi_dout <= registers_gain;
@@ -721,14 +801,40 @@ module usb_interface(
 						ftdi_wr_n <= 0;
 						state <= `IDLE;	
 						
-					end else if (address == `SCARDWR_ADDR) begin
-						ftdi_dout <= registers_scardout;
+					end else if (address == `SCARDPLD_ADDR) begin						
+						case(bytecnt)
+							0: ftdi_dout <= scard_response[127:120];
+							1: ftdi_dout <= scard_response[119:112];
+							2: ftdi_dout <= scard_response[111:104];
+							3: ftdi_dout <= scard_response[103:96];
+							4: ftdi_dout <= scard_response[95:88];
+							5: ftdi_dout <= scard_response[87:80];
+							6: ftdi_dout <= scard_response[79:72];
+							7: ftdi_dout <= scard_response[71:64];
+							8: ftdi_dout <= scard_response[63:56];
+							9: ftdi_dout <= scard_response[55:48];
+							10: ftdi_dout <= scard_response[47:40];
+							11: ftdi_dout <= scard_response[39:32];
+							12: ftdi_dout <= scard_response[31:24];
+							13: ftdi_dout <= scard_response[23:16];
+							14: ftdi_dout <= scard_response[15:8];
+							15: ftdi_dout <= scard_response[7:0];
+							16: ftdi_dout <= scard_resp_code[15:8];
+							17: ftdi_dout <= scard_resp_code[7:0];
+							default: ;
+						endcase
+						
 						extclk_locked <= 0;
 						ftdi_wr_n <= 0;
-						state <= `IDLE;	
 						
-					end else if (address == `SCARDRD_ADDR) begin
-						ftdi_dout <= scard_datai;
+						if(bytecnt == 17) begin
+							state <= `IDLE;	
+						end else begin
+							state <= `DATARDSTART;
+						end
+						
+					end else if (address == `SCARDHDR_ADDR) begin
+						ftdi_dout <= 8'd0;
 						extclk_locked <= 0;
 						ftdi_wr_n <= 0;
 						state <= `IDLE;	

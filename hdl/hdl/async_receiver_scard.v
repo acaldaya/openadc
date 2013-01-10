@@ -3,8 +3,8 @@
 
 `include "includes.v"
 
-module async_receiver_scard(clk, RxD, RxD_data_ready, RxD_data, RxD_endofpacket, RxD_idle);
-input clk, RxD;
+module async_receiver_scard(clk, rst, RxD, RxD_data_ready, RxD_data, RxD_endofpacket, RxD_idle);
+input clk, RxD, rst;
 output RxD_data_ready;  // onc clock pulse when RxD_data is valid
 output [7:0] RxD_data;
 
@@ -22,7 +22,7 @@ parameter Baud8 = Baud*8;
 parameter Baud8GeneratorAccWidth = 16;
 wire [Baud8GeneratorAccWidth:0] Baud8GeneratorInc = ((Baud8<<(Baud8GeneratorAccWidth-7))+(ClkFrequency>>8))/(ClkFrequency>>7);
 reg [Baud8GeneratorAccWidth:0] Baud8GeneratorAcc;
-always @(posedge clk) Baud8GeneratorAcc <= Baud8GeneratorAcc[Baud8GeneratorAccWidth-1:0] + Baud8GeneratorInc;
+always @(posedge clk) if (rst) Baud8GeneratorAcc <= 0; else Baud8GeneratorAcc <= Baud8GeneratorAcc[Baud8GeneratorAccWidth-1:0] + Baud8GeneratorInc;
 wire Baud8Tick = Baud8GeneratorAcc[Baud8GeneratorAccWidth];
 
 ////////////////////////////
@@ -61,6 +61,9 @@ if(Baud8Tick)
 	bit_spacing <= {bit_spacing[2:0] + 4'b0001} | {bit_spacing[3], 3'b000};
 
 always @(posedge clk)
+if (rst) begin
+	state <= 0;
+end else begin
 if(Baud8Tick)
 case(state)
 	4'b0000: if(RxD_bit_inv) state <= 4'b1000;  // start bit found?
@@ -77,6 +80,7 @@ case(state)
 	4'b0001: if(next_bit) state <= 4'b0000;  // stop bit 2
 	default: state <= 4'b0000;
 endcase
+end
 
 reg [7:0] RxD_data;
 always @(posedge clk)
