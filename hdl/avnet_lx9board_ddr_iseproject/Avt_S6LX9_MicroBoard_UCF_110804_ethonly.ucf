@@ -73,7 +73,7 @@ CONFIG PROHIBIT = P1,L3;
 #   because this is Isolate Mode                              
 ############################################################################	
 NET ETH_COL           LOC = M18 | IOSTANDARD = LVCMOS33 | PULLDOWN;    # "ETH_COL"
-NET ETH_CRC           LOC = N17 | IOSTANDARD = LVCMOS33 | PULLDOWN;    # "ETH_CRS"
+NET ETH_CRS           LOC = N17 | IOSTANDARD = LVCMOS33 | PULLDOWN;    # "ETH_CRS"
 NET ETH_MDC           LOC = M16 | IOSTANDARD = LVCMOS33;               # "ETH_MDC"
 NET ETH_MDIO          LOC = L18 | IOSTANDARD = LVCMOS33;               # "ETH_MDIO"
 NET ETH_RESET_n       LOC = T18 | IOSTANDARD = LVCMOS33 | TIG;         # "ETH_RESET#"

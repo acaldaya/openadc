@@ -23,7 +23,7 @@ module dumb_eth_test(
 	 input		 reset_i,
 
     input 		 eth_col,
-    input 		 eth_crc,
+    input 		 eth_crs,
 	 output 		 eth_mdc,
 	 inout  		 eth_mdio,
 	 
@@ -61,7 +61,7 @@ module dumb_eth_test(
 	  .reset_i(1'b0),
 
      .eth_col(eth_col),
-     .eth_crc(eth_crc),
+     .eth_crs(eth_crs),
 	  .eth_mdc(eth_mdc),
 	  .eth_mdio(eth_mdio),
 	 

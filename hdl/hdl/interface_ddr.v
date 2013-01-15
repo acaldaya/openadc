@@ -339,7 +339,7 @@ module interface(
 
 	 
 	 wire [7:0] scard_cla, scard_ins, scard_p1, scard_p2, scard_async_data;
-	 wire [5:0] scard_len_command, scard_len_response;
+	 wire [4:0] scard_len_command, scard_len_response;
 	 wire [127:0] scard_command, scard_response;
     wire scard_docmd, scard_busy, scard_async_datardy, scard_status;
 	 wire [15:0] scard_resp_code;
