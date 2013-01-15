@@ -14,6 +14,8 @@ import time
 import logging
 import math
 import numpy
+
+sys.path.append('../common')
 import openadc
 import openadc_qt
 import serial
