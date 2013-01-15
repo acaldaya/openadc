@@ -14,6 +14,7 @@ import time
 import serial
 import logging
 import math
+import random
 
 ADDR_GAIN       = 0
 ADDR_SETTINGS   = 1
@@ -36,6 +37,8 @@ ADDR_DDR1       = 20
 ADDR_DDR2       = 21
 ADDR_DDR3       = 22
 ADDR_DDR4       = 23
+
+ADDR_MULTIECHO  = 34
 
 CODE_READ       = 0x80
 CODE_WRITE      = 0xC0
@@ -78,6 +81,24 @@ class serialOpenADCInterface:
         self.offset = 0.5
 
         self.ddrMode = False
+
+    def testAndTime(self):
+        totalbytes = 0
+        totalerror = 0
+
+        for n in range(10):
+               #Generate 500 bytes         
+               testData = bytearray(range(250) + range(250)) #bytearray(random.randint(0,255) for r in xrange(500))
+               self.sendMessage(CODE_WRITE, ADDR_MULTIECHO, testData, False)
+               testDataEcho = self.sendMessage(CODE_READ, ADDR_MULTIECHO, None, False, 502)
+               testDataEcho = testDataEcho[2:]      
+
+               #Compare
+               totalerror = totalerror + len([(i,j) for i,j in zip(testData,testDataEcho) if i!=j])
+               totalbytes = totalbytes + len(testData)
+
+               print "%d errors in %d"%(totalerror, totalbytes)
+
     
     def sendMessage(self, mode, address, payload=None, Validate=True, maxResp=None):
         """Send a message out the serial port"""
@@ -88,7 +109,7 @@ class serialOpenADCInterface:
         #Get length
         length = len(payload)
 
-        if ((mode == CODE_WRITE) and (length != 1)) or ((mode == CODE_READ) and (length != 0)):
+        if ((mode == CODE_WRITE) and (length < 1)) or ((mode == CODE_READ) and (length != 0)):
             self.log.error("Invalid payload for mode")
             return None
 
@@ -110,12 +131,10 @@ class serialOpenADCInterface:
 
         ### Wait Response (if requested)
         if (mode == CODE_READ):
-
-            if (ADDR_ADCDATA == address):
-                if maxResp:
-                       datalen = maxResp
-                else:
-                       datalen = 65000
+            if (maxResp):
+                datalen = maxResp
+            elif (ADDR_ADCDATA == address):
+                datalen = 65000
             else:
                 datalen = 1
             
