@@ -1,6 +1,10 @@
 `include "includes.v"
 //`define CHIPSCOPE
 
+`define BYTE_SELECTION(__bytenum) (7+(8*__bytenum)):(0 + 8*__bytenum))
+`define MSB(__bytenum) (7+(8*__bytenum))
+`define LSB(__bytenum) (8*bytenum)
+
 /***********************************************************************
 This file is part of the OpenADC Project. See www.newae.com for more details,
 or the codebase at http://www.assembla.com/spaces/openadc .
@@ -8,9 +12,22 @@ or the codebase at http://www.assembla.com/spaces/openadc .
 This file is the computer interface. It provides a simple interface to the
 rest of the board.
 
-Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+Copyright (c) 2012-2013, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
 This project is released under the Modified FreeBSD License. See LICENSE
 file which should have came with this code.
+
+Notes on interface:
+
+[ 1 RW A5 A4 A3 A2 A1 A0] - Header
+[ Write/Read Size LSB   ] - Size, '0' is special case for read which means 'natural size'
+[ Write/Read Size MSB   ] 
+[ Data Byte 0           ]
+[ Data Byte 1           ]
+ .......................
+[ Data Byte N           ] - Payload size (Variable Length). On WR sent in, on RD sent out
+[ Checksum Byte         ] - Checksum, on WR sent in, on RD sent out.
+
+
 *************************************************************************/
 module usb_interface(
 	input 			reset_i,
@@ -26,10 +43,6 @@ module usb_interface(
 	output [7:0]	cmdfifo_dout,
 	// Following is provided for units with half-duplex interface such as FTDI
 	output			cmdfifo_isout,
-	// Following is a hint that complete packet is ready in output FIFO, can be
-	// completely ignored. Mostly used in USB mode.
-	// *** NOT CURRENTLY IMPLEMENTED ***
-	output			cmdfifo_ready,
 		
 	/* Interface to gain module */
 	output [7:0]	gain,
@@ -102,11 +115,6 @@ module usb_interface(
 	 output			scard_docmd,
 	 input			scard_busy 
 `endif
-
-	/* If using chipscope implement ICON in top module, then ILA inside here */
-`ifdef CHIPSCOPE
-	,inout [35:0]              chipscope_control
-`endif  
     );
 
 		 
@@ -144,13 +152,17 @@ module usb_interface(
 	 
 	 assign phase_clk_o = clk;
     
-    //For FTDI interface you would do e.g.:
+    //For FTDI interface you would do this in the main module that instiated this:
     //assign ftdi_d = ftdi_isOutput ? ftdi_dout : 8'bZ;
     //assign ftdi_din = ftdi_d;
-    
+	 
 `ifdef CHIPSCOPE
-   wire [127:0] cs_data;
-    
+   wire [127:0] cs_data;   
+   wire [35:0]  chipscope_control;
+  coregen_icon icon (
+    .CONTROL0(chipscope_control) // INOUT BUS [35:0]
+   ); 
+
    coregen_ila ila (
     .CONTROL(chipscope_control), // INOUT BUS [35:0]
     .CLK(clk), // IN
@@ -226,14 +238,14 @@ module usb_interface(
 	 
 	 /* Registers:
 	 
-	 0x00 - GAIN SETTING
+	 0x00 - Gain Settings (One Byte)
 	 
 	   [ G7 G6 G5 G4 G3 G2 G1 G0 ]
 		
 		  G = 8-bit PWM setting for gain voltage.
 		      Voltage = G / 256 * VCCIO
 	 
-	 0x01 - SETTINGS
+	 0x01 - Settings (One Byte)
 	 
 	   [  I  C  W  P  A  T  H  R ]
 	     
@@ -260,7 +272,7 @@ module usb_interface(
 		      1 = Internal (e.g.: based on ADC reading)
 				0 = External (e.g.: based on trigger-in line)
 		  
-	 0x02 - STATUS
+	 0x02 - Status (One Byte)
 	 
 	    [  X  M  DC DE P  E  F  T ] 
 		 T = (bit 0) Triggered status
@@ -296,53 +308,56 @@ module usb_interface(
 		 
 		 [  0 D6 D5 D4 D3 D2 D1 D0 ]
 	 
-	 0x04 - Echo Register
+	 0x04 - Echo Register (1 byte)
 	 
 		 [ E7 E6 E5 E4 E3 E2 E1 E0 ]
 		 
 		 E = Write data to this register then read back to
 		     confirm device connection is OK	
 
-	 0x05 - 0x08 - External Frequency Counter
+	 0x05 - External Frequency Counter (4 bytes)
 	 
-	 0x09 - Phase Adjust LSB
+	 0x09 - Phase Adjust (2 Bytes)
 	 
-	    [ P7 P6 P5 P4 P3 P2 P1 P0 ]
-		 
-	 0x0A - Phase Adjust MSB
-	    
-		 [                    S P8 ]
+	    [ P7 P6 P5 P4 P3 P2 P1 P0 ] (Byte 0)	    
+		 [                    S P8 ] (Byte 1)
 		 
 		 S = Start (write), Status (read)
 		 
-	 0x10 - 0x13 - Number of samples to capture on trigger.
+	 0x10 - Number of samples to capture on trigger (4 Bytes)
 	    On reset set to maximum number of samples possible.
-	    0x10 - LSB
-		 0x11
-		 0x12
-		 0x13 - MSB
+	    [ LSB ] (Byte 0)
+		 [     ] (Byte 1)
+		 [     ] (Byte 2)
+		 [ MSB ] (Byte 3)
 	 
-	 0x14 - 0x17 - DDR address to read from.
+	 0x14 - DDR address to read from (4 Bytes)
 	 
 	    This must be 32-bit aligned, e.g. lower 2 bits are zero.
 		 This register is automatically incremented following a
 		 READ command. So to dump entire memory set DDR address to
 		 'zero' then issue read commands.
 		 
-		 0x14 - LSB
-		 0x15
-		 0x16
-		 0x17 - MSB
+		 [ LSB ] (Byte 0)
+		 [     ] (Byte 1)
+		 [     ] (Byte 2)
+		 [ MSB ] (Byte 3)
 		 
-	 0x18 - ADC Trigger Level Low
-	 0x19 - ADC Trigger Level High Bits
+	 0x18 - ADC Trigger Level (2 Bytes)
 	 
-	 0x1A - 0x1D - Offset of trigger to start of capture
+	    [ LSB ] (Byte 0)
+		 [ MSB ] (Byte 1)
+	 
+	 0x1A - Offset of trigger to start of capture, clock cycles (8 Bytes)
 	   
-		 0x1A - LSB
-		 0x1B
-		 0x1C
-		 0x1D - MSB
+		 [ LSB ] (Byte 0)
+		 [     ] (Byte 1)
+		 [     ] (Byte 2)
+		 [     ] (Byte 3)
+		 [     ] (Byte 4)
+		 [     ] (Byte 5)
+		 [     ] (Byte 6)
+		 [ MSB ] (Byte 7)
 
 
 	 0x1E - Smartcard Control/Status Register
@@ -377,7 +392,6 @@ module usb_interface(
 		  payload is less than 16 bytes, this will
 		  be determined by numbers written into
 		  the smartcard header register
-	 
 		 
 	*/
 	 
@@ -386,25 +400,14 @@ module usb_interface(
 	 `define STATUS_ADDR    2
     `define ADCDATA_ADDR	3
     `define ECHO_ADDR      4
-	 `define EXTFREQ_ADDR1  5
-	 `define EXTFREQ_ADDR2  6
-	 `define EXTFREQ_ADDR3  7
-	 `define EXTFREQ_ADDR4  8
-	 `define PHASE_ADDR1    9
-	 `define PHASE_ADDR2    10	 
-	 `define SAMPLES_ADDR1  16
-	 `define SAMPLES_ADDR2  17
-	 `define SAMPLES_ADDR3  18
-	 `define SAMPLES_ADDR4  19
-	 `define DDRADDR_ADDR1  20
-	 `define DDRADDR_ADDR2  21
-	 `define DDRADDR_ADDR3  22
-	 `define DDRADDR_ADDR4  23
-	 
-	 `define OFFSET_ADDR1   26
-	 `define OFFSET_ADDR2   27
-	 `define OFFSET_ADDR3   28
-	 `define OFFSET_ADDR4   29
+	 `define EXTFREQ_ADDR   5
+	 `define EXTFREQ_LEN    4
+	 `define PHASE_ADDR     9 
+	 `define PHASE_LEN      2
+	 `define SAMPLES_ADDR   16
+	 `define SAMPLES_LEN    4
+	 `define DDRADDR_ADDR   20	 
+	 `define OFFSET_ADDR    26
 	 	 
 `ifdef USE_SCARD
 	 `define SCARDCTRL_ADDR	30
@@ -417,21 +420,22 @@ module usb_interface(
 	 `undef  IDLE
     `define IDLE            'b0000
     `define ADDR            'b0001
-    `define DATAWR1         'b0010
-    `define DATAWR2         'b0011
-    `define DATAWRDONE      'b0100
+	 `define BYTECNTLSB      'b0010
+	 `define BYTECNTMSB      'b0011
+    `define DATAWR1         'b0100
+    `define DATAWR2         'b0101
+    `define DATAWRDONE      'b0110
     `define DATARDSTART     'b1000
     `define DATARD1         'b1001
     `define DATARD2         'b1010
-	 `define DATARD_DDRSTART 'b1011         
-	 
-	 `define SCARDRD1			 'b1100
-	 `define SCARDRD2			 'b1101
+	 `define DATARD_DDRSTART 'b1011
+	 `define CHECKSUM			 'b1110
 
-	 reg [8:0]					write_bytes;
-	 reg [8:0]					read_bytes;
+	 reg [15:0]					total_bytes;    //Byte count for this transaction
+	 reg [7:0]					totalbytes_lsb; //LSB from input 
 	 reg [8:0]					bytecnt;
     reg [3:0]              state = `IDLE;
+	 reg [3:0]              state_new;
     reg [5:0]              address;
 	 reg							extclk_locked;
 	 reg 							ddr_rd_done_reg;
@@ -473,7 +477,8 @@ module usb_interface(
 	 */
 	 
 	 always @(posedge ftdi_clk) begin
-	  if ((state == `DATAWR2) & (address == `SCARDPLD_ADDR) & (write_bytes == 0)) begin
+	 //FIXME : write_bytes no longer counts down to zero, no longer exists
+	  if ((state == `DATAWR2) & (address == `SCARDPLD_ADDR) & (total_bytes == 0)) begin
 			scard_docmd_reg <= 1'b1;
 	  end else begin
 			scard_docmd_reg <= 1'b0;
@@ -540,37 +545,66 @@ module usb_interface(
             `ADDR: begin	
 					bytecnt <= 0;										
 					case(ftdi_din[5:0])
-						`SCARDHDR_ADDR: begin write_bytes <= 6; end
-						`SCARDPLD_ADDR: begin write_bytes <= 16; read_bytes <= 18; end
-						`MULTIECHO_ADDR: begin write_bytes <= 500; end
-						default: begin write_bytes <= 1; read_bytes <= 1; end
+						`SCARDHDR_ADDR: total_bytes <= 6; 
+						`SCARDPLD_ADDR: total_bytes <= 16; 
+						`MULTIECHO_ADDR: total_bytes <= 500;
+						`EXTFREQ_ADDR: total_bytes <= `EXTFREQ_LEN;
+						`PHASE_ADDR: total_bytes <= `PHASE_LEN;
+						`SAMPLES_ADDR: total_bytes <= `SAMPLES_LEN;
+						default: total_bytes <= 1;
 					endcase				
 										
                address <= ftdi_din[5:0];
-               ftdi_rd_n <= 1;
+               ftdi_rd_n <= 0;
                ftdi_wr_n <= 1;
 					fifo_rd_en_reg <= 0;
                if (ftdi_din[7] == 1) begin
                   if (ftdi_din[6] == 1) begin
                      //MSB means WRITE
                      ftdi_isOutput <= 0;
-                     state <= `DATAWR1;               
+                     state_new <= `DATAWR1;               
+							state <= `BYTECNTLSB;
                   end else begin
                      //MSB means READ
-                     ftdi_isOutput <= 1;
-                     state <= `DATARDSTART;               
+                     ftdi_isOutput <= 0;
+                     state_new <= `DATARDSTART;               
+							state <= `BYTECNTLSB;
                   end
                end else begin
                   ftdi_isOutput <= 0;
                   state <= `IDLE;                  
                end
              end
-               
+				 
+				`BYTECNTLSB: begin
+					ftdi_isOutput <= 0;
+					ftdi_wr_n <= 1;
+					ftdi_rd_n <= 0;
+					fifo_rd_en_reg <= 0;
+					totalbytes_lsb <= ftdi_din;
+					state <= `BYTECNTMSB;					
+				end
+				
+				`BYTECNTMSB: begin
+					ftdi_wr_n <= 1;		
+					ftdi_rd_n <= 1;					
+					fifo_rd_en_reg <= 0;
+					if((ftdi_din > 0) | (totalbytes_lsb > 0)) begin
+						total_bytes[7:0] <= totalbytes_lsb;
+						total_bytes[15:8] <= ftdi_din;
+               end
+					state <= state_new;
+					if(state_new == `DATARDSTART) begin
+						ftdi_isOutput <= 1;
+					end else begin
+						ftdi_isOutput <= 0;
+					end
+				 end
+					
             `DATAWR1: begin
                ftdi_isOutput <= 0;
                ftdi_wr_n <= 1;
 					fifo_rd_en_reg <= 0;
-					write_bytes <= write_bytes - 1;
                if (ftdi_rxf_n == 0) begin
                   ftdi_rd_n <= 0;
                   state <= `DATAWR2;
@@ -585,37 +619,19 @@ module usb_interface(
                ftdi_wr_n <= 1;
                ftdi_rd_n <= 1;
 					fifo_rd_en_reg <= 0;
-               			
+ 
 					if (address == `GAIN_ADDR) begin
                   registers_gain <= ftdi_din;
                end else if (address == `SETTINGS_ADDR) begin
                   registers_settings <= ftdi_din;
                end else if (address == `ECHO_ADDR) begin
                   registers_echo <= ftdi_din;
-					end else if (address == `SAMPLES_ADDR1) begin
-						registers_samples[7:0] <= ftdi_din;
-					end else if (address == `SAMPLES_ADDR2) begin
-						registers_samples[15:8] <= ftdi_din;
-					end else if (address == `SAMPLES_ADDR3) begin
-						registers_samples[23:16] <= ftdi_din;
-					end else if (address == `SAMPLES_ADDR4) begin
-						registers_samples[31:24] <= ftdi_din;
-					end else if (address == `DDRADDR_ADDR1) begin
-						registers_ddr_address[7:0] <= ftdi_din;
-					end else if (address == `DDRADDR_ADDR2) begin
-						registers_ddr_address[15:8] <= ftdi_din;
-					end else if (address == `DDRADDR_ADDR3) begin
-						registers_ddr_address[23:16] <= ftdi_din;
-					end else if (address == `DDRADDR_ADDR4) begin
-						registers_ddr_address[31:24] <= ftdi_din;
-					end else if (address == `OFFSET_ADDR1) begin
-						registers_offset[7:0] <= ftdi_din;
-					end else if (address == `OFFSET_ADDR2) begin
-						registers_offset[15:8] <= ftdi_din;
-					end else if (address == `OFFSET_ADDR3) begin
-						registers_offset[23:16] <= ftdi_din;
-					end else if (address == `OFFSET_ADDR4) begin
-						registers_offset[31:24] <= ftdi_din;
+					end else if (address == `SAMPLES_ADDR) begin
+						registers_samples[bytecnt*8 +: 8] <= ftdi_din;
+					end else if (address == `DDRADDR_ADDR) begin
+						registers_ddr_address[bytecnt*8 +: 8] <= ftdi_din;
+					end else if (address == `OFFSET_ADDR) begin
+						registers_offset[bytecnt*8 +: 8] <= ftdi_din;
 `ifdef USE_SCARD 
 					end else if (address == `SCARDCTRL_ADDR) begin
 						registers_scardctrl <= ftdi_din;
@@ -656,7 +672,7 @@ module usb_interface(
 						registers_multiecho <= ftdi_din;
 					end
 					
-					if (write_bytes == 0) begin
+					if (bytecnt == (total_bytes-1)) begin
 						state <= `IDLE;         
 					end else begin
 						state <= `DATAWR1;
@@ -673,22 +689,22 @@ module usb_interface(
 					fifo_rd_en_reg <= 0;
 					
 					bytecnt <= bytecnt + 1;
-            					
+					           					
 					if (address == `GAIN_ADDR) begin
                   ftdi_dout <= registers_gain;
 						ftdi_wr_n <= 0;
-						state <= `IDLE;
 						extclk_locked <= 0;
+						state <= `IDLE;
                end else if (address == `SETTINGS_ADDR) begin
                   ftdi_dout <= registers_settings;
 						ftdi_wr_n <= 0;
-						state <= `IDLE;
 						extclk_locked <= 0;
+						state <= `IDLE;
                end else if (address == `ECHO_ADDR) begin
                   ftdi_dout <= registers_echo;
 						ftdi_wr_n <= 0;
-						state <= `IDLE;
 						extclk_locked <= 0;
+						state <= `IDLE;
 					end else if (address == `ADCDATA_ADDR) begin						
 						ftdi_dout <= 8'hAC; //Sync Byte
 						ftdi_wr_n <= 1;					
@@ -701,99 +717,53 @@ module usb_interface(
 					end else if (address == `STATUS_ADDR) begin
 						ftdi_dout <= status;
 						ftdi_wr_n <= 0;
-						state <= `IDLE;
 						extclk_locked <= 0;
-					end else if (address == `EXTFREQ_ADDR1) begin
-						ftdi_dout <= registers_extclk_frequency[7:0];
+						state <= `IDLE;
+					end else if (address == `EXTFREQ_ADDR) begin
+						ftdi_dout <= registers_extclk_frequency[bytecnt*8 +: 8];
 						extclk_locked <= 1;
 						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `EXTFREQ_ADDR2) begin
-						ftdi_dout <= registers_extclk_frequency[15:8];
-						extclk_locked <= 1;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `EXTFREQ_ADDR3) begin
-						ftdi_dout <= registers_extclk_frequency[23:16];
-						extclk_locked <= 1;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `EXTFREQ_ADDR4) begin
-						ftdi_dout <= registers_extclk_frequency[31:24];
+						if (bytecnt == (total_bytes-1)) begin
+							state <= `IDLE;
+						end else begin
+							state <= `DATARDSTART;
+						end
+					end else if (address == `PHASE_ADDR) begin
+						ftdi_dout <= phase_in[bytecnt*8 +: 8];
 						extclk_locked <= 0;
 						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `PHASE_ADDR1) begin
-						ftdi_dout <= phase_in[7:0];
+						if (bytecnt == (total_bytes-1)) begin
+							state <= `IDLE;
+						end else begin
+							state <= `DATARDSTART;
+						end
+					end else if (address == `SAMPLES_ADDR) begin
+						ftdi_dout <= registers_samples[bytecnt*8 +: 8];
 						extclk_locked <= 0;
 						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `PHASE_ADDR2) begin
-						ftdi_dout[0] <= phase_in[8];
-						ftdi_dout[1] <= phase_done;
+						if (bytecnt == (total_bytes-1)) begin
+							state <= `IDLE;
+						end else begin
+							state <= `DATARDSTART;
+						end						
+					end else if (address == `DDRADDR_ADDR) begin
+						ftdi_dout <= registers_ddr_address[bytecnt*8 +: 8];
 						extclk_locked <= 0;
 						ftdi_wr_n <= 0;
-						state <= `IDLE;	
-					end else if (address == `SAMPLES_ADDR1) begin
-						ftdi_dout <= registers_samples[7:0];
+						if (bytecnt == (total_bytes-1)) begin
+							state <= `IDLE;
+						end else begin
+							state <= `DATARDSTART;
+						end
+					end else if (address == `OFFSET_ADDR) begin
+						ftdi_dout <= registers_offset[bytecnt*8 +: 8];
 						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `SAMPLES_ADDR2) begin
-						ftdi_dout <= registers_samples[15:8];
-						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `SAMPLES_ADDR3) begin
-						ftdi_dout <= registers_samples[23:16];
-						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `SAMPLES_ADDR4) begin
-						ftdi_dout <= registers_samples[31:24];
-						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;							
-					end else if (address == `DDRADDR_ADDR1) begin
-						ftdi_dout <= registers_ddr_address[7:0];
-						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `DDRADDR_ADDR2) begin
-						ftdi_dout <= registers_ddr_address[15:8];
-						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `DDRADDR_ADDR3) begin
-						ftdi_dout <= registers_ddr_address[23:16];
-						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `DDRADDR_ADDR4) begin
-						ftdi_dout <= registers_ddr_address[31:24];
-						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;	
-					end else if (address == `OFFSET_ADDR1) begin
-						ftdi_dout <= registers_offset[7:0];
-						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `OFFSET_ADDR2) begin
-						ftdi_dout <= registers_offset[15:8];
-						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `OFFSET_ADDR3) begin
-						ftdi_dout <= registers_offset[23:16];
-						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;
-					end else if (address == `OFFSET_ADDR4) begin
-						ftdi_dout <= registers_offset[31:24];
-						extclk_locked <= 0;
-						ftdi_wr_n <= 0;
-						state <= `IDLE;							
+						ftdi_wr_n <= 0;	
+						if (bytecnt == (total_bytes-1)) begin
+							state <= `IDLE;
+						end else begin
+							state <= `DATARDSTART;
+						end
 `ifdef USE_SCARD
 					end else if (address == `SCARDCTRL_ADDR) begin
 						ftdi_dout <= registers_scardctrl_read;
@@ -1030,11 +1000,13 @@ module usb_interface(
       end else begin
          case (state)               
             `DATAWR2: begin
-               if (address == `PHASE_ADDR1) begin
-						phase_out[7:0] <= ftdi_din;
-					end else if (address == `PHASE_ADDR2) begin
-						phase_out[8] <= ftdi_din[0];	
-						phase_loadout <= ftdi_din[1];
+               if (address == `PHASE_ADDR) begin
+						if (bytecnt == 0) begin
+							phase_out[7:0] <= ftdi_din;
+						end else if (bytecnt == 1) begin
+							phase_out[8] <= ftdi_din[0];
+							phase_loadout <= ftdi_din[1];
+						end
 					end                     
              end
 						
@@ -1050,12 +1022,15 @@ module usb_interface(
    assign cs_data[3:0] = state;
    assign cs_data[11:4] = address;
    assign cs_data[12] = ftdi_rxf_n;
+	assign cs_data[13] = ftdi_txe_n;
+	assign cs_data[14] = ftdi_rd_n;
+	assign cs_data[15] = ftdi_wr_n;
    assign cs_data[23:16] = registers_echo[7:0]; 
-	assign cs_data[24] = ftdi_wr_n;
 	assign cs_data[32:25] = ftdi_dout;
-	assign cs_data[34] = fifo_empty;
-	assign cs_data[35] = fifo_rd_en;
-	assign cs_data[43:36] = fifo_data;
+	assign cs_data[43:36] = ftdi_din;
+	assign cs_data[51:44] = total_bytes;
  `endif
  
 endmodule
+
+`undef CHIPSCOPE

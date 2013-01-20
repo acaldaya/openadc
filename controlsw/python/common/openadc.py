@@ -3,7 +3,7 @@
 # This file is part of the OpenADC Project. See www.newae.com for more details,
 # or the codebase at http://www.assembla.com/spaces/openadc .
 #
-# Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+# Copyright (c) 2012-2013, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
 # This project is released under the Modified FreeBSD License. See LICENSE
 # file which should have came with this code.
 
@@ -21,23 +21,10 @@ ADDR_SETTINGS   = 1
 ADDR_STATUS     = 2
 ADDR_ADCDATA    = 3
 ADDR_ECHO       = 4
-ADDR_FREQ1      = 5
-ADDR_FREQ2      = 6
-ADDR_FREQ3      = 7
-ADDR_FREQ4      = 8
-ADDR_PHASE1     = 9
-ADDR_PHASE2     = 10
-
-ADDR_SAMPLES1   = 16
-ADDR_SAMPLES2   = 17
-ADDR_SAMPLES3   = 18
-ADDR_SAMPLES4   = 19
-
-ADDR_DDR1       = 20
-ADDR_DDR2       = 21
-ADDR_DDR3       = 22
-ADDR_DDR4       = 23
-
+ADDR_FREQ       = 5
+ADDR_PHASE      = 9
+ADDR_SAMPLES    = 16
+ADDR_DDR        = 20
 ADDR_MULTIECHO  = 34
 
 CODE_READ       = 0x80
@@ -72,6 +59,8 @@ class serialOpenADCInterface:
     def __init__(self, serial_instance, debug=None):
         self.serial = serial_instance
         self.log = logging.getLogger('serialUsb')
+
+        self.setSettings(SETTINGS_RESET);
 
         #Send clearing function
         nullmessage = bytearray([20])
@@ -124,10 +113,20 @@ class serialOpenADCInterface:
 
         #Message type
         message.append(mode | address)
+       
+        #Length
+        lenpayload = len(pba)
+        message.append(lenpayload & 0xff)
+        message.append((lenpayload >> 8) & 0xff)
+
+        #append payload
         message = message + pba
 
         ### Send out serial port
         self.serial.write(str(message))
+
+        for b in message: print "%02x "%b,
+        print ""               
 
         ### Wait Response (if requested)
         if (mode == CODE_READ):
@@ -151,13 +150,14 @@ class serialOpenADCInterface:
             return rb
         else:
             if Validate:
-                check = self.sendMessage(CODE_READ, address)
+                check = self.sendMessage(CODE_READ, address, maxResp=len(pba))
                 if check != pba:
                     self.log.error("Command text not set correctly")
-                    print "Sent data: ",
+                    print "For address 0x%02x=%d"%(address,address)
+                    print "  Sent data: ",
                     for c in pba: print("%x")%c,
                     print("")
-                    print "Read data: ",
+                    print "  Read data: ",
                     if check:
                         for c in check: print("%x")%c,
                         print("")
@@ -216,21 +216,17 @@ class serialOpenADCInterface:
         LSB = phase & 0x00FF;
         MSB = (phase & 0x0100) >> 8;
        
-        cmd = bytearray(1)
+        cmd = bytearray(2)
         cmd[0] = LSB;
-        self.sendMessage(CODE_WRITE, ADDR_PHASE1, cmd, False);
-
-        cmd[0] = MSB | 0x02;
-        self.sendMessage(CODE_WRITE, ADDR_PHASE2, cmd, False);
+        cmd[1] = MSB | 0x02;
+        self.sendMessage(CODE_WRITE, ADDR_PHASE, cmd, False);
 
     def getPhase(self):
-        result = self.sendMessage(CODE_READ, ADDR_PHASE2);
+        result = self.sendMessage(CODE_READ, ADDR_PHASE, maxResp=2);
 
-        if (result[0] & 0x02):
-            MSB = result[0] & 0x01;
-
-            result = self.sendMessage(CODE_READ, ADDR_PHASE1);
+        if (result[1] & 0x02):            
             LSB = result[0]
+            MSB = result[1] & 0x01;
 
             phase = LSB | (MSB << 8);
 
@@ -254,47 +250,37 @@ class serialOpenADCInterface:
            requires conversion to Hz'''
         freq = 0x00000000;
 
-        temp = self.sendMessage(CODE_READ, ADDR_FREQ1)
+        temp = self.sendMessage(CODE_READ, ADDR_FREQ, maxResp=4)
         freq = freq | (temp[0] << 0);
+        freq = freq | (temp[1] << 8);
+        freq = freq | (temp[2] << 16);
+        freq = freq | (temp[3] << 24);
 
-        temp = self.sendMessage(CODE_READ, ADDR_FREQ2)
-        freq = freq | (temp[0] << 8);
+        samplefreq = 40E6 / pow(2,25)
+        measured = freq * samplefreq
 
-        temp = self.sendMessage(CODE_READ, ADDR_FREQ3)
-        freq = freq | (temp[0] << 16);
-
-        temp = self.sendMessage(CODE_READ, ADDR_FREQ4)
-        freq = freq | (temp[0] << 24);
+        print measured
 
         #Board samples 40E6/2^25, so convert to Hz
-        return long(freq * (40E6 / pow(2,25)))
+        return long(measured)
 
     def setMaxSamples(self, samples):
-        cmd = bytearray(1)
+        cmd = bytearray(4)
         cmd[0] = ((samples >> 0) & 0xFF)
-        self.sendMessage(CODE_WRITE, ADDR_SAMPLES1, cmd)
-        cmd[0] = ((samples >> 8) & 0xFF)
-        self.sendMessage(CODE_WRITE, ADDR_SAMPLES2, cmd)
-        cmd[0] = ((samples >> 16) & 0xFF)
-        self.sendMessage(CODE_WRITE, ADDR_SAMPLES3, cmd)
-        cmd[0] = ((samples >> 24) & 0xFF)
-        self.sendMessage(CODE_WRITE, ADDR_SAMPLES4, cmd)
+        cmd[1] = ((samples >> 8) & 0xFF)
+        cmd[2] = ((samples >> 16) & 0xFF)
+        cmd[3] = ((samples >> 24) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_SAMPLES, cmd)
 
     def getMaxSamples(self):
         '''Return the number of samples captured in one go'''
         samples = 0x00000000;
 
-        temp = self.sendMessage(CODE_READ, ADDR_SAMPLES1)
+        temp = self.sendMessage(CODE_READ, ADDR_SAMPLES, maxResp=4)
         samples = samples | (temp[0] << 0);
-
-        temp = self.sendMessage(CODE_READ, ADDR_SAMPLES2)
-        samples = samples | (temp[0] << 8);
-
-        temp = self.sendMessage(CODE_READ, ADDR_SAMPLES3)
-        samples = samples | (temp[0] << 16);
-
-        temp = self.sendMessage(CODE_READ, ADDR_SAMPLES4)
-        samples = samples | (temp[0] << 24);
+        samples = samples | (temp[1] << 8);
+        samples = samples | (temp[2] << 16);
+        samples = samples | (temp[3] << 24);
 
         return samples
 
