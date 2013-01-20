@@ -306,7 +306,6 @@ module interface(
 	wire cmdfifo_rd;
 	wire cmdfifo_wr;
 	wire cmdfifo_isout;
-	wire cmdfifo_ready;
 	wire [7:0] cmdfifo_din;
 	wire [7:0] cmdfifo_dout;
 	
@@ -321,7 +320,7 @@ module interface(
 	 assign ftdi_rdn = ~cmdfifo_rd;
 	 assign ftdi_wrn = ~cmdfifo_wr;
 	 assign ftdi_oen = cmdfifo_isout;
-	 assign ftdi_siwua = ~cmdfifo_ready;
+	 assign ftdi_siwua = 1'b1;
 `else	
 	 serial_reg_iface cmdfifo_serial(.reset_i(reset),
 										  .clk_i(slowclock),
@@ -411,6 +410,7 @@ module interface(
 `endif
 
 //`undef CHIPSCOPE
+/*
    usb_interface usb(.reset_i(reset_i),
 							.reset_o(reset_intermediate),
                      .clk(slowclock),
@@ -421,7 +421,6 @@ module interface(
 							.cmdfifo_din(cmdfifo_din),
 							.cmdfifo_dout(cmdfifo_dout),
 							.cmdfifo_isout(cmdfifo_isout),
-							.cmdfifo_ready(cmdfifo_ready),
 							.gain(PWM_incr),
                      .hilow(amp_hilo),
 							.status(reg_status),
@@ -482,7 +481,84 @@ module interface(
                      , .chipscope_control(chipscope_control)
 `endif
 
-                     );                      	 
+                     );  
+*/
+
+
+	wire reg_clk;
+	wire [5:0] reg_address;
+	wire [15:0] reg_bytecnt;
+	wire [7:0] reg_datao;
+	wire [15:0] reg_size;
+	wire reg_read;
+	wire reg_write;
+	wire reg_addrvalid;
+	wire [5:0] reg_hypaddress;
+	wire reg_stream;
+	wire [7:0] reg_datai;
+	wire [15:0] reg_hyplen;
+	
+	reg_main registers_mainctl (
+		.reset_i(reset_i), 
+		.clk(slowclock), 
+		.cmdfifo_rxf(cmdfifo_rxf), 
+		.cmdfifo_txe(cmdfifo_txe), 
+		.cmdfifo_rd(cmdfifo_rd), 
+		.cmdfifo_wr(cmdfifo_wr), 
+		.cmdfifo_din(cmdfifo_din), 
+		.cmdfifo_dout(cmdfifo_dout), 
+		.cmdfifo_isout(cmdfifo_isout), 
+		.reg_clk(reg_clk), 
+		.reg_address(reg_address), 
+		.reg_bytecnt(reg_bytecnt), 
+		.reg_datao(reg_datao), 
+		.reg_datai(reg_datai), 
+		.reg_size(reg_size), 
+		.reg_read(reg_read), 
+		.reg_write(reg_write), 
+		.reg_addrvalid(reg_addrvalid), 
+		.reg_stream(reg_stream),
+		.reg_hypaddress(reg_hypaddress), 
+		.reg_hyplen(reg_hyplen)
+	);	
+	
+	reg_openadc registers_openadc (
+		.reset_i(reset_i),
+		.reset_o(reset_intermediate),
+		.clk(reg_clk),
+		.reg_address(reg_address), 
+		.reg_bytecnt(reg_bytecnt), 
+		.reg_datao(reg_datai), 
+		.reg_datai(reg_datao), 
+		.reg_size(reg_size), 
+		.reg_read(reg_read), 
+		.reg_write(reg_write), 
+		.reg_addrvalid(reg_addrvalid), 
+		.reg_stream(reg_stream),
+		.reg_hypaddress(reg_hypaddress), 
+		.reg_hyplen(reg_hyplen),
+		
+		.gain(PWM_incr),
+      .hilow(amp_hilo),
+		.status(reg_status),         
+		.cmd_arm(cmd_arm),
+		.trigger_mode(trigger_mode),
+		.trigger_wait(trigger_wait),  
+		.trigger_source(trigger_source),
+		.trigger_level(trigger_level),
+		.trigger_now(trigger_now),
+		.extclk_frequency(extclk_frequency),							
+		.phase_o(phase_requested),
+		.phase_ld_o(phase_load),
+		.phase_i(phase_actual),
+		.phase_done_i(phase_done),
+		.phase_clk_o(phase_clk),
+		.maxsamples_i(maxsamples_limit),
+		.maxsamples_o(maxsamples),
+		.adc_clk_src_o(ADC_clk_selection)
+		);
+
+							
 	
 `undef CHIPSCOPE
 	clock_managment genclocks(
