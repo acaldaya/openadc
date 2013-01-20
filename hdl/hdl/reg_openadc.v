@@ -1,27 +1,36 @@
 `include "includes.v"
-`define CHIPSCOPE
+//`define CHIPSCOPE
 
 /***********************************************************************
 This file is part of the OpenADC Project. See www.newae.com for more details,
 or the codebase at http://www.assembla.com/spaces/openadc .
 
-This file is the computer interface. It provides a simple interface to the
-rest of the board.
+This file is the OpenADC main registers. Does not include the actual data
+transfer register which is in a seperate file.
 
-Copyright (c) 2012-2013, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
-This project is released under the Modified FreeBSD License. See LICENSE
-file which should have came with this code.
+Copyright (c) 2013, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+This project (and file) is released under the 2-Clause BSD License:
 
-Notes on interface:
+Redistribution and use in source and binary forms, with or without 
+modification, are permitted provided that the following conditions are met:
 
-[ 1 RW A5 A4 A3 A2 A1 A0] - Header
-[ Write/Read Size LSB   ] - Size, '0' is special case for read which means 'natural size'
-[ Write/Read Size MSB   ] 
-[ Data Byte 0           ]
-[ Data Byte 1           ]
- .......................
-[ Data Byte N           ] - Payload size (Variable Length). On WR sent in, on RD sent out
-[ Checksum Byte         ] - Checksum, on WR sent in, on RD sent out.
+   * Redistributions of source code must retain the above copyright notice,
+	  this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above copyright
+	  notice, this list of conditions and the following disclaimer in the
+	  documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
 
 
 *************************************************************************/
@@ -123,180 +132,8 @@ module reg_openadc(
 			phase_in <= phase_i;
 			phase_done <= 1;
 		end
-	end
-	 
-	 /* Registers:
-	 
-	 0x00 - Gain Settings (One Byte)
-	 
-	   [ G7 G6 G5 G4 G3 G2 G1 G0 ]
-		
-		  G = 8-bit PWM setting for gain voltage.
-		      Voltage = G / 256 * VCCIO
-	 
-	 0x01 - Settings (One Byte)
-	 
-	   [  I  C  W  P  A  T  H  R ]
-	     
-		  R = (bit 0) System Reset, active high
-		  H = (bit 1) Hilo output to amplifier
-		  T = (bit 2) Trigger Polarity:
-		      1 = Trigger when 'trig in' = 1
-				0 = Trigger when 'trig in' = 0
-		  A = (bit 3) Arm Trigger
-		      1 = Arm trigger
-				0 = No effect, but you must clear bit to 0
-				    before next trigger cycle can be started
-		  P = (bit 4) DUT Clkin PLL Reset
-		      1 = Reset to PLL active (must do this when ext clock changes)
-				0 = Reset to PLL inactive
-		  W = (bit 5) Before arming wait for trigger to go inactive (e.g: edge sensitive)
-		      1 = Wait for trigger to go inactive before arming
-				0 = Arm immediatly, which if trigger line is currently in active state
-				    will also immediatly trigger
-		  C = (bit 6) Select clock source for ADC
-		      1 = External x4
-				0 = Internal 100 MHz				
-		  I = (bit 7) Select trigger source: int/ext
-		      1 = Internal (e.g.: based on ADC reading)
-				0 = External (e.g.: based on trigger-in line)
-		  
-	 0x02 - Status (One Byte)
-	 
-	    [  X  M  DC DE P  E  F  T ] 
-		 T = (bit 0) Triggered status
-		      1 = System armed
-				0 = System disarmed		
-		 F = (bit 1) Capture Status
-		      1 = FIFO Full / Capture Done
-				0 = FIFO Not Full / Capture Not Done
-		 E = (bit 2) External trigger status
-		      1 = Trigger line high
-				0 = Trigger line low
-		 P = (bit 3) DUT Clkin PLL Status
-		      1 = Locked / OK
-				0 = Unlocked				
-		 DE = (bit 4) DDR Error
-		      1 = DDR error (FIFO underflow/overflow or DDR Error)
-				0 = No error		 
-		 DC = (bit 5) DDR Calibration Done
-		      1 = Cal done OK
-				0 = Cal in progress/failed	
-		 M =  (bit 6) Memory Mode
-		      1 = DDR
-				0 = FIFO
-		
-	 0x03 - ADC Readings
-	 
-       Data is read from this register by issuing a READ command.
-		 The entire contents of the FIFO will be dumped following
-		 that read command (e.g.: number of samples requested), or
-		 in DDR mode a different formatting is used (described elsewhere)
-	 
-	    [  1  X  X  P OR D9 D8 D7 ]
-		 
-		 [  0 D6 D5 D4 D3 D2 D1 D0 ]
-	 
-	 0x04 - Echo Register (1 byte)
-	 
-		 [ E7 E6 E5 E4 E3 E2 E1 E0 ]
-		 
-		 E = Write data to this register then read back to
-		     confirm device connection is OK	
-
-	 0x05 - External Frequency Counter (4 bytes)
-	 
-	 0x09 - Phase Adjust (2 Bytes)
-	 
-	    [ P7 P6 P5 P4 P3 P2 P1 P0 ] (Byte 0)	    
-		 [                    S P8 ] (Byte 1)
-		 
-		 S = Start (write), Status (read)
-		 
-	 0x10 - Number of samples to capture on trigger (4 Bytes)
-	    On reset set to maximum number of samples possible.
-	    [ LSB ] (Byte 0)
-		 [     ] (Byte 1)
-		 [     ] (Byte 2)
-		 [ MSB ] (Byte 3)
-	 
-	 0x14 - DDR address to read from (4 Bytes)
-	 
-	    This must be 32-bit aligned, e.g. lower 2 bits are zero.
-		 This register is automatically incremented following a
-		 READ command. So to dump entire memory set DDR address to
-		 'zero' then issue read commands.
-		 
-		 [ LSB ] (Byte 0)
-		 [     ] (Byte 1)
-		 [     ] (Byte 2)
-		 [ MSB ] (Byte 3)
-		 
-	 0x18 - ADC Trigger Level (2 Bytes)
-	 
-	    [ LSB ] (Byte 0)
-		 [ MSB ] (Byte 1)
-	 
-	 0x1A - Offset of trigger to start of capture, clock cycles (8 Bytes)
-	   
-		 [ LSB ] (Byte 0)
-		 [     ] (Byte 1)
-		 [     ] (Byte 2)
-		 [     ] (Byte 3)
-		 [     ] (Byte 4)
-		 [     ] (Byte 5)
-		 [     ] (Byte 6)
-		 [ MSB ] (Byte 7)
-
-
-	 0x1E - Smartcard Control/Status Register
-	    [ X X X S D PT C R ]	 	 
-		
-		 S  = (bit 4) ACK Status (R)
-		      1 = Last transaction successful
-				0 = Last transaction had wrong ack
-		
-		 B  = (bit 3) Smartcard Core Busy (R)
-		      1 = Busy
-				0 = Not Busy (done)
-		
-		 PT = (bit 2) Pass Through( R/W)
-		      1 = Pass any received data to bus - done in ASYNC fasion, be careful
-				0 = Pass thru disabled
-		
-		 C = (bit 1) Card Present (R)
-		      1 = Card Inserted
-				0 = No Card Present
-				
-		 R = (bit 0) Card Reset (R/W)
-				1 = Reset Asserted (low)
-				0 = Reset Deasserted (high)
+	 end
 	 	 
-	 0x1F - Smartcard Header Register (W)
-	     Always write 6 bytes here.
-		    
-	 
-	 0x20 - Smartcard Payload Register (R/W)
-	     Always write 16 bytes here. If actual
-		  payload is less than 16 bytes, this will
-		  be determined by numbers written into
-		  the smartcard header register
-		 
-	*/
-	 
-    `define GAIN_ADDR    	0
-    `define SETTINGS_ADDR  1
-	 `define STATUS_ADDR    2
-    `define ECHO_ADDR      4
-	 `define EXTFREQ_ADDR   5
-	 `define EXTFREQ_LEN    4
-	 `define PHASE_ADDR     9 
-	 `define PHASE_LEN      2
-	 `define SAMPLES_ADDR   16
-	 `define SAMPLES_LEN    4
-	 `define OFFSET_ADDR    26
-	 `define OFFSET_LEN		8
-	 
 	 reg [15:0] reg_hyplen_reg;
 	 assign reg_hyplen = reg_hyplen_reg;
 	 
@@ -390,7 +227,7 @@ module reg_openadc(
 			registers_gain <= 0;
 			registers_settings <= 0;
 			registers_echo <= 0;
-			registers_samples <= 0;
+			registers_samples <= maxsamples_i;
 			registers_offset <= 0;
 		end else if (reg_write) begin
 			case (reg_address)

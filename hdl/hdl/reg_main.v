@@ -8,10 +8,6 @@ or the codebase at http://www.assembla.com/spaces/openadc .
 This file is the computer interface. It provides a simple interface to the
 rest of the board.
 
-Copyright (c) 2012-2013, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
-This project is released under the Modified FreeBSD License. See LICENSE
-file which should have came with this code.
-
 Notes on interface:
 
 [ 1 RW A5 A4 A3 A2 A1 A0] - Header
@@ -22,6 +18,29 @@ Notes on interface:
  .......................
 [ Data Byte N           ]
 
+Copyright (c) 2012-2013, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+This project (and file) is released under the 2-Clause BSD License:
+
+Redistribution and use in source and binary forms, with or without 
+modification, are permitted provided that the following conditions are met:
+
+   * Redistributions of source code must retain the above copyright notice,
+	  this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above copyright
+	  notice, this list of conditions and the following disclaimer in the
+	  documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
 
 *************************************************************************/
 module reg_main(
@@ -119,6 +138,7 @@ module reg_main(
     `define DATARD1         'b1001
     `define DATARD2         'b1010
 	 `define DATARD_DDRSTART 'b1011
+	 `define DATARDWAIT		 'b1100
 	 `define CHECKSUM			 'b1110
 
 	 reg [15:0]					total_bytes;    //Byte count for this transaction
@@ -258,13 +278,22 @@ module reg_main(
 					ftdi_dout <= reg_datai;
 					ftdi_wr_n <= 0;
 					
-					if ((reg_stream) | (bytecnt < (total_bytes-1))) begin
-						state <= `DATARDSTART;
-						regout_read <= 1;
+					if ((reg_stream) | (bytecnt < (total_bytes-1))) begin						
+						state <= (ftdi_txe_n) ? `DATARDWAIT:`DATARDSTART;
+						regout_read <= (ftdi_txe_n) ? 0:1;
 					end else begin
 						state <= `IDLE; 
 						regout_read <= 0;
 					end
+				end
+				
+				`DATARDWAIT: begin
+					ftdi_isOutput <= 1;
+					ftdi_rd_n <= 1;
+					ftdi_wr_n <= 1;					
+					ftdi_dout <= reg_datai;
+					regout_read <= 0;					
+					state <= (ftdi_txe_n) ? `DATARDWAIT:`DATARDSTART;					
 				end
 				
 				default: begin				

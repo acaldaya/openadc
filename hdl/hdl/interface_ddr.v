@@ -7,8 +7,28 @@ or the codebase at http://www.assembla.com/spaces/openadc .
 This file is the main interface.
 
 Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
-This project is released under the Modified FreeBSD License. See LICENSE
-file which should have came with this code.
+This project (and file) is released under the 2-Clause BSD License:
+
+Redistribution and use in source and binary forms, with or without 
+modification, are permitted provided that the following conditions are met:
+
+   * Redistributions of source code must retain the above copyright notice,
+	  this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above copyright
+	  notice, this list of conditions and the following disclaimer in the
+	  documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
 *************************************************************************/
 
 module interface(
@@ -219,7 +239,7 @@ module interface(
 	wire [9:0] trigger_level;
 	
 	always @(posedge ADC_clk_sample) begin
-		ADC_Data_tofifo <= ADC_Data;
+		//ADC_Data_tofifo <= ADC_Data;
 		
 		//Input Validation Test #1: Uncomment the following
 		//ADC_Data_tofifo <= 10'hAA;
@@ -227,7 +247,7 @@ module interface(
 		//Input Validation Test #2: uncomment following, which should
 		//put a perfect ramp. Tests FIFO & USB interface for proper
 		//syncronization
-		//ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
+		ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
 		
 		//Input Validation Test #3: 
 	end
@@ -522,6 +542,9 @@ module interface(
 		.reg_hyplen(reg_hyplen)
 	);	
 	
+	wire reg_stream_openadc;
+	wire [15:0] reg_hyplen_openadc;
+	
 	reg_openadc registers_openadc (
 		.reset_i(reset_i),
 		.reset_o(reset_intermediate),
@@ -534,9 +557,9 @@ module interface(
 		.reg_read(reg_read), 
 		.reg_write(reg_write), 
 		.reg_addrvalid(reg_addrvalid), 
-		.reg_stream(reg_stream),
+		.reg_stream(reg_stream_openadc),
 		.reg_hypaddress(reg_hypaddress), 
-		.reg_hyplen(reg_hyplen),
+		.reg_hyplen(reg_hyplen_openadc),
 		
 		.gain(PWM_incr),
       .hilow(amp_hilo),
@@ -557,8 +580,31 @@ module interface(
 		.maxsamples_o(maxsamples),
 		.adc_clk_src_o(ADC_clk_selection)
 		);
+		
+	wire reg_stream_fifo;
+	wire [15:0] reg_hyplen_fifo;
+	reg_openadc_adcfifo registers_fiforead(
+		.reset_i(reset_i),
+		.clk(reg_clk),
+		.reg_address(reg_address), 
+		.reg_bytecnt(reg_bytecnt), 
+		.reg_datao(reg_datai), 
+		.reg_datai(reg_datao), 
+		.reg_size(reg_size), 
+		.reg_read(reg_read), 
+		.reg_write(reg_write), 
+		.reg_addrvalid(reg_addrvalid), 
+		.reg_stream(reg_stream_fifo),
+		.reg_hypaddress(reg_hypaddress), 
+		.reg_hyplen(reg_hyplen_fifo),
+		.fifo_empty(ddrfifo_empty),
+		.fifo_data(ddrfifo_dout),
+		.fifo_rd_en(ddrfifo_rd_en),
+		.fifo_rd_clk(ddrfifo_rd_clk)
+	);
 
-							
+	assign reg_stream = reg_stream_fifo | reg_stream_openadc;
+	assign reg_hyplen = reg_hyplen_fifo | reg_hyplen_openadc;
 	
 `undef CHIPSCOPE
 	clock_managment genclocks(
