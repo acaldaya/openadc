@@ -94,7 +94,7 @@ module reg_openadc_adcfifo(
 	
 	 reg [7:0] reg_datao_reg;
 	 reg reg_datao_valid_reg;
-	 assign reg_datao = (reg_datao_valid_reg & reg_read) ? reg_datao_reg : 8'bZZZZZZZZ;
+	 assign reg_datao = (reg_datao_valid_reg /*& reg_read*/) ? reg_datao_reg : 8'bZZZZZZZZ;
 
 
 	 always @(posedge clk) begin
@@ -107,35 +107,47 @@ module reg_openadc_adcfifo(
 			reg_datao_valid_reg <= 0;
 		end
 	 end
-	 
+	  
 	 always @(reg_address, reg_addrvalid, reg_bytecnt, fifo_data) begin
 		if (reg_addrvalid) begin
 			case (reg_address)
 				`ADCREAD_ADDR: reg_datao_reg <= (reg_bytecnt == 0) ? 8'hAC : fifo_data; 
 				default: reg_datao_reg <= 0;	
 			endcase
+		end else begin
+			reg_datao_reg <= 0;
 		end
 	 end
 
-	 always @(posedge clk, negedge reg_read) begin
+/*
+	 always @(negedge clk, negedge reg_read) begin
 		if (reg_read == 0) begin
 			fifo_rd_en_reg <= 0;
+		end else if (reg_address == `ADCREAD_ADDR) begin
+			if ((reg_bytecnt == 0) || (reg_bytecnt == 1)) begin
+				fifo_rd_en_reg <= 0;
+			end else begin
+				fifo_rd_en_reg <= ~fifo_empty;
+			end
 		end else begin
-			case (reg_address)
-				`ADCREAD_ADDR: fifo_rd_en_reg <= ~fifo_empty; 
-				default: fifo_rd_en_reg <= 0;	
-			endcase
+			fifo_rd_en_reg <= 0;
 		end
 	 end	 
-	 
+ */
+ 
+	 always @(reg_read, reg_address, reg_bytecnt) begin
+		 if ((reg_read == 1) && (reg_address == `ADCREAD_ADDR) && (reg_bytecnt > 16'd0)) begin
+			fifo_rd_en_reg <= 1;
+		 end else begin
+			fifo_rd_en_reg <= 0;
+		 end
+	 end
+  	 
 	 always begin
-		if (fifo_empty) begin
+		if ((fifo_empty == 1) || (reset == 1) || (reg_addrvalid == 0) || (reg_address != `ADCREAD_ADDR)) begin
 			reg_stream_reg <= 0;
-		end else if (reg_addrvalid) begin
-			case (reg_address)
-				`ADCREAD_ADDR: reg_stream_reg <= 1;
-				default: reg_stream_reg <= 0;	
-			endcase
+		end else if ((reg_addrvalid == 1) && (reg_address == `ADCREAD_ADDR)) begin
+			reg_stream_reg <= 1;
 		end
 	 end
 			
@@ -153,6 +165,7 @@ module reg_openadc_adcfifo(
 
 	 assign cs_data[64] = fifo_empty;
 	 assign cs_data[65] = fifo_rd_en;
+	 assign cs_data[73:66] = fifo_data;
  `endif
  
 endmodule

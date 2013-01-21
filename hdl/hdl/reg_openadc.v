@@ -219,6 +219,8 @@ module reg_openadc(
 				`OFFSET_ADDR: reg_datao_reg <= registers_offset[reg_bytecnt*8 +: 8];
 				default: reg_datao_reg <= 0;	
 			endcase
+		end else begin
+			reg_datao_reg <= 0;
 		end
 	 end
 
