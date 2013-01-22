@@ -176,7 +176,7 @@ module reg_openadc(
 
 	 reg [7:0] reg_datao_reg;
 	 reg reg_datao_valid_reg;
-	 assign reg_datao = (reg_datao_valid_reg & reg_read) ? reg_datao_reg : 8'bZZZZZZZZ;
+	 assign reg_datao = (reg_datao_valid_reg/*& reg_read*/) ? reg_datao_reg : 8'bZZZZZZZZ;
 
 	 always @(posedge clk) begin	
 		if (reg_addrvalid) begin

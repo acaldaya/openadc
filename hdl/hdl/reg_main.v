@@ -82,7 +82,7 @@ module reg_main(
 	 wire	  		reset;
 	 assign 		reset = reset_i;
     	 
-    wire [7:0] ftdi_din;
+    reg [7:0] ftdi_din;
     reg [7:0]  ftdi_dout;
     reg        ftdi_isOutput;
     wire       ftdi_clk;
@@ -94,17 +94,23 @@ module reg_main(
 	 assign reg_datao = ftdi_din;
 	 assign reg_write = regout_write;
 	 assign reg_addrvalid = regout_addrvalid;
-	 assign reg_read = regout_read & ~ftdi_txe_n;
+	 assign reg_read = regout_read;// & ~ftdi_txe_n; //FIXME???
     
     assign ftdi_clk = clk;
 	 assign reg_clk = clk;
-    assign ftdi_rxf_n = ~cmdfifo_rxf;
 	 assign ftdi_txe_n = ~cmdfifo_txe;
-	 assign ftdi_din = cmdfifo_din;
 	 assign cmdfifo_dout = ftdi_dout;
 	 assign cmdfifo_rd = ~ftdi_rd_n;
 	 assign cmdfifo_wr = ~ftdi_wr_n;
 	 assign cmdfifo_isout = ftdi_isOutput; 
+
+	 always @(posedge clk) begin
+		if (cmdfifo_rxf == 1) ftdi_din <= cmdfifo_din;
+	 end
+	 
+	 //always @(posedge clk) begin
+	 assign ftdi_rxf_n = ~cmdfifo_rxf;
+	 //end
     
     //For FTDI interface you would do this in the main module that instiated this:
     //assign ftdi_d = ftdi_isOutput ? ftdi_dout : 8'bZ;
@@ -143,6 +149,7 @@ module reg_main(
 	 reg [7:0]					totalbytes_lsb; //LSB from input 
 	 reg [15:0]					bytecnt;
     reg [3:0]              state = `IDLE;
+	 reg [3:0]					laststate;
 	 reg [3:0]              state_new;
     reg [5:0]              address;
 
@@ -157,9 +164,14 @@ module reg_main(
 	 reg data_vld;
 	 
 	 always @(posedge ftdi_clk) begin
-		if ((regout_read == 1) && (cmdfifo_txe == 1)) ftdi_dout <= reg_datai;
+		laststate <= state;
 	 end
-	 
+	  
+	 always @(posedge ftdi_clk) begin
+		//if ((regout_read == 1) && (cmdfifo_txe == 1)) ftdi_dout <= reg_datai;
+		ftdi_dout <= reg_datai;
+	 end
+	 	 
     always @(posedge ftdi_clk)
     begin
       if (reset == 1) begin
@@ -192,7 +204,6 @@ module reg_main(
 					bytecnt <= 0;			
 					total_bytes <= reg_hyplen;										
                address <= ftdi_din[5:0];
-               ftdi_rd_n <= 0;
                ftdi_wr_n <= 1;
 					regout_addrvalid <= 1;		
 					regout_write <= 0;					
@@ -203,13 +214,23 @@ module reg_main(
                      //MSB means WRITE
                      ftdi_isOutput <= 0;
                      state_new <= `DATAWR1;               
-							state <= `BYTECNTLSB;
                   end else begin
                      //MSB means READ
                      ftdi_isOutput <= 0;
-                     state_new <= `DATARDSTART;               
-							state <= `BYTECNTLSB;
+                     state_new <= `DATARDSTART; 
                   end
+						
+						if (ftdi_rxf_n == 0) begin
+							ftdi_rd_n <= 0;
+							ftdi_wr_n <= 1;
+							state <= `BYTECNTLSB;
+						end else begin					
+							ftdi_rd_n <= 1;
+							ftdi_wr_n <= 1;
+							state <= `ADDR;
+						end
+						
+						
                end else begin
                   ftdi_isOutput <= 0;
                   state <= `IDLE;                  
@@ -226,6 +247,17 @@ module reg_main(
 					regout_write <= 0;
 					regout_read <= 0;
 					data_vld <= 0;
+					
+					if (ftdi_rxf_n == 0) begin
+						ftdi_rd_n <= 0;
+						ftdi_wr_n <= 1;
+						state <= `BYTECNTMSB;
+					end else begin					
+						ftdi_rd_n <= 1;
+						ftdi_wr_n <= 1;
+						state <= `BYTECNTLSB;
+					end
+					
 				end
 				
 				`BYTECNTMSB: begin
@@ -284,28 +316,44 @@ module reg_main(
 					            
             `DATARDSTART: begin						
                ftdi_isOutput <= 1;               
-               ftdi_rd_n <= 1;	
-					if (bytecnt == 16'hFFFF) begin
-						bytecnt <= 16'hFFFF;
-					end else begin
-						bytecnt <= bytecnt + 16'd1;
-					end										
+               ftdi_rd_n <= 1;							
+										
+					if ((reg_stream == 1) || (bytecnt < (total_bytes-16'd1)) || ((ftdi_txe_n == 1) && (state == laststate))) begin	
+						
+						if (ftdi_txe_n == 1) begin
+							if (state != laststate) begin //NB: should check laststate != `BYTECNTMSB ?
+								if (bytecnt == 16'hFFFF) begin
+									bytecnt <= 16'hFFFF;
+								end else begin
+									bytecnt <= bytecnt + 16'd1;
+								end								
+							end
+							regout_read <= 0;
+							state <= `DATARDWAIT;
+							ftdi_wr_n <= 1;
+						end else begin
+							regout_read <= 1;
+							state <= `DATARDSTART;
+							ftdi_wr_n <= 0;
+							
+							if (bytecnt == 16'hFFFF) begin
+								bytecnt <= 16'hFFFF;
+							end else begin
+								bytecnt <= bytecnt + 16'd1;
+							end														
+						end
 					
-					
-					if ((reg_stream == 1) || (bytecnt < (total_bytes-16'd1))) begin						
-						state <= (ftdi_txe_n == 1) ? `DATARDWAIT:`DATARDSTART;
-						regout_read <= (ftdi_txe_n) ? 0:1;
-						regout_addrvalid <= 1;
-						ftdi_wr_n <= 0;
+						regout_addrvalid <= 1;						
 						
 					end else begin
 						state <= `IDLE; 
-						regout_read <= 0;
-						regout_addrvalid <= 0;
+						regout_read <= 0;						
 						
-						if(bytecnt == (total_bytes-16'd1)) begin
+						if((bytecnt == (total_bytes-16'd1)) && (ftdi_txe_n == 0)) begin
 							ftdi_wr_n <= 0;
+							regout_addrvalid <= 1;
 						end else begin
+							regout_addrvalid <= 0;
 							ftdi_wr_n <= 1;
 						end
 					end
@@ -321,8 +369,13 @@ module reg_main(
 					//get back to the read state. The DATARDSTART state will read
 					//that 'last' byte that has been waiting on the bus, and while
 					//reading that byte request a new one
-					regout_read <= (ftdi_txe_n == 1) ? 0:1;			
-					state <= (ftdi_txe_n == 1) ? `DATARDWAIT:`DATARDSTART;					
+					if (ftdi_txe_n == 1) begin
+						regout_read <= 0;
+						state <= `DATARDWAIT;
+					end else begin
+						regout_read <= 1;
+						state <= `DATARDSTART;
+					end			
 				end
 				/*
 				`DATARDRESTART: begin
@@ -365,7 +418,10 @@ module reg_main(
 	assign cs_data[43:36] = ftdi_din;
 	assign cs_data[51:44] = total_bytes;
 	assign cs_data[67:52] = bytecnt;
+	assign cs_data[16] = regout_read;
+	//assign cs_data[:68] = reg_datai;
  `endif
+
  
 endmodule
 
