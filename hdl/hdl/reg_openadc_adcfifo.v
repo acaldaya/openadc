@@ -1,5 +1,5 @@
 `include "includes.v"
-`define CHIPSCOPE
+//`define CHIPSCOPE
 
 /***********************************************************************
 This file is part of the OpenADC Project. See www.newae.com for more details,
@@ -136,7 +136,7 @@ module reg_openadc_adcfifo(
  */
  
 	 always @(reg_read, reg_address, reg_bytecnt) begin
-		 if ((reg_read == 1) && (reg_address == `ADCREAD_ADDR) && (reg_bytecnt > 16'd0)) begin
+		 if ((reg_read == 1) && (reg_address == `ADCREAD_ADDR) && (reg_bytecnt > 16'd1)) begin
 			fifo_rd_en_reg <= 1;
 		 end else begin
 			fifo_rd_en_reg <= 0;

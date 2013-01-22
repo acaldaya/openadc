@@ -1,5 +1,5 @@
 `include "includes.v"
-//`define CHIPSCOPE
+`define CHIPSCOPE
 
 /***********************************************************************
 This file is part of the OpenADC Project. See www.newae.com for more details,
@@ -65,8 +65,10 @@ module reg_main(
 	output [7:0]   reg_datao,    // Data to write
 	input  [7:0]   reg_datai,    // Data to read
 	output [15:0]  reg_size,     // Total size being read/write
-	output         reg_read,     // Read flag
-	output			reg_write,    // Write flag
+	output         reg_read,     // Read flag. One clock cycle AFTER this flag is high
+	                             // valid data must be present on the reg_datai bus
+	output			reg_write,    // Write flag. When high on rising edge valid data is
+	                             // present on reg_datao
 	output         reg_addrvalid,// Address valid flag
 	input				reg_stream,	
 	
@@ -139,8 +141,8 @@ module reg_main(
     `define DATAWR1         'b0100
     `define DATAWR2         'b0101
     `define DATAWRDONE      'b0110
-    `define DATARDSTART     'b1000
-    `define DATARDRESTART   'b1001
+    `define DATARD1         'b1000
+    `define DATARD2         'b1001
 	 `define DATARD_DDRSTART 'b1011
 	 `define DATARDWAIT		 'b1100
 	 `define CHECKSUM			 'b1110
@@ -168,7 +170,6 @@ module reg_main(
 	 end
 	  
 	 always @(posedge ftdi_clk) begin
-		//if ((regout_read == 1) && (cmdfifo_txe == 1)) ftdi_dout <= reg_datai;
 		ftdi_dout <= reg_datai;
 	 end
 	 	 
@@ -217,7 +218,7 @@ module reg_main(
                   end else begin
                      //MSB means READ
                      ftdi_isOutput <= 0;
-                     state_new <= `DATARDSTART; 
+                     state_new <= `DATARD1; 
                   end
 						
 						if (ftdi_rxf_n == 0) begin
@@ -270,7 +271,7 @@ module reg_main(
                end
 					state <= state_new;
 					regout_write <= 0;
-					if(state_new == `DATARDSTART) begin
+					if(state_new == `DATARD1) begin
 						ftdi_isOutput <= 1;
 						regout_read <= 1;
 					end else begin
@@ -313,86 +314,69 @@ module reg_main(
 					bytecnt <= bytecnt + 16'd1;
 
 				end
-					            
-            `DATARDSTART: begin						
-               ftdi_isOutput <= 1;               
-               ftdi_rd_n <= 1;							
-										
-					if ((reg_stream == 1) || (bytecnt < (total_bytes-16'd1)) || ((ftdi_txe_n == 1) && (state == laststate))) begin	
-						
-						if (ftdi_txe_n == 1) begin
-							if (state != laststate) begin //NB: should check laststate != `BYTECNTMSB ?
-								if (bytecnt == 16'hFFFF) begin
-									bytecnt <= 16'hFFFF;
-								end else begin
-									bytecnt <= bytecnt + 16'd1;
-								end								
-							end
-							regout_read <= 0;
-							state <= `DATARDWAIT;
-							ftdi_wr_n <= 1;
-						end else begin
-							regout_read <= 1;
-							state <= `DATARDSTART;
-							ftdi_wr_n <= 0;
-							
-							if (bytecnt == 16'hFFFF) begin
-								bytecnt <= 16'hFFFF;
-							end else begin
-								bytecnt <= bytecnt + 16'd1;
-							end														
-						end
+				
+				`DATARD1: begin
+					ftdi_isOutput <= 1;
+					ftdi_rd_n <= 1;
+					regout_write <= 0;
+					regout_read <= 0;
+					regout_addrvalid <= 1;
 					
-						regout_addrvalid <= 1;						
+					if ( (reg_stream == 1) || (bytecnt < (total_bytes-16'd1)) ) begin
+						//More data to read from other module
 						
-					end else begin
-						state <= `IDLE; 
-						regout_read <= 0;						
-						
-						if((bytecnt == (total_bytes-16'd1)) && (ftdi_txe_n == 0)) begin
+						if (ftdi_txe_n == 0)  begin
+							//Ready for write so go ahead and get more data on bus
 							ftdi_wr_n <= 0;
 							regout_addrvalid <= 1;
+							
+							//Will select next byte
+							bytecnt <= bytecnt + 16'd1;
+							
+							//Do read
+							state <= `DATARD2;
+							
 						end else begin
-							regout_addrvalid <= 0;
+							//Cannot write another byte, hold on
 							ftdi_wr_n <= 1;
+							regout_addrvalid <= 1;
 						end
+						
+					end else begin
+						//No more data to read
+						
+						if (ftdi_txe_n == 0) begin
+							//We can write one more byte if needed							
+							state <= `IDLE;
+							
+							//If last byte (e.g.: was NOT in stream mode) 
+							//we write
+							if ((bytecnt == (total_bytes-16'd1)))  begin
+								ftdi_wr_n <= 0;
+								regout_addrvalid <= 1;
+							end else begin
+								regout_addrvalid <= 0;
+								ftdi_wr_n <= 1;
+							end
+							
+						end else begin
+							//Cannot write another byte, hold on
+							regout_addrvalid <= 1;
+							ftdi_wr_n <= 1;
+						end					
 					end
+				
 				end
 				
-				`DATARDWAIT: begin
-					regout_addrvalid <= 1;	
+				`DATARD2: begin
 					ftdi_isOutput <= 1;
 					ftdi_rd_n <= 1;
-					ftdi_wr_n <= ftdi_txe_n;					
-				   //When we entered this state there was still one valid byte
-					//on the databus, so we don't set regout_read high until we
-					//get back to the read state. The DATARDSTART state will read
-					//that 'last' byte that has been waiting on the bus, and while
-					//reading that byte request a new one
-					if (ftdi_txe_n == 1) begin
-						regout_read <= 0;
-						state <= `DATARDWAIT;
-					end else begin
-						regout_read <= 1;
-						state <= `DATARDSTART;
-					end			
+					ftdi_wr_n <= 1;
+					regout_write <= 0;
+					regout_read <= 1;
+					regout_addrvalid <= 1;			
+					state <= `DATARD1;
 				end
-				/*
-				`DATARDRESTART: begin
-					bytecnt <= 8'hCC;
-					regout_addrvalid <= 1;	
-					ftdi_isOutput <= 1;
-					ftdi_rd_n <= 1;
-					ftdi_wr_n <= 1;					
-				   //When we entered this state there was still one valid byte
-					//on the databus, so we don't set regout_read high until we
-					//get back to the read state. The DATARDSTART state will read
-					//that 'last' byte that has been waiting on the bus, and while
-					//reading that byte request a new one
-					regout_read <= 1;	
-					state <= `DATARDSTART;					
-				end
-				*/
 				
 				default: begin	
 					regout_addrvalid <= 0;	
