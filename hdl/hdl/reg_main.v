@@ -84,7 +84,7 @@ module reg_main(
 	 wire	  		reset;
 	 assign 		reset = reset_i;
     	 
-    reg [7:0] ftdi_din;
+    wire [7:0] ftdi_din;
     reg [7:0]  ftdi_dout;
     reg        ftdi_isOutput;
     wire       ftdi_clk;
@@ -105,15 +105,10 @@ module reg_main(
 	 assign cmdfifo_rd = ~ftdi_rd_n;
 	 assign cmdfifo_wr = ~ftdi_wr_n;
 	 assign cmdfifo_isout = ftdi_isOutput; 
-
-	 always @(posedge clk) begin
-		if (cmdfifo_rxf == 1) ftdi_din <= cmdfifo_din;
-	 end
 	 
-	 //always @(posedge clk) begin
+	 assign ftdi_din = cmdfifo_din; 
 	 assign ftdi_rxf_n = ~cmdfifo_rxf;
-	 //end
-    
+
     //For FTDI interface you would do this in the main module that instiated this:
     //assign ftdi_d = ftdi_isOutput ? ftdi_dout : 8'bZ;
     //assign ftdi_din = ftdi_d;
@@ -136,15 +131,15 @@ module reg_main(
 	 `undef  IDLE
     `define IDLE            'b0000
     `define ADDR            'b0001
-	 `define BYTECNTLSB      'b0010
-	 `define BYTECNTMSB      'b0011
-    `define DATAWR1         'b0100
-    `define DATAWR2         'b0101
-    `define DATAWRDONE      'b0110
-    `define DATARD1         'b1000
-    `define DATARD2         'b1001
-	 `define DATARD_DDRSTART 'b1011
-	 `define DATARDWAIT		 'b1100
+	 `define ADDRWAIT			 'b0010
+	 `define BYTECNTLSB      'b0011
+	 `define BYTECNTLSBWAIT  'b0100
+	 `define BYTECNTMSB      'b0101
+    `define DATAWR1         'b0110
+    `define DATAWR2         'b0111
+    `define DATAWRDONE      'b1000
+    `define DATARD1         'b1001
+    `define DATARD2         'b1010
 	 `define CHECKSUM			 'b1110
 
 	 reg [15:0]					total_bytes;    //Byte count for this transaction
@@ -169,7 +164,8 @@ module reg_main(
 		laststate <= state;
 	 end
 	  
-	 always @(posedge ftdi_clk) begin
+	 //always @(posedge ftdi_clk) begin
+	 always @(reg_datai) begin
 		ftdi_dout <= reg_datai;
 	 end
 	 	 
@@ -206,31 +202,22 @@ module reg_main(
 					total_bytes <= reg_hyplen;										
                address <= ftdi_din[5:0];
                ftdi_wr_n <= 1;
+					ftdi_rd_n <= 1;
 					regout_addrvalid <= 1;		
 					regout_write <= 0;					
 					regout_read <= 0;
 					data_vld <= 0;
+					ftdi_isOutput <= 0;
                if (ftdi_din[7] == 1) begin
                   if (ftdi_din[6] == 1) begin
                      //MSB means WRITE
-                     ftdi_isOutput <= 0;
                      state_new <= `DATAWR1;               
                   end else begin
-                     //MSB means READ
-                     ftdi_isOutput <= 0;
+                     //MSB means READ                     
                      state_new <= `DATARD1; 
                   end
 						
-						if (ftdi_rxf_n == 0) begin
-							ftdi_rd_n <= 0;
-							ftdi_wr_n <= 1;
-							state <= `BYTECNTLSB;
-						end else begin					
-							ftdi_rd_n <= 1;
-							ftdi_wr_n <= 1;
-							state <= `ADDR;
-						end
-						
+						state <= `ADDRWAIT;						
 						
                end else begin
                   ftdi_isOutput <= 0;
@@ -238,17 +225,39 @@ module reg_main(
                end
              end
 				 
+				`ADDRWAIT: begin
+					ftdi_isOutput <= 0;
+					regout_write <= 0;					
+					regout_read <= 0;
+					regout_addrvalid <= 1;
+					if (ftdi_rxf_n == 0) begin
+						ftdi_rd_n <= 0;
+						ftdi_wr_n <= 1;
+						state <= `BYTECNTLSB;
+					end else begin					
+						ftdi_rd_n <= 1;
+						ftdi_wr_n <= 1;
+						state <= `ADDRWAIT;
+					end
+				end
+				 
 				`BYTECNTLSB: begin
 					regout_addrvalid <= 1;	
 					ftdi_isOutput <= 0;
 					ftdi_wr_n <= 1;
-					ftdi_rd_n <= 0;
+					ftdi_rd_n <= 1;
 					totalbytes_lsb <= ftdi_din;
-					state <= `BYTECNTMSB;					
+					state <= `BYTECNTLSBWAIT;					
 					regout_write <= 0;
 					regout_read <= 0;
-					data_vld <= 0;
-					
+					data_vld <= 0;				
+				end
+				
+				`BYTECNTLSBWAIT: begin
+					ftdi_isOutput <= 0;
+					regout_write <= 0;					
+					regout_read <= 0;
+					regout_addrvalid <= 1;
 					if (ftdi_rxf_n == 0) begin
 						ftdi_rd_n <= 0;
 						ftdi_wr_n <= 1;
@@ -256,9 +265,8 @@ module reg_main(
 					end else begin					
 						ftdi_rd_n <= 1;
 						ftdi_wr_n <= 1;
-						state <= `BYTECNTLSB;
+						state <= `BYTECNTLSBWAIT;
 					end
-					
 				end
 				
 				`BYTECNTMSB: begin
@@ -274,7 +282,9 @@ module reg_main(
 					if(state_new == `DATARD1) begin
 						ftdi_isOutput <= 1;
 						regout_read <= 1;
+						bytecnt <= 16'h0000;
 					end else begin
+						bytecnt <= 16'hFFFF;
 						ftdi_isOutput <= 0;
 						regout_read <= 0;
 					end					
@@ -284,16 +294,17 @@ module reg_main(
 					regout_addrvalid <= 1;	
                ftdi_isOutput <= 0;
                ftdi_wr_n <= 1;
+					regout_read <= 0;
+					regout_write <= 0;
 					
                if (ftdi_rxf_n == 0) begin
                   ftdi_rd_n <= 0;
-						regout_write <= 1;
                   state <= `DATAWR2;
+						bytecnt <= bytecnt + 16'd1;
                end else begin
                   ftdi_rd_n <= 1;
-						regout_write <= 0;
-                  state <= `DATAWR1;
-               end
+                  state <= `DATAWR1;						
+               end			
 										
              end
                
@@ -301,18 +312,15 @@ module reg_main(
                ftdi_isOutput <= 0;
                ftdi_wr_n <= 1;
                ftdi_rd_n <= 1;
-					regout_write <= 0;
+					regout_write <= 1;
+					regout_read <= 0;
+					regout_addrvalid <= 1;
 														
 					if (bytecnt == (total_bytes-1)) begin
-						regout_addrvalid <= 0;
 						state <= `IDLE;         
-					end else begin
-						regout_addrvalid <= 1;
+					end else begin					
 						state <= `DATAWR1;
-					end
-					
-					bytecnt <= bytecnt + 16'd1;
-
+					end					
 				end
 				
 				`DATARD1: begin
@@ -403,7 +411,7 @@ module reg_main(
 	assign cs_data[51:44] = total_bytes;
 	assign cs_data[67:52] = bytecnt;
 	assign cs_data[16] = regout_read;
-	//assign cs_data[:68] = reg_datai;
+	assign cs_data[75:68] = reg_datai;
  `endif
 
  

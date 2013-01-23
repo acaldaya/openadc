@@ -6,7 +6,7 @@ or the codebase at http://www.assembla.com/spaces/openadc .
 
 This file is the main interface.
 
-Copyright (c) 2012-2013, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
 This project (and file) is released under the 2-Clause BSD License:
 
 Redistribution and use in source and binary forms, with or without 
@@ -30,18 +30,32 @@ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 *************************************************************************/
-module openadc_interface(
+
+module interface(
     input         reset_i,
     
-	 /* Fast Clock - ADC Internal Mode. Typically 100 MHz */
-	 input         clk_adcint,
+`ifdef AVNET
+    input         clk_40mhz,
+    input         clk_100mhz,
+	 inout			sda,
+	 inout			scl,
+`endif
+
+`ifdef DLP_HS_FPGA
+	 input			clk_66mhz,
+`endif
+
+`ifdef NEXYS2
+	 input			clk_50mhz,
+`endif
+
+`ifdef SASEBOW
+	 input         clk_100mhz,
+	 input			clk_24mhz,
+	 input			ADC_clk_feedback,
 	 
-	 /* Slower Clock - USB Interface, serial, etc. Typically ~20-60 MHz */
-	 input			clk_iface,
-	  
-`ifdef FAST_FTDI	 
-	/* Interface for FT2232H in Fast Syncronous Mode. Connect the
-      FIFO Clock to 'clk_iface'. */
+`ifdef FAST_FTDI
+	 input			ftdi_clk,	 
 	 inout [7:0]  	ftdi_data,
 	 input			ftdi_rxfn,
 	 input			ftdi_txen,
@@ -49,24 +63,21 @@ module openadc_interface(
 	 output		 	ftdi_wrn,
 	 output		 	ftdi_oen,	
 	 output			ftdi_siwua,
-`else
-	 //Assume serial
-    input         rxd,
-    output        txd,	 
-`endif	 
-
-       
-	 /* LEDs. Connect up any you wish. */
-    output        LED_hbeat, /* Heartbeat LED */
-    output        LED_armed, /* Armed LED */
-    output        LED_capture, /* Capture in Progress LED (only illuminate during capture, very quick) */
+`endif
 	 
-	 /* OpenADC Interface Pins */
+`endif
+	 
+    input         rxd,
+    output        txd,
+       
+    output        GPIO_LED1,
+    output        GPIO_LED2,
+    output        GPIO_LED3,
+    output        GPIO_LED4,
+	 
 	 input [9:0]   ADC_Data,
 	 input         ADC_OR,
 	 output        ADC_clk,
-	 /* Feedback path for ADC Clock. If unused connect to ADC_clk */
-	 input			ADC_clk_feedback,
 	 input         DUT_CLK_i,
 	 input         DUT_trigger_i,
 	 output        amp_gain,
@@ -109,31 +120,68 @@ module openadc_interface(
 	 output        eth_tx_en
 `endif
 
+`ifdef USE_SCARD
+	,input			scard_present,
+	output			scard_rst,
+	inout 			scard_io
+`endif
 
-	/* Connections to external registers. Use clk_iface for
-      clocking	*/
-	 ,output			reg_reset_o,
-	 output [5:0]	reg_address_o,
-	 output [15:0] reg_bytecnt_o,
-	 output [7:0]	reg_datao_o,
-	 input  [7:0]  reg_datai_i,
-	 output [15:0] reg_size_o,
-	 output			reg_read_o,
-	 output			reg_write_o,
-	 output			reg_addrvalid_o,
-	 input			reg_stream_i,
-	 output [5:0]	reg_hypaddress_o,
-	 input  [15:0]	reg_hyplen_i 
     );
 
+/*
+  wire [35:0]                          chipscope_control;
+  coregen_icon icon (
+    .CONTROL0(chipscope_control) // INOUT BUS [35:0]
+   ); 
+
+   wire [127:0] cs_data;
+    
+   coregen_ila ila (
+    .CONTROL(chipscope_control), // INOUT BUS [35:0]
+    .CLK(ftdi_clk), // IN
+    .TRIG0(cs_data) // IN BUS [127:0]
+   );
+	
+	assign cs_data[7:0] = ftdi_data;
+	assign cs_data[8] = ftdi_rxfn;
+	assign cs_data[9] = ftdi_txen;
+	assign cs_data[10] = ftdi_rdn;
+	assign cs_data[11] = ftdi_wrn;
+	assign cs_data[12] = ftdi_oen;
+*/
 	wire        slowclock;
-	wire 			clk_100mhz_buf, clk_100mhz; 	
+	wire 			clk_100mhz_buf; 	
 	wire			dcm_locked;
 	wire 			reset_intermediate;
 	
+`ifdef AVNET
+	assign slowclock = clk_40mhz;
+	//These need pull-ups enabled to avoid screwing up parts on board
+	assign scl = 1'bz;
+	assign sda = 1'bz;
+`endif
 
-	assign slowclock = clk_iface;
-	assign clk_100mhz = clk_adcint;
+`ifdef DLP_HS_FPGA
+	wire clk_100mhz;
+	assign clk_100mhz = clk_66mhz;
+	assign slowclock = clk_100mhz_buf;
+`endif
+
+`ifdef SASEBOW
+
+`ifdef FAST_FTDI
+	assign slowclock = ftdi_clk;
+`else
+	assign slowclock = clk_24mhz;
+`endif
+	assign clk_100mhz_buf = clk_100mhz;
+`endif
+	
+`ifdef NEXYS2
+	wire clk_100mhz;
+	assign clk_100mhz = clk_50mhz;
+	assign slowclock = clk_100mhz_buf;
+`endif
 	
 	wire       phase_clk;
 	wire [8:0] phase_requested;
@@ -144,8 +192,10 @@ module openadc_interface(
 	wire 			adc_capture_go;
 	wire			adc_capture_done;
 	wire			armed;	  
-   wire        reset;                     
-	  
+   wire        reset;
+                      
+   assign GPIO_LED1 = ~reset_i;   
+  
    //Divide clock by 2^24 for heartbeat LED
 	//Divide clock by 2^25 for frequency measurement
    reg [25:0] timer_heartbeat;
@@ -157,9 +207,9 @@ module openadc_interface(
       end	
       
    //Blink heartbeat LED
-   assign LED_hbeat = timer_heartbeat[24];
-	assign LED_armed = armed;
-   assign LED_capture = adc_capture_go;
+   assign GPIO_LED2 = timer_heartbeat[24];
+	assign GPIO_LED3 = armed;
+   assign GPIO_LED4 = adc_capture_go;
  
 	//Frequency Measurement
 	wire freq_measure;
@@ -210,6 +260,7 @@ module openadc_interface(
     .CONTROL0(chipscope_control) // INOUT BUS [35:0]
    ); 
   
+/*
 	wire [127:0] cs_data;
     
    coregen_ila ila (
@@ -217,6 +268,7 @@ module openadc_interface(
     .CLK(ADC_clk_sample), // IN
     .TRIG0(cs_data) // IN BUS [127:0]
    );
+*/
 `endif 
 	
 	//1 = trigger on high, 0 = trigger on low
@@ -281,33 +333,9 @@ module openadc_interface(
 	wire [31:0] maxsamples;
 	
 `ifdef FAST_FTDI	 	
-
-	 reg [7:0] cmdfifo_delay;
-	 reg [7:0] cmdfifo_delay2;
-	 /* FTDI FIFO already has a byte ready when it puts RXF active. Our
-       system assumes bytes don't come until the read pin is asserted,
-       so need to add a delay, and also account for the rxf pin being
-		 deasserted too fast. */
-	 always @(posedge slowclock) begin
-		if (cmdfifo_rd == 0) begin
-			cmdfifo_delay <= ftdi_data;
-		end
-	 end
-	 
-	 reg ftdi_rxfn_dly;
-	 reg ftdi_rxfn_dly2;
-	 always @(posedge slowclock or negedge ftdi_rxfn) begin
-		if (ftdi_rxfn == 0) begin
-			ftdi_rxfn_dly <= 0;
-		end else if (cmdfifo_rd == 0) begin
-			ftdi_rxfn_dly <= ftdi_rxfn;
-		end
-	 end
- 
     assign ftdi_data = cmdfifo_isout ? cmdfifo_dout : 8'bZ;
-	 assign cmdfifo_din = cmdfifo_delay;
-	 //assign cmdfifo_rxf = ~ftdi_rxfn;
-	 assign cmdfifo_rxf = ~ftdi_rxfn_dly;
+	 assign cmdfifo_din = ftdi_data;
+	 assign cmdfifo_rxf = ~ftdi_rxfn;
 	 assign cmdfifo_txe = ~ftdi_txen;
 	 assign ftdi_rdn = ~cmdfifo_rd;
 	 assign ftdi_wrn = ~cmdfifo_wr;
@@ -325,7 +353,35 @@ module openadc_interface(
 										  .cmdfifo_din(cmdfifo_din),
 										  .cmdfifo_dout(cmdfifo_dout));	
 `endif
-		
+											  
+`ifdef USE_SCARD
+
+	 
+	 wire [7:0] scard_cla, scard_ins, scard_p1, scard_p2, scard_async_data;
+	 wire [4:0] scard_len_command, scard_len_response;
+	 wire [127:0] scard_command, scard_response;
+    wire scard_docmd, scard_busy, scard_async_datardy, scard_status;
+	 wire [15:0] scard_resp_code;
+
+	 serial_scard_hls_iface scard_inst(.reset_i(reset),
+													.clk_i(slowclock),
+													.scard_io(scard_io),
+													.scard_cla(scard_cla),
+													.scard_ins(scard_ins),
+													.scard_p1(scard_p1),
+													.scard_p2(scard_p2),
+													.scard_len_command(scard_len_command),
+													.scard_command(scard_command),
+													.scard_len_response(scard_len_response),
+													.scard_response(scard_response),
+													.scard_status(scard_status),
+													.scard_resp_code(scard_resp_code),	
+													.async_data(scard_async_data),
+													.async_datardy(scard_async_datardy),
+													.do_cmd(scard_docmd),
+													.busy(scard_busy));	
+`endif
+
 
 `ifdef USE_ETH
 	wire [7:0]  ethusr_data;
@@ -373,6 +429,82 @@ module openadc_interface(
 	 assign eth_tx_en = 1'b0;
 `endif
 
+//`undef CHIPSCOPE
+/*
+   usb_interface usb(.reset_i(reset_i),
+							.reset_o(reset_intermediate),
+                     .clk(slowclock),
+							.cmdfifo_rxf(cmdfifo_rxf),
+							.cmdfifo_txe(cmdfifo_txe),
+							.cmdfifo_rd(cmdfifo_rd),
+							.cmdfifo_wr(cmdfifo_wr),
+							.cmdfifo_din(cmdfifo_din),
+							.cmdfifo_dout(cmdfifo_dout),
+							.cmdfifo_isout(cmdfifo_isout),
+							.gain(PWM_incr),
+                     .hilow(amp_hilo),
+							.status(reg_status),
+							.fifo_empty(ddrfifo_empty),
+							.fifo_data(ddrfifo_dout),
+							.fifo_rd_en(ddrfifo_rd_en),
+							.fifo_rd_clk(ddrfifo_rd_clk),                     
+							.cmd_arm(cmd_arm),
+							.trigger_mode(trigger_mode),
+							.trigger_wait(trigger_wait),  
+							.trigger_source(trigger_source),
+							.trigger_level(trigger_level),
+							.trigger_now(trigger_now),
+							.extclk_frequency(extclk_frequency),							
+							.phase_o(phase_requested),
+							.phase_ld_o(phase_load),
+							.phase_i(phase_actual),
+							.phase_done_i(phase_done),
+							.phase_clk_o(phase_clk),
+							.maxsamples_i(maxsamples_limit),
+							.maxsamples_o(maxsamples),
+							.adc_clk_src_o(ADC_clk_selection)
+`ifdef USE_DDR
+							, .ddr_address(ddr_read_address),
+							.ddr_rd_req(ddr_read_req),
+							.ddr_rd_done(ddr_read_done)
+`endif
+
+`ifdef USE_ETH
+							, .eth_clk(ethusr_clk),
+							.eth_clken(ethusr_clken),
+							.eth_start(ethusr_start),
+							.eth_done(ethusr_done),
+							.eth_datalen(ethusr_datalen),
+							.eth_data(ethusr_data)
+`endif
+							
+`ifdef USE_SCARD
+							,.scard_cla(scard_cla),
+							.scard_ins(scard_ins),
+							.scard_p1(scard_p1),
+							.scard_p2(scard_p2),
+							.scard_len_command(scard_len_command),
+							.scard_command(scard_command),
+							.scard_len_response(scard_len_response),
+							.scard_response(scard_response),
+							.scard_status(scard_status),
+							.scard_resp_code(scard_resp_code),
+							.scard_async_data(scard_async_data),
+							.scard_async_datardy(scard_async_datardy),							
+							.scard_present(scard_present),
+							.scard_reset(scard_rst),
+							.scard_docmd(scard_docmd),
+							.scard_busy(scard_busy)
+`endif
+
+`ifdef CHIPSCOPE                     
+                     , .chipscope_control(chipscope_control)
+`endif
+
+                     );  
+*/
+
+
 	wire reg_clk;
 	wire [5:0] reg_address;
 	wire [15:0] reg_bytecnt;
@@ -383,8 +515,7 @@ module openadc_interface(
 	wire reg_addrvalid;
 	wire [5:0] reg_hypaddress;
 	wire reg_stream;
-	wire [7:0] reg_datai_fifo;
-	wire [7:0] reg_datai_oadc;
+	wire [7:0] reg_datai;
 	wire [15:0] reg_hyplen;
 	
 	reg_main registers_mainctl (
@@ -401,7 +532,7 @@ module openadc_interface(
 		.reg_address(reg_address), 
 		.reg_bytecnt(reg_bytecnt), 
 		.reg_datao(reg_datao), 
-		.reg_datai(reg_datai_fifo | reg_datai_oadc | reg_datai_i), 
+		.reg_datai(reg_datai), 
 		.reg_size(reg_size), 
 		.reg_read(reg_read), 
 		.reg_write(reg_write), 
@@ -420,7 +551,7 @@ module openadc_interface(
 		.clk(reg_clk),
 		.reg_address(reg_address), 
 		.reg_bytecnt(reg_bytecnt), 
-		.reg_datao(reg_datai_oadc), 
+		.reg_datao(reg_datai), 
 		.reg_datai(reg_datao), 
 		.reg_size(reg_size), 
 		.reg_read(reg_read), 
@@ -457,7 +588,7 @@ module openadc_interface(
 		.clk(reg_clk),
 		.reg_address(reg_address), 
 		.reg_bytecnt(reg_bytecnt), 
-		.reg_datao(reg_datai_fifo), 
+		.reg_datao(reg_datai), 
 		.reg_datai(reg_datao), 
 		.reg_size(reg_size), 
 		.reg_read(reg_read), 
@@ -472,17 +603,8 @@ module openadc_interface(
 		.fifo_rd_clk(ddrfifo_rd_clk)
 	);
 
-	assign reg_stream = reg_stream_fifo | reg_stream_openadc | reg_stream_i;
-	assign reg_hyplen = reg_hyplen_fifo | reg_hyplen_openadc | reg_hyplen_i;
-	
-	assign reg_reset_o = reset;
-	assign reg_address_o = reg_address;
-	assign reg_bytecnt_o = reg_bytecnt;
-	assign reg_datao_o = reg_datao;
-	assign reg_read_o = reg_read;
-	assign reg_write_o = reg_write;
-	assign reg_addrvalid_o = reg_addrvalid;
-	assign reg_hypaddress_o = reg_hypaddress;
+	assign reg_stream = reg_stream_fifo | reg_stream_openadc;
+	assign reg_hyplen = reg_hyplen_fifo | reg_hyplen_openadc;
 	
 `undef CHIPSCOPE
 	clock_managment genclocks(
@@ -569,8 +691,10 @@ module openadc_interface(
     .reset_i(reset_intermediate),
 	 .reset_o(reset),
 
+`ifndef SASEBOW
     .clk_100mhz_in(clk_100mhz),
 	 .clk_100mhz_out(clk_100mhz_buf),
+`endif
 	 
 	 //ADC Sample Input
 	 .adc_datain(ADC_Data_tofifo),

@@ -94,7 +94,7 @@ module reg_openadc_adcfifo(
 	
 	 reg [7:0] reg_datao_reg;
 	 reg reg_datao_valid_reg;
-	 assign reg_datao = (reg_datao_valid_reg /*& reg_read*/) ? reg_datao_reg : 8'bZZZZZZZZ;
+	 assign reg_datao = (reg_datao_valid_reg /*& reg_read*/) ? reg_datao_reg : 8'd0;
 
 
 	 always @(posedge clk) begin
@@ -108,15 +108,16 @@ module reg_openadc_adcfifo(
 		end
 	 end
 	  
-	 always @(reg_address, reg_addrvalid, reg_bytecnt, fifo_data) begin
-		if (reg_addrvalid) begin
+//	 always @(reg_address, reg_addrvalid, reg_bytecnt, fifo_data) begin
+	 always @(posedge clk) begin
+		if (reg_read) begin
+//		if (reg_addrvalid) begin
 			case (reg_address)
 				`ADCREAD_ADDR: reg_datao_reg <= (reg_bytecnt == 0) ? 8'hAC : fifo_data; 
 				default: reg_datao_reg <= 0;	
 			endcase
-		end else begin
-			reg_datao_reg <= 0;
 		end
+	//	end
 	 end
 
 /*
@@ -136,7 +137,8 @@ module reg_openadc_adcfifo(
  */
  
 	 always @(reg_read, reg_address, reg_bytecnt) begin
-		 if ((reg_read == 1) && (reg_address == `ADCREAD_ADDR) && (reg_bytecnt > 16'd1)) begin
+	 //always @(posedge clk) begin
+		 if ((reg_read == 1) && (reg_address == `ADCREAD_ADDR) && (reg_bytecnt > 16'd0)) begin
 			fifo_rd_en_reg <= 1;
 		 end else begin
 			fifo_rd_en_reg <= 0;

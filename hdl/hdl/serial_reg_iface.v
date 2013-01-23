@@ -34,6 +34,29 @@ module serial_reg_iface(
 	assign tx_o = tx_out;
 	assign reset = reset_i;
 
+
+	reg cmdfifo_rxf;
+	reg [7:0] dataout;
+	wire [7:0] data;
+	wire data_ready;
+	assign cmdfifo_din = dataout;
+
+	always @(posedge clk) begin
+		if (data_ready) begin
+			dataout <= data;
+		end
+	end
+	
+	always @(posedge clk or posedge cmdfifo_rd) begin
+		if (cmdfifo_rd) begin
+			cmdfifo_rxf <= 0;
+		end else begin
+			if (data_ready) begin
+				cmdfifo_rxf <= 1;
+			end
+		end
+	end
+
 	//Serial
     wire txbusy;
     async_transmitter AT (.clk(clk),
@@ -46,7 +69,7 @@ module serial_reg_iface(
                 
     async_receiver AR (.clk(clk),
                    .RxD(rx_in),
-                   .RxD_data_ready(cmdfifo_rxf),
-                   .RxD_data(cmdfifo_din),
+                   .RxD_data_ready(data_ready),
+                   .RxD_data(data),
 						 .RxD_endofpacket());
 endmodule

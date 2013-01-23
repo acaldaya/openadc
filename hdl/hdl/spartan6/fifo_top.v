@@ -79,9 +79,13 @@ module fifo_top(
 	assign			adc_capture_stop = adc_capture_stop_reg;
 	
 	
+	`ifdef NOBUFG_ADCCLK
+	assign clk_100mhz_out = clk_100mhz_in;
+	`else	
 	IBUFG IBUFG_inst (
 	.O(clk_100mhz_out),
 	.I(clk_100mhz_in) );
+	`endif
 		
 	assign reset_o = reset_i;
 	

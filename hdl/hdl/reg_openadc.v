@@ -176,7 +176,7 @@ module reg_openadc(
 
 	 reg [7:0] reg_datao_reg;
 	 reg reg_datao_valid_reg;
-	 assign reg_datao = (reg_datao_valid_reg/*& reg_read*/) ? reg_datao_reg : 8'bZZZZZZZZ;
+	 assign reg_datao = (reg_datao_valid_reg/*& reg_read*/) ? reg_datao_reg : 8'd0;
 
 	 always @(posedge clk) begin	
 		if (reg_addrvalid) begin
@@ -206,8 +206,8 @@ module reg_openadc(
 		end
 	 end
 	 
-	 always begin
-		if (reg_addrvalid) begin
+	 always @(posedge clk) begin
+		if (reg_read) begin
 			case (reg_address)
 				`GAIN_ADDR: reg_datao_reg <= registers_gain; 
 				`SETTINGS_ADDR: reg_datao_reg <= registers_settings;
@@ -219,8 +219,6 @@ module reg_openadc(
 				`OFFSET_ADDR: reg_datao_reg <= registers_offset[reg_bytecnt*8 +: 8];
 				default: reg_datao_reg <= 0;	
 			endcase
-		end else begin
-			reg_datao_reg <= 0;
 		end
 	 end
 
