@@ -145,11 +145,17 @@ module reg_openadc_adcfifo(
 		 end
 	 end
   	 
-	 always begin
-		if ((fifo_empty == 1) || (reset == 1) || (reg_addrvalid == 0) || (reg_address != `ADCREAD_ADDR)) begin
+	 //always begin
+	 wire stream_rst;
+	 assign stream_rst = fifo_empty | reset | ~reg_addrvalid;
+	 always  @(posedge clk or posedge stream_rst) begin
+		//if ((fifo_empty == 1) || (reset == 1) || (reg_addrvalid == 0) || (reg_address != `ADCREAD_ADDR)) begin
+		if (stream_rst == 1) begin
 			reg_stream_reg <= 0;
-		end else if ((reg_addrvalid == 1) && (reg_address == `ADCREAD_ADDR)) begin
-			reg_stream_reg <= 1;
+		end else begin
+			if ((reg_addrvalid == 1) && (reg_address == `ADCREAD_ADDR)) begin
+				reg_stream_reg <= 1;
+			end
 		end
 	 end
 			

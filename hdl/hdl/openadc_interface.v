@@ -281,7 +281,6 @@ module openadc_interface(
 	wire [31:0] maxsamples;
 	
 `ifdef FAST_FTDI	 	
-
 	 reg [7:0] cmdfifo_delay;
 	 reg [7:0] cmdfifo_delay2;
 	 /* FTDI FIFO already has a byte ready when it puts RXF active. Our
@@ -295,8 +294,7 @@ module openadc_interface(
 	 end
 	 
 	 reg ftdi_rxfn_dly;
-	 reg ftdi_rxfn_dly2;
-	 always @(posedge slowclock or negedge ftdi_rxfn) begin
+	 always @(negedge slowclock or negedge ftdi_rxfn) begin
 		if (ftdi_rxfn == 0) begin
 			ftdi_rxfn_dly <= 0;
 		end else if (cmdfifo_rd == 0) begin
