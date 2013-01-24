@@ -3,8 +3,8 @@
 # This file is part of the OpenADC Project. See www.newae.com for more details,
 # or the codebase at http://www.assembla.com/spaces/openadc .
 #
-# Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
-# This project is released under the Modified FreeBSD License. See LICENSE
+# Copyright (c) 2012-2013, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+# This project is released under the 2-Clause BSD License. See LICENSE
 # file which should have came with this code.
 
 import sys
@@ -15,97 +15,68 @@ import logging
 import math
 import serial
 import openadc
-os.environ["QT_API"] = "pyside"
-import matplotlib
-matplotlib.use("Qt4Agg")
-from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
+import pyqtgraph as pg
 from PySide.QtCore import *
 from PySide.QtGui import *
 
-class pysideGraph():
-    def __init__(self, name="", xmin=0, xmax=1, ymin=-1.0, ymax=1.0, xfigsize=600, yfigsize=600):
-        self.gb = QGroupBox("Results Preview")
-        self.fig = Figure(figsize=(xfigsize,yfigsize), dpi=72)
-        self.fig_ax =  self.fig.add_subplot(111)
-        self.fig_ax.plot([0,0])
-        clocklayout = QVBoxLayout()
-        canvas = FigureCanvas(self.fig)
-        layout = QVBoxLayout()
-        layout.addWidget(canvas)
-        settingsLayout = QGridLayout()
-      
-        self.xmin = QSpinBox()
-        self.xmin.setMinimum(xmin)
-        self.xmin.setMaximum(xmax)
-        self.xmax = QSpinBox()
-        self.xmax.setMinimum(xmin)
-        self.xmax.setMaximum(xmax)
-        self.ymin = QDoubleSpinBox()
-        self.ymin.setMinimum(ymin)
-        self.ymin.setMaximum(ymax)
-        self.ymin.setDecimals(5)
-        self.ymax = QDoubleSpinBox()
-        self.ymax.setMinimum(ymin)
-        self.ymax.setMaximum(ymax)
-        self.ymin.setValue(ymin)
-        self.ymax.setValue(ymax)
-        self.xmin.setValue(xmin)
-        self.xmax.setValue(xmax)
-        self.ymax.setDecimals(5)
+class previewWindow():
+    def __init__(self):
+        pg.setConfigOption('background', 'w')
+        pg.setConfigOption('foreground', 'k')
+        
+        self.pw = pg.PlotWidget(name="Trace Preview")
+        self.pw.setLabel('bottom', 'Sample Number')
+        self.pw.setLabel('left', 'Value')
+        vb = self.pw.getPlotItem().getViewBox()
+        vb.setMouseMode(vb.RectMode)
+            
+        self.dock = QDockWidget("Trace Preview")
+        self.dock.setAllowedAreas(Qt.BottomDockWidgetArea | Qt.RightDockWidgetArea| Qt.LeftDockWidgetArea)
+        self.dock.setWidget(self.pw)
+
+        self.settings = QGroupBox("Gain Settings");
+        layout = QGridLayout()
+        self.settings.setLayout(layout)
 
         self.persistant = QCheckBox("Persistance")
+        clearPB = QPushButton("Clear")
+        clearPB.clicked.connect(self.pw.clear)        
+        layout.addWidget(self.persistant, 0, 0)
+        layout.addWidget(clearPB, 0, 1)
+        
+        self.colour = QSpinBox()
+        self.colour.setMinimum(0)
+        self.colour.setMaximum(7)
+        self.autocolour = QCheckBox("Auto Colour")
+        layout.addWidget(QLabel("Colour"), 1, 0)
+        layout.addWidget(self.colour, 1, 1)
+        layout.addWidget(self.autocolour, 1, 2)
 
-        settingsLayout.addWidget(QLabel("X Limits:"), 0, 0)
-        settingsLayout.addWidget(self.xmin, 0, 1)
-        settingsLayout.addWidget(self.xmax, 0, 2)
-        settingsLayout.addWidget(QLabel("Y Limits:"), 1, 0)
-        settingsLayout.addWidget(self.ymin, 1, 1)
-        settingsLayout.addWidget(self.ymax, 1, 2)
-        settingsLayout.addWidget(self.persistant, 1, 3)
-        layout.addLayout(settingsLayout)       
-        self.gb.setLayout(layout)
+    def addDock(self, mainWindow):
+        '''Pass the main window, adds the dock for you'''
+        mainWindow.addDockWidget(Qt.BottomDockWidgetArea,self.dock)
 
-        self.xmin.valueChanged.connect(self.updateAxis)
-        self.xmax.valueChanged.connect(self.updateAxis)
-        self.ymin.valueChanged.connect(self.updateAxis)
-        self.ymax.valueChanged.connect(self.updateAxis)
+    def getSetupWidget(self):
+        '''Returns the setup widget for the preview graph'''
+        return self.settings
 
-    def getWidget(self):
-        return self.gb
-
-    def updateAxis(self):
-        self.fig_ax.axis([self.xmin.value(), self.xmax.value(), self.ymin.value(), self.ymax.value()])
-        self.redraw()
-
-    def redraw(self):
-        self.fig.canvas.draw()
-            
-    def updateData(self, data=None):
-        if data:
-            if self.persistant.isChecked() == False:
-                self.fig_ax.cla()
-                
-            self.fig_ax.plot(data)
-
-        if self.xmin.value() == self.xmax.value():
-            cursettings = self.fig_ax.axis()
-            self.xmin.setValue(cursettings[0])
-            self.xmax.setValue(cursettings[1])
-            self.ymin.setValue(cursettings[2])
-            self.ymax.setValue(cursettings[3])
+    def updateData(self, data):
+        if self.persistant.isChecked():
+            if self.autocolour.isChecked():
+                nc = (self.colour.value() + 1) % 8
+                self.colour.setValue(nc)            
         else:
-            self.updateAxis()
-
-        self.redraw()
+            self.pw.clear()
+            
+        self.pw.plot(data, pen=(self.colour.value(),8))
+        
 
 class OpenADCQt():
-
-    def __init__(self, parent=None, includePreview=True):
+    def __init__(self, MainWindow=None, includePreview=True):
         self.offset = 0.5
         self.ser = None
         self.sc = None
-        self.setupLayout(parent, includePreview)
+        self.setupLayout(MainWindow, includePreview)
 
     def setEnabled(self, mode):        
         self.gainlow.setEnabled(mode)
@@ -122,7 +93,7 @@ class OpenADCQt():
         self.clockExternal.setEnabled(mode)
         
 
-    def setupLayout(self, parent, includePreview=True):
+    def setupLayout(self, MainWindow, includePreview=True):
         vlayout = QVBoxLayout()
         layout = QGridLayout()
         
@@ -246,16 +217,16 @@ class OpenADCQt():
         self.freqDisp.setSegmentStyle(QLCDNumber.Flat)
         layout.addWidget(status, 3, 0)    
 
+        vlayout.addLayout(layout)
+
         ###### Graphical Preview Window
         if includePreview:
-            self.preview = pysideGraph("Preview", 0, 100000, -0.5, 0.5)
-            vlayout.addWidget(self.preview.getWidget())
+            self.preview = previewWindow()
+            self.preview.addDock(MainWindow)
+            vlayout.addWidget(self.preview.getSetupWidget())
         else:
             self.preview = None
-#        self.preview.getWidget().setSizePolicy(QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed))
-        
-        vlayout.addLayout(layout)
-              
+                  
         self.masterLayout = vlayout
 
         self.trigmode = 0
@@ -270,9 +241,9 @@ class OpenADCQt():
 
     def setMaxSample(self, samples):
         self.samples.setMaximum(samples)
-        self.maxSamplesLabel.setText("Max Samples: %d"%samples)
-        if self.preview:
-            self.preview.xmax.setMaximum(samples)
+        #self.maxSamplesLabel.setText("Max Samples: %d"%samples)
+        #if self.preview:
+        #            self.preview.xmax.setMaximum(samples)
         
     def readAllSettings(self):
 
@@ -349,7 +320,6 @@ class OpenADCQt():
         self.sc.setMaxSamples(samples)
 
     def processData(self, data):
-
         fpData = []
 
         lastpt = -100;
@@ -391,7 +361,7 @@ class OpenADCQt():
 
         self.datapoints = self.sc.readData(NumberPoints, progress)
 
-        if update & (self.preview != None):
+        if update & (self.preview != None):               
             self.preview.updateData(self.datapoints)
 
         return True
@@ -453,9 +423,6 @@ class OpenADCQt():
         if self.sc.getPhase():
             print "Phase      = %d"%self.sc.getPhase()
         print "Status Reg = 0x%2x"%self.sc.getStatus()
-        #print "Samples Captured = %d"%self.sc.getMaxSamples()
-
-        #print "SCard = 0x%2x"%self.sc.scGetStatus()
         
     def ADCconnect(self, ser):
 

@@ -125,8 +125,8 @@ class serialOpenADCInterface:
         ### Send out serial port
         self.serial.write(str(message))
 
-        for b in message: print "%02x "%b,
-        print ""               
+        #for b in message: print "%02x "%b,
+        #print ""               
 
         ### Wait Response (if requested)
         if (mode == CODE_READ):
