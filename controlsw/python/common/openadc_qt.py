@@ -34,7 +34,7 @@ class previewWindow():
         self.dock.setAllowedAreas(Qt.BottomDockWidgetArea | Qt.RightDockWidgetArea| Qt.LeftDockWidgetArea)
         self.dock.setWidget(self.pw)
 
-        self.settings = QGroupBox("Gain Settings");
+        self.settings = QGroupBox("Trace Preview Settings");
         layout = QGridLayout()
         self.settings.setLayout(layout)
 
@@ -241,9 +241,7 @@ class OpenADCQt():
 
     def setMaxSample(self, samples):
         self.samples.setMaximum(samples)
-        #self.maxSamplesLabel.setText("Max Samples: %d"%samples)
-        #if self.preview:
-        #            self.preview.xmax.setMaximum(samples)
+        self.maxSamplesLabel.setText("Max Samples: %d"%samples)
         
     def readAllSettings(self):
 

@@ -23,12 +23,18 @@ import scan
 from PySide.QtCore import *
 from PySide.QtGui import *
 
-import ftd2xx as ft
+#Non-Critical Imports
+try:
+    import ftd2xx as ft
+except ImportError:
+    ft = None
+    ft_str = sys.exc_info()
+    print ft_str
 
-import numpy as np
-import scipy as sp
-import matplotlib as mp
-import pylab as pl
+#import numpy as np
+#import scipy as sp
+#import matplotlib as mp
+#import pylab as pl
 
 class SerialADCLayout():
     def __init__(self):
@@ -105,59 +111,72 @@ class SerialADCLayout():
     def __del__(self):
         self.ser.close()
 
-class FTDIOpenADC():
-    def __init__(self, name):
-        self.adc = ft.openEx(name)
-        self.adc.setTimeouts(1000, 1000)
-    
-    def write(self, a):
-        self.adc.write(str(a))
+class FTDIADCLayout():
+    def __init__(self):
+        self.gb = QGroupBox("Connection Settings");
+        layout = QGridLayout()
 
-    def read(self, n):
-        return self.adc.read(n)
+        self.serialList = QComboBox()
+        layout.addWidget(QLabel("Serial Num:"), 0, 0)
+        layout.addWidget(self.serialList, 0, 1)
 
-    def flushInput(self):
-        return
-  
-class MainWindow(QMainWindow):
+        self.mode = QComboBox()
+        self.mode.addItem("Sync (Dual-Channel)")
+        self.mode.addItem("ASync (Single-Channel)")
+        layout.addWidget(QLabel("FIFO Mode:"), 1, 0)
+        layout.addWidget(self.mode, 1, 1)
+        self.gb.setLayout(layout)
 
-    def plotSpectrum(self,y,Fs):
-        """
-        Plots a Single-Sided Amplitude Spectrum of y(t)
-        """
-        n = len(y) # length of the signal
-        k = np.arange(n)
-        T = n/Fs
-        frq = k/T # two sides frequency range
-        frq = frq[range(n/2)] # one side frequency range
+        self.ser = None
 
-        Y = sp.fft(y)/n # fft computing and normalization
-        Y = Y[range(n/2)]
+    def setDisabled(self, disable):
+        self.serialList.setDisabled(disable)
+        self.mode.setDisabled(disable)
+        
+    def connect(self):
+        snum = self.serialList.currentText();
+        try:
+            self.ser = ft.openEx(str(snum), ft.ftd2xx.OPEN_BY_SERIAL_NUMBER)
+            #Sync FIFO Requires extra work
+            if self.mode.currentIndex() == 0:
+                self.ser.setBitMode(0x00, 0x40)
+            self.ser.setTimeouts(500, 500)
+            self.ser.setLatencyTimer(2)
+            return True
+        except ft.ftd2xx.DeviceError, e:
+            self.ser = None
+            print e
+            QMessageBox.warning(None, "FTDI Port", "Could not open %s"%snum)
+            return False
+        
+    def getTextName(self):
+        try:
+            return self.ser.name
+        except:
+            return "None?"
 
-        pl.clf()
-            
-        pl.plot(frq,abs(Y),'r') # plotting the spectrum
-        pl.xlabel('Freq (Hz)')
-        pl.ylabel('|Y(freq)|')
-        pl.show()
-        pl.draw()
+    def disconnect(self):
+        self.setDisabled(False)
+        if self.ser:
+            self.ser.close()
+            self.ser = None
 
-        if self.base == None:
-            self.base = max(abs(Y))
+    def update(self):
+        serialnames = ft.listDevices()
+        if serialnames == None:
+            serialnames = [" "]
+        for i in range(0, 255):
+            self.serialList.removeItem(i)
+        self.serialList.addItems(serialnames)
 
-        print "%f"%(10.0*np.log10(max(abs(Y[1:-1]))/self.base))
-                     
+    def __del__(self):
+        self.ser.close()
+ 
+class MainWindow(QMainWindow):                    
     def ADCcapture(self):
         self.oa.ADCarm()
         self.oa.ADCcapture()
 
-        #freq = sp.fft(self.oa.datapoints)
-        #pl.plot(freq)
-        #pl.show()
-        #self.plotSpectrum(self.oa.datapoints, 40000000.0)
-
-        #print "%f (3dB = %f)"%(max(self.oa.datapoints), 0.707*max(self.oa.datapoints))
-              
     def ADCupdate(self):
         self.oa.ADCupdate()
 
@@ -185,8 +204,8 @@ class MainWindow(QMainWindow):
         elif index == 1:
             self.adccon = None
         elif index == 2:
-            self.adccon = None
-            #layout = FTDIADCLayout()
+            self.adccon = self.OADC_FTDI
+
         self.conSettings.setCurrentIndex(index)
         self.adccon.update()
 
@@ -196,6 +215,7 @@ class MainWindow(QMainWindow):
             self.mode.setDisabled(True)
             self.captureButton.setDisabled(False)
             self.startButton.setDisabled(False)
+            self.updateButton.setDisabled(False)
 
             #Failed to open port
             if self.adccon.connect() == False:
@@ -217,6 +237,7 @@ class MainWindow(QMainWindow):
             self.mode.setDisabled(False)
             self.captureButton.setDisabled(True)
             self.startButton.setDisabled(True)
+            self.updateButton.setDisabled(True)
             self.adccon.disconnect()
         
     def __init__(self, parent=None):
@@ -241,8 +262,9 @@ class MainWindow(QMainWindow):
         ## Get an OpenADC Instance
         self.oa = openadc_qt.OpenADCQt(self);
 
-        ##
+        ##Get Connection Instances
         self.OADC_Ser = SerialADCLayout()
+        self.OADC_FTDI = FTDIADCLayout()
 
         #Update the list for default widget
         self.OADC_Ser.update()
@@ -253,7 +275,7 @@ class MainWindow(QMainWindow):
         #Add each group box
         self.conSettings.addWidget(self.OADC_Ser.gb)
         self.conSettings.addWidget(QLabel("FX2 Not Implemented"))
-        self.conSettings.addWidget(QLabel("FTDI Not Implemented"))
+        self.conSettings.addWidget(self.OADC_FTDI.gb)
 
         self.mode = QComboBox()
         self.mode.addItem("Serial")
@@ -274,7 +296,6 @@ class MainWindow(QMainWindow):
         self.startButton.setCheckable(True)
 
         
-        #self.connect(self.connectButton, SIGNAL("clicked()"),self, SLOT("ADCconnect()"))
         self.connect(self.captureButton, SIGNAL("clicked()"),self, SLOT("ADCcapture()"))
         self.connect(self.updateButton, SIGNAL("clicked()"),self,SLOT("ADCupdate()"))
         self.connect(self.startButton, SIGNAL("clicked()"),self,SLOT("ADCloop()"))
@@ -296,10 +317,7 @@ class MainWindow(QMainWindow):
         
         glayout.addWidget(self.conSettings, 0, 0)
         glayout.addLayout(layoutCon, 0, 1)
-        #glayout.addWidget(self.serialList, 0, 0)
-        #glayout.addWidget(self.connectButton, 0, 1)
-        #glayout.addWidget(self.captureButton, 1, 0)
-        #glayout.addWidget(self.readButton, 1, 1)
+        glayout.addWidget(self.captureButton, 1, 0)
         glayout.addWidget(self.updateButton, 1, 1)
         glayout.addWidget(self.startButton, 2, 0)
 
