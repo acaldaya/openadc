@@ -60,10 +60,10 @@ class serialOpenADCInterface:
         self.serial = serial_instance
         self.log = logging.getLogger('serialUsb')
 
-        self.setSettings(SETTINGS_RESET);
+        self.getSettings();
 
         #Send clearing function
-        nullmessage = bytearray([20])
+        nullmessage = bytearray([0]*20)
         
         self.serial.write(str(nullmessage));
 

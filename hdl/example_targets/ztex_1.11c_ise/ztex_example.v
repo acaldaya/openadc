@@ -1,4 +1,5 @@
 `include "includes.v"
+//`define CHIPSCOPE
 /***********************************************************************
 This file is part of the OpenADC Project. See www.newae.com for more details,
 or the codebase at http://www.assembla.com/spaces/openadc .
@@ -42,7 +43,7 @@ module interface(
 	 output			pktend,
 	 input			flaga,
 	 input			flagb,
-	 input [7:0]   fd,
+	 inout [7:0]   fd,
 		 
     output        GPIO_LED1,
     output        GPIO_LED2,
@@ -75,19 +76,40 @@ module interface(
 	 output			LPDDR_RZQ
 `endif
     );
-
+	 
+	 /* Notes on the FX2 Interface:
+	   EP2 is IN (input from FPGA to computer)
+		EP6 is OUT (output from computer to FPGA)
+		FLAGA = EP2 FULL (aka stop writing)
+		FLAGB = EP6 EMPTY (aka stop reading)
+		
+		All signals have active-low polarity
+	 */
+	
 	wire ADC_clk_int;
 	assign ADC_clk = ADC_clk_int;
-	assign GPIO_LED1 = ~reset_i;
+	assign GPIO_LED1 = ~reset_i;	
+	reg sloe_int_last;	
+	assign pktend = ~(sloe_int_last & ~sloe_int);	
+	always @(posedge ifclk_buf) begin
+		sloe_int_last <= sloe_int;
+	end
 	
-	assign pktend = 1'b1;
+	assign sloe = sloe_int;
 	
 	assign fifoadr0 = 1'b0;
-	assign fifoadr1 = 1'b0;
-	assign sloe = 1'b1;
-	assign slrd = 1'b1;
-	assign slwr = 1'b1;
-	
+		
+	/*
+	EP2: ADR1=0
+	EP6: ADR1=1
+	When SLOE_INT is low we are reading (e.g. from EP6). When it goes
+	high we are going to write to EP2.
+	*/
+	reg fifoadr1_reg;
+	always @(posedge ifclk_buf) begin
+		fifoadr1_reg <= ~sloe_int;
+	end
+	assign fifoadr1 = fifoadr1_reg;	
 	wire ifclk_buf;
 	
 	IBUFG IBUFG_inst (
@@ -109,6 +131,14 @@ module interface(
 		.DUT_trigger_i(DUT_trigger_i),
 		.amp_gain(amp_gain),
 		.amp_hilo(amp_hilo),
+				
+		.ftdi_data(fd),
+		.ftdi_rxfn(~flagb),
+		.ftdi_txen(~flaga),
+		.ftdi_rdn(slrd),
+		.ftdi_wrn(slwr),
+		.ftdi_oen(sloe_int),	
+		.ftdi_siwua(),
 		
 		.reg_stream_i(1'b0),
 		.reg_datai_i(8'd0),
@@ -130,4 +160,31 @@ module interface(
 		.LPDDR_RZQ(LPDDR_RZQ)	
 	*/
 	);		 		
+	
+	
+	`ifdef CHIPSCOPE
+   wire [127:0] cs_data;   
+   wire [35:0]  chipscope_control;
+   	
+	coregen_icon icon (
+    .CONTROL0(chipscope_control) // INOUT BUS [35:0]
+   ); 
+
+   coregen_ila ila (
+    .CONTROL(chipscope_control), // INOUT BUS [35:0]
+    .CLK(ifclk_buf), // IN
+    .TRIG0(cs_data) // IN BUS [127:0]
+   );
+	
+  assign cs_data[7:0] = fd;
+  assign cs_data[8] = sloe;
+  assign cs_data[9] = slrd;
+  assign cs_data[10] = slwr;
+  assign cs_data[11] = fifoadr0;
+  assign cs_data[12] = fifoadr1;
+  assign cs_data[13] = pktend;
+  assign cs_data[14] = flaga;
+  assign cs_data[15] = flagb; 
+  `endif
+	
 endmodule

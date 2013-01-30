@@ -30,6 +30,15 @@ except ImportError:
     ft = None
     ft_str = sys.exc_info()
     print ft_str
+    print "ftd2xx import failed. Install XXX from XXX for FTDI support"
+
+try:
+    import usb
+except ImportError:
+    usb = None
+    usb_str = sys.exc_info()
+    print usb_str
+    print "usb import failed. Install pyusb from http://pyusb.sourceforge.net for FX2 Support"
 
 #import numpy as np
 #import scipy as sp
@@ -171,6 +180,84 @@ class FTDIADCLayout():
 
     def __del__(self):
         self.ser.close()
+
+class FX2ADCLayout():
+    def __init__(self):
+        self.gb = QGroupBox("Connection Settings");
+        layout = QGridLayout()
+
+        #self.serialList = QComboBox()
+        #layout.addWidget(QLabel("Serial Num:"), 0, 0)
+        #layout.addWidget(self.serialList, 0, 1)
+
+        #self.mode = QComboBox()
+        #self.mode.addItem("Sync (Dual-Channel)")
+        #self.mode.addItem("ASync (Single-Channel)")
+        #layout.addWidget(QLabel("FIFO Mode:"), 1, 0)
+        #layout.addWidget(self.mode, 1, 1)
+        #self.gb.setLayout(layout)
+
+        self.dev = None
+
+    def setDisabled(self, disable):
+        #self.serialList.setDisabled(disable)
+        #self.mode.setDisabled(disable)
+        return
+        
+    def connect(self):
+        #snum = self.serialList.currentText();
+
+        dev = usb.core.find(idVendor=0x221A, idProduct=0x0100)
+
+        if dev is None:
+            QMessageBox.warning(None, "FX2 Port", "Could not open USB Device")            
+            return False
+        
+         # set the active configuration. With no arguments, the first
+        # configuration will be the active one
+        dev.set_configuration()
+
+        self.dev = dev
+        self.writeEP = 0x06
+        self.readEP = 0x82
+        self.interface = 0
+
+        self.ser = self
+
+        #TODO: Check extended descriptor!!!
+
+        return True
+
+    def read(self, N=0, debug=False):
+        data = self.dev.read(self.readEP, N, self.interface, 500)
+        data = bytearray(data)
+        if debug:
+            print "RX: ",
+            for b in data:
+                print "%02x "%b,
+            print ""
+        return data
+
+    def write(self, data, debug=False):
+        data = bytearray(data)
+        if debug:
+            print "TX: ",
+            for b in data:
+                print "%02x "%b,
+            print ""
+        self.dev.write(self.writeEP, data, self.interface, 500)
+            
+    def getTextName(self):
+        try:
+            return self.ser.name
+        except:
+            return "None?"
+
+    def disconnect(self):
+        self.setDisabled(False)
+
+    def update(self):
+        print "update"
  
 class MainWindow(QMainWindow):                    
     def ADCcapture(self):
@@ -202,7 +289,7 @@ class MainWindow(QMainWindow):
         if index == 0:
             self.adccon = self.OADC_Ser
         elif index == 1:
-            self.adccon = None
+            self.adccon = self.OADC_FX2
         elif index == 2:
             self.adccon = self.OADC_FTDI
 
@@ -226,9 +313,10 @@ class MainWindow(QMainWindow):
             #Find OpenADC
             try:
                 self.oa.ADCconnect(self.adccon.ser)
-            except IOError:
+            except IOError as detail:
                 QMessageBox.warning(None, "OpenADC",
-                        "Opened port but failed to find OpenADC Connected")
+                        "Failed to find OpenADC Connected\nCheck Console for Detail")
+                print detail
                 self.connectButton.setChecked(False)
                 self.connectButton.setText("Connect")
                 return
@@ -264,6 +352,7 @@ class MainWindow(QMainWindow):
 
         ##Get Connection Instances
         self.OADC_Ser = SerialADCLayout()
+        self.OADC_FX2 = FX2ADCLayout()
         self.OADC_FTDI = FTDIADCLayout()
 
         #Update the list for default widget
@@ -274,7 +363,7 @@ class MainWindow(QMainWindow):
 
         #Add each group box
         self.conSettings.addWidget(self.OADC_Ser.gb)
-        self.conSettings.addWidget(QLabel("FX2 Not Implemented"))
+        self.conSettings.addWidget(self.OADC_FX2.gb)
         self.conSettings.addWidget(self.OADC_FTDI.gb)
 
         self.mode = QComboBox()
