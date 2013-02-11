@@ -76,3 +76,6 @@ NET "ifclk" CLOCK_DEDICATED_ROUTE = FALSE;
 
 #NET clk_50mhz TNM_NET = clk_50mhz;
 #TIMESPEC TS_clk_50mhz = PERIOD "clk_50mhz" 50000 KHz HIGH 50%;
+
+NET ifclk TNM_NET = ifclk;
+TIMESPEC TS_ifclk = PERIOD "ifclk" 50000 KHz HIGH 50%;

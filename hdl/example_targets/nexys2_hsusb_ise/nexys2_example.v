@@ -76,7 +76,6 @@ module interface(
 	 output			LPDDR_RZQ
 `endif
     );
-	 wire ifclk_buf;
 	 
 	 /* Notes on the FX2 Interface:
 	   EP2 is IN (input from FPGA to computer)
@@ -88,6 +87,7 @@ module interface(
 	 */
 	
 	wire sloe_int;
+	wire ifclk_buf;
 	wire ADC_clk_int;
 	assign ADC_clk = ADC_clk_int;
 	assign GPIO_LED1 = ~reset_i;	
