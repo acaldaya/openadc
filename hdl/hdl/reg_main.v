@@ -154,12 +154,9 @@ module reg_main(
 	 assign reg_bytecnt = bytecnt;
 	 assign reg_size = total_bytes;
 
-	 assign cmdfifo_ready = 1'b0;
-	 
-	 assign reg_hypaddress = ftdi_din[5:0];
-	 
-	 reg data_vld;
-	 
+	 assign cmdfifo_ready = 1'b0;	 
+	 assign reg_hypaddress = ftdi_din[5:0];	 	 
+		 		 
 	 always @(posedge ftdi_clk) begin
 		laststate <= state;
 	 end
@@ -167,6 +164,17 @@ module reg_main(
 	 //always @(posedge ftdi_clk) begin
 	 always @(reg_datai) begin
 		ftdi_dout <= reg_datai;
+	 end
+	 
+	 reg reg_streamdly;
+	 
+	 always @(posedge ftdi_clk)
+	 begin
+		if (reset == 1) begin
+			reg_streamdly <= 0;
+		end else begin
+			reg_streamdly <= reg_stream;
+		end
 	 end
 	 	 
     always @(posedge ftdi_clk)
@@ -182,18 +190,29 @@ module reg_main(
             `IDLE: begin
 					regout_addrvalid <= 0;
 					regout_read <= 0;
-					regout_write <= 0;
-					data_vld <= 0;
+					regout_write <= 0;					
                if (ftdi_rxf_n == 0) begin
                   ftdi_rd_n <= 0;
                   ftdi_wr_n <= 1;
                   ftdi_isOutput <= 0;
-                  state <= `ADDR;
-               end else begin					
-                  ftdi_rd_n <= 1;
-                  ftdi_wr_n <= 1;
-                  ftdi_isOutput <= 0;
-                  state <= `IDLE;
+                  state <= `ADDR;						
+               end else begin
+						if((reg_streamdly == 0) & (reg_stream == 1)) begin
+							ftdi_wr_n <= 1;
+							ftdi_rd_n <= 1;
+							ftdi_isOutput <= 1;
+							state <= `IDLE;						
+						end else if(reg_streamdly) begin
+							ftdi_wr_n <= 0;
+							ftdi_rd_n <= 1;
+							ftdi_isOutput <= 1;
+							state <= `IDLE;
+						end else begin					
+							ftdi_rd_n <= 1;
+							ftdi_wr_n <= 1;
+							ftdi_isOutput <= 0;
+							state <= `IDLE;
+						end
                end
             end
 
@@ -206,7 +225,6 @@ module reg_main(
 					regout_addrvalid <= 1;		
 					regout_write <= 0;					
 					regout_read <= 0;
-					data_vld <= 0;
 					ftdi_isOutput <= 0;
                if (ftdi_din[7] == 1) begin
                   if (ftdi_din[6] == 1) begin
@@ -249,8 +267,7 @@ module reg_main(
 					totalbytes_lsb <= ftdi_din;
 					state <= `BYTECNTLSBWAIT;					
 					regout_write <= 0;
-					regout_read <= 0;
-					data_vld <= 0;				
+					regout_read <= 0;					
 				end
 				
 				`BYTECNTLSBWAIT: begin
