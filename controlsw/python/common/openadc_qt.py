@@ -69,6 +69,9 @@ class previewWindow():
             self.pw.clear()
             
         self.pw.plot(data, pen=(self.colour.value(),8))
+
+    def hideGraph(self):
+        self.dock.close()
         
 
 class OpenADCQt():
@@ -459,5 +462,12 @@ class OpenADCQt():
             self.ser.close()
             self.ser = None
 
+    def closeAndHide(self):
+        self.close()
+        if self.preview:
+            self.preview.hideGraph()
+
     def __del__(self):
         self.close()
+
+        
