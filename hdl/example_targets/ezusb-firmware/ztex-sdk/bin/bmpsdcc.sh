@@ -63,7 +63,7 @@ while true; do
     fi
 
     addr=`grep ".*:.* _DeviceDescriptor" $base.map | (
-        read a b c
+        read a b c d
         if [ "$c" = "_DeviceDescriptor" ]; then
     	    echo 0x${b#*:}
     	else

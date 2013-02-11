@@ -367,7 +367,7 @@ void init_USB ()
     }
 #endif    
     
-	USBCS |= bmBIT1;
+	//USBCS |= bmBIT1;
 	
 #ifeq[FLASH_ENABLED][1]
     flash_init();
