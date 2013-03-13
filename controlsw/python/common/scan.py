@@ -10,7 +10,13 @@ from 0 to 255 and it builds a list of those ports where this was
 successful.
 """
 
-import serial
+import sys
+
+try:
+    import serial
+except ImportError:
+    print "PySerial not found. Install from https://pypi.python.org/pypi/pyserial or http://www.lfd.uci.edu/~gohlke/pythonlibs/#pyserial"
+    sys.exit()
 
 def scan():
     """scan for available ports. return a list of names"""
