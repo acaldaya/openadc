@@ -365,7 +365,7 @@ class serialOpenADCInterface:
        #Flush output FIFO
        self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, None)
 
-    def readData(self, NumberPoints=None, progressDialog=None):     
+    def readData(self, NumberPoints=None, progressDialog=None):
        datapoints = []
 
        if NumberPoints == None:
@@ -423,11 +423,11 @@ class serialOpenADCInterface:
 
        #for point in datapoints:
        #       print "%3x"%(int((point+0.5)*1024))
+       
+       if len(datapoints) > NumberPoints:
+              datapoints = datapoints[0:NumberPoints]
 
-       if len(datapoints) > NumberPoints:              
-              return datapoints[0:NumberPoints]
-       else:
-              return datapoints
+       return datapoints
 
     def processData(self, data):
         fpData = []
