@@ -15,7 +15,15 @@ import logging
 import math
 import serial
 import openadc
-import pyqtgraph as pg
+try:
+    import pyqtgraph as pg
+except ImportError:
+    print "*************************************************"
+    print "*************************************************"
+    print "Install pyqtgraph from http://www.pyqtgraph.org"
+    print "*************************************************"
+    print "*************************************************"
+    
 from PySide.QtCore import *
 from PySide.QtGui import *
 

@@ -13,7 +13,16 @@ import threading
 import time
 import logging
 import math
-import numpy
+
+try:
+    import numpy
+except ImportError:
+    print "*************************************************"
+    print "*************************************************"
+    print "Install numpy from http://sourceforge.net/projects/numpy/files/NumPy"
+    print "or  http://www.lfd.uci.edu/~gohlke/pythonlibs/#numpy"
+    print "*************************************************"
+    print "*************************************************"    
 
 sys.path.append('../common')
 import openadc
