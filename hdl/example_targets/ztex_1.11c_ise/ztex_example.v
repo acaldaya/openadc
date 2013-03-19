@@ -86,6 +86,8 @@ module interface(
 		All signals have active-low polarity
 	 */
 	
+	wire sloe_int;
+	wire ifclk_buf;
 	wire ADC_clk_int;
 	assign ADC_clk = ADC_clk_int;
 	assign GPIO_LED1 = ~reset_i;	
@@ -110,7 +112,6 @@ module interface(
 		fifoadr1_reg <= ~sloe_int;
 	end
 	assign fifoadr1 = fifoadr1_reg;	
-	wire ifclk_buf;
 	
 	IBUFG IBUFG_inst (
 	.O(ifclk_buf),
