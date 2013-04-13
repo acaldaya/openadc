@@ -8,7 +8,7 @@
 	 
 	 0x01 - Settings (One Byte)
 	 
-	   [  I  C  W  P  A  T  H  R ]
+	   [  I  X  W  X  A  T  H  R ]
 	     
 		  R = (bit 0) System Reset, active high
 		  H = (bit 1) Hilo output to amplifier
@@ -19,23 +19,17 @@
 		      1 = Arm trigger
 				0 = No effect, but you must clear bit to 0
 				    before next trigger cycle can be started
-		  P = (bit 4) DUT Clkin PLL Reset
-		      1 = Reset to PLL active (must do this when ext clock changes)
-				0 = Reset to PLL inactive
 		  W = (bit 5) Before arming wait for trigger to go inactive (e.g: edge sensitive)
 		      1 = Wait for trigger to go inactive before arming
 				0 = Arm immediatly, which if trigger line is currently in active state
 				    will also immediatly trigger
-		  C = (bit 6) Select clock source for ADC
-		      1 = External x4
-				0 = Internal 100 MHz				
 		  I = (bit 7) Select trigger source: int/ext
 		      1 = Internal (e.g.: based on ADC reading)
 				0 = External (e.g.: based on trigger-in line)
 		  
 	 0x02 - Status (One Byte)
 	 
-	    [  X  M  DC DE P  E  F  T ] 
+	    [  X M  DC DE X  E  F  T ] 
 		 T = (bit 0) Triggered status
 		      1 = System armed
 				0 = System disarmed		
@@ -44,10 +38,7 @@
 				0 = FIFO Not Full / Capture Not Done
 		 E = (bit 2) External trigger status
 		      1 = Trigger line high
-				0 = Trigger line low
-		 P = (bit 3) DUT Clkin PLL Status
-		      1 = Locked / OK
-				0 = Unlocked				
+				0 = Trigger line low	
 		 DE = (bit 4) DDR Error
 		      1 = DDR error (FIFO underflow/overflow or DDR Error)
 				0 = No error		 
@@ -77,6 +68,48 @@
 		     confirm device connection is OK	
 
 	 0x05 - External Frequency Counter (4 bytes)
+	 
+	 0x06 - Advanced Clock Registers (4 bytes)
+	    [  1 SP SG RA G0 C2 C1 C0 ] (Byte 0)
+		 
+		   1 = Always '1'
+		 
+		   SP = Status of DCM Block
+			     1 = Locked/OK
+				  0 = Not Locked
+		 
+		   SG = Status of CLKGEN Lock
+			     1 = Locked/OK
+				  0 = Not Locked
+		 
+			RA = Reset All DCM/PLL Blocks
+			     1 = Reset Active
+				  0 = No Reset
+		 
+		   G0 = Select INPUT to CLKGEN Block
+			     0 = From system clock
+				  1 = From EXTCLK input
+		 
+		   C2 = Select INPUT to DCM Block.
+			     0 = From CLKGEN Block
+				  1 = From EXTCLK Input
+				  
+			C1 = Select DCM Output
+			     0 = 4x INPUT TO DCM clock
+				  1 = 1x INPUT TO DCM clock				  
+				  
+		   C0 = Select source for ADC clock
+			     0 = From DCM (e.g.: dependant on C1, C2, phase shift)
+				  1 = Direct from external input
+				  
+			[                         ] (Byte 1)
+			[                         ] (Byte 2)
+			[                         ] (Byte 3)
+			
+	 0x07 - System Clock (4 Bytes) - Read Only
+	    Clock frequency in Hz
+		 
+	 0x08 - ADC Output Clock (4 Bytes) - Read Only
 	 
 	 0x09 - Phase Adjust (2 Bytes)
 	 
@@ -133,6 +166,15 @@
 	 
 	 `define EXTFREQ_ADDR   5	 
 	 `define EXTFREQ_LEN    4
+	 
+	 `define ADVCLOCK_ADDR  6
+	 `define ADVCLOCK_LEN   4
+	 
+	 `define SYSTEMCLK_ADDR 7
+	 `define SYSTEMCLK_LEN	4
+	 
+	 `define ADCFREQ_ADDR   8	 
+	 `define ADCFREQ_LEN    4
 	 
 	 `define PHASE_ADDR     9 	 
 	 `define PHASE_LEN      2

@@ -33,7 +33,7 @@ POSSIBILITY OF SUCH DAMAGE.
 module openadc_interface(
     input         reset_i,
     
-	 /* Fast Clock - ADC Internal Mode. Typically 100 MHz */
+	 /* Fast Clock - ADC Internal Mode. Typically ~100 MHz */
 	 input         clk_adcint,
 	 
 	 /* Slower Clock - USB Interface, serial, etc. Typically ~20-60 MHz */
@@ -165,8 +165,7 @@ module openadc_interface(
 	wire freq_measure;
 	//BUFG buf_freqmeasure (.I(timer_heartbeat[25]), .O(freq_measure));
 	assign freq_measure = timer_heartbeat[25];
-	reg [31:0] extclk_frequency_int;
-	
+	reg [31:0] extclk_frequency_int;	
 	always @(posedge DUT_CLK_i or negedge freq_measure) begin
 		if (freq_measure == 1'b0) begin
 			extclk_frequency_int <= 32'd0;
@@ -175,11 +174,25 @@ module openadc_interface(
 		end
 	end
 	
+	reg [31:0] adcclk_frequency_int;	
+	always @(posedge ADC_clk_sample or negedge freq_measure) begin
+		if (freq_measure == 1'b0) begin
+			adcclk_frequency_int <= 32'd0;
+		end else if (freq_measure == 1'b1) begin
+			adcclk_frequency_int <= adcclk_frequency_int + 32'd1;
+		end
+	end
+	
 		
 	reg [31:0] extclk_frequency;
 	always @(negedge freq_measure) begin
 		extclk_frequency <= extclk_frequency_int;
-	end	
+	end
+
+	reg [31:0] adcclk_frequency;
+	always @(negedge freq_measure) begin
+		adcclk_frequency <= adcclk_frequency_int;
+	end		
  
    wire ADC_clk_sample; 
     
@@ -259,7 +272,8 @@ module openadc_interface(
 
 	wire [7:0] PWM_incr;
 
-	wire ADC_clk_selection; //0=internal, 1=external
+	wire [2:0] ADC_clk_selection; //0=internal, 1=external
+	wire clkgen_selection;
 	
 	wire				ddr_read_req;
 	wire				ddr_read_done;
@@ -411,6 +425,7 @@ module openadc_interface(
 	
 	wire reg_stream_openadc;
 	wire [15:0] reg_hyplen_openadc;
+	wire clockreset;
 	
 	reg_openadc registers_openadc (
 		.reset_i(reset_i),
@@ -438,6 +453,7 @@ module openadc_interface(
 		.trigger_level(trigger_level),
 		.trigger_now(trigger_now),
 		.extclk_frequency(extclk_frequency),							
+		.adcclk_frequency(adcclk_frequency),
 		.phase_o(phase_requested),
 		.phase_ld_o(phase_load),
 		.phase_i(phase_actual),
@@ -445,9 +461,13 @@ module openadc_interface(
 		.phase_clk_o(phase_clk),
 		.maxsamples_i(maxsamples_limit),
 		.maxsamples_o(maxsamples),
-		.adc_clk_src_o(ADC_clk_selection)
+		.adc_clk_src_o(ADC_clk_selection),
+		.clkgen_src_o(clkgen_selection),
+		.clkblock_reset_o(clockreset),
+		.clkblock_dcm_locked_i(dcm_locked),
+		.clkblock_gen_locked_i(dcm_gen_locked)
 		);
-		
+	
 	wire reg_stream_fifo;
 	wire [15:0] reg_hyplen_fifo;
 	reg_openadc_adcfifo registers_fiforead(
@@ -483,6 +503,26 @@ module openadc_interface(
 	assign reg_hypaddress_o = reg_hypaddress;
 	
 `undef CHIPSCOPE
+
+`ifdef CLOCK_ADVANCED
+	clock_managment_advanced genclocks(
+	 .reset(reset | clockreset),
+    .clk_sys(clk_100mhz_buf),
+    .clk_ext(DUT_CLK_i),   
+	 .adc_clk(ADC_clk),
+	 .clkadc_source(ADC_clk_selection),
+	 .clkgen_source(clkgen_selection),
+	 .systemsample_clk(ADC_clk_sample),
+	 .phase_clk(phase_clk),
+	 .phase_requested(phase_requested),
+	 .phase_actual(phase_actual),
+	 .phase_load(phase_load),
+	 .phase_done(phase_done),
+	 .dcm_adc_locked(dcm_locked),
+	 .dcm_gen_locked(dcm_gen_locked)
+    );
+	 
+`else
 	clock_managment genclocks(
 	 .reset(reset),
     .clk_100mhz(clk_100mhz_buf),
@@ -491,10 +531,8 @@ module openadc_interface(
 `ifdef SASEBOW
 	 .adc_clk_feedback(ADC_clk_feedback),
 `endif
-	 .use_ext_clk(ADC_clk_selection),
-	 
+	 .use_ext_clk(ADC_clk_selection[0]),
 	 .systemsample_clk(ADC_clk_sample),
-
 	 .phase_clk(phase_clk),
 	 .phase_requested(phase_requested),
 	 .phase_actual(phase_actual),
@@ -503,7 +541,8 @@ module openadc_interface(
 	 
 	 .dcm_locked(dcm_locked)
     );
-			 
+`endif
+	 
 	reg [8:0] PWM_accumulator;
 	always @(posedge slowclock) PWM_accumulator <= PWM_accumulator[7:0] + PWM_incr;
 	

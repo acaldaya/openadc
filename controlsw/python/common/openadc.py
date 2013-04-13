@@ -22,6 +22,9 @@ ADDR_STATUS     = 2
 ADDR_ADCDATA    = 3
 ADDR_ECHO       = 4
 ADDR_FREQ       = 5
+ADDR_ADVCLK     = 6
+ADDR_SYSFREQ    = 7
+ADDR_ADCFREQ    = 8
 ADDR_PHASE      = 9
 ADDR_SAMPLES    = 16
 ADDR_DDR        = 20
@@ -226,9 +229,9 @@ class serialOpenADCInterface:
 
         if (result[1] & 0x02):            
             LSB = result[0]
-            MSB = result[1] & 0x01;
+            MSB = result[1] & 0x01
 
-            phase = LSB | (MSB << 8);
+            phase = LSB | (MSB << 8)
 
             #Sign Extend
             phase = SIGNEXT(phase, 9)
@@ -238,17 +241,130 @@ class serialOpenADCInterface:
             return None
 
     def getStatus(self):
-        result = self.sendMessage(CODE_READ, ADDR_STATUS);
+        result = self.sendMessage(CODE_READ, ADDR_STATUS)
 
         if len(result) == 1:
             return result[0]
         else:
             return None
 
+    def getADCClk(self):
+        result = self.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        print"%x"%result[0]
+        result[0] = result[0] & 0x07
+
+        if result[0] & 0x04:
+            dcminput = "extclk"
+        else:
+            dcminput = "clkgen"
+
+        if result[0] & 0x02:
+            dcmout = 1
+        else:
+            dcmout = 4
+
+        if result[0] & 0x01:
+            source = "extclk"
+        else:
+            source = "dcm"
+
+        return (source, dcmout, dcminput)
+
+    def setClkGen(self, source="system"):
+        result = self.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+
+        result[0] = result[0] & ~0x08
+
+        if source == "system":
+            pass
+        elif source == "extclk":
+            result[0] = result[0] | 0x08
+        else:
+            raise ValueError("source must be 'system' or 'extclk'")             
+
+        self.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+
+    def setADCClk(self, source="dcm", dcmout=4, dcminput="clkgen"):
+        result = self.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+
+        result[0] = result[0] & ~0x07
+
+        if dcminput == "clkgen":
+            pass
+        elif dcminput == "extclk":
+            result[0] = result[0] | 0x04
+        else:
+            raise ValueError("dcminput must be 'clkgen' or 'extclk'")
+
+        if dcmout == 4:
+            pass
+        elif dcmout == 1:
+            result[0] = result[0] | 0x02
+        else:
+            raise ValueError("dcmout must be 1 or 4") 
+
+        if source == "dcm":
+            pass
+        elif source == "extclk":
+            result[0] = result[0] | 0x01
+        else:
+            raise ValueError("source must be 'dcm' or 'extclk'")
+
+        self.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+
+    def getDCMStatus(self):
+         result = self.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+         if (result[0] & 0x80) == 0:
+             print "ERROR: ADVCLK register not present. Version mismatch"
+             return (False, False)
+
+         if (result[0] & 0x40) == 0:
+             dcmADCLocked = False
+         else:
+             dcmADCLocked = True
+
+         if (result[0] & 0x20) == 0:
+             dcmCLKGENLocked = False
+         else:
+             dcmCLKGENLocked = True
+
+         return (dcmADCLocked, dcmCLKGENLocked)
+
+    def resetDCMs(self):
+        result = self.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+
+        #Set reset high
+        result[0] = result[0] | 0x10
+
+        result[0] = result[0] | 0x0E
+        
+        self.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+
+        #Set reset low
+        result[0] = result[0] & ~(0x10)
+        self.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+
+    def getSysFrequency(self):
+        '''Return the system clock frequency in specific firmware version'''
+        freq = 0x00000000;
+
+        temp = self.sendMessage(CODE_READ, ADDR_SYSFREQ, maxResp=4)
+        freq = freq | (temp[0] << 0);
+        freq = freq | (temp[1] << 8);
+        freq = freq | (temp[2] << 16);
+        freq = freq | (temp[3] << 24);
+
+        print freq
+        
+        return long(freq)
+
     def getExtFrequency(self):
         '''Return the external frequency measured on 'CLOCK' pin. Returned value
            requires conversion to Hz'''
         freq = 0x00000000;
+
+        #Get sample frequency
+        samplefreq = float(self.getSysFrequency()) / float(pow(2,25))
 
         temp = self.sendMessage(CODE_READ, ADDR_FREQ, maxResp=4)
         freq = freq | (temp[0] << 0);
@@ -256,7 +372,33 @@ class serialOpenADCInterface:
         freq = freq | (temp[2] << 16);
         freq = freq | (temp[3] << 24);
 
-        samplefreq = 40E6 / pow(2,25)
+        print freq
+
+        #samplefreq = 40E6 / pow(2,25)
+        measured = freq * samplefreq
+
+        print measured
+
+        #Board samples 40E6/2^25, so convert to Hz
+        return long(measured)
+
+    def getAdcFrequency(self):
+        '''Return the external frequency measured on 'CLOCK' pin. Returned value
+           requires conversion to Hz'''
+        freq = 0x00000000;
+
+        #Get sample frequency
+        samplefreq = float(self.getSysFrequency()) / float(pow(2,25))
+
+        temp = self.sendMessage(CODE_READ, ADDR_ADCFREQ, maxResp=4)
+        freq = freq | (temp[0] << 0);
+        freq = freq | (temp[1] << 8);
+        freq = freq | (temp[2] << 16);
+        freq = freq | (temp[3] << 24);
+
+        print freq
+
+        #samplefreq = 40E6 / pow(2,25)
         measured = freq * samplefreq
 
         print measured

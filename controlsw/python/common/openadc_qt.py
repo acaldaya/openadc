@@ -100,8 +100,8 @@ class OpenADCQt():
         self.trigmodelow.setEnabled(mode)
 
         self.phase.setEnabled(mode)
-        self.clockInternal.setEnabled(mode)
-        self.clockExternal.setEnabled(mode)
+        #self.clockInternal.setEnabled(mode)
+        #self.clockExternal.setEnabled(mode)
         
 
     def setupLayout(self, MainWindow, includePreview=True):
@@ -172,32 +172,6 @@ class OpenADCQt():
         #Set default
         self.trigmodelow.setChecked(True)
 
-        ###### Clock Setup
-        self.phase = QSpinBox()
-        self.phase.setMinimum(-255)
-        self.phase.setMaximum(255)
-        self.phase.valueChanged.connect(self.ADCsetclock)
-
-        bgClockSource = QButtonGroup()
-        self.clockInternal = QRadioButton("Internal");
-        self.clockExternal = QRadioButton("External");
-        bgClockSource.addButton(self.clockInternal)
-        bgClockSource.addButton(self.clockExternal)
-        self.clockInternal.clicked.connect(self.ADCSetClockSource)
-        self.clockExternal.clicked.connect(self.ADCSetClockSource)
-
-        #Set default
-        self.clockInternal.setChecked(True)
-
-        clocksettings = QGroupBox("Clock Settings")
-        clocklayout = QGridLayout()
-        clocksettings.setLayout(clocklayout)
-        clocklayout.addWidget(QLabel("Clock Source"), 0, 0)
-        clocklayout.addWidget(self.clockInternal, 0, 1)
-        clocklayout.addWidget(self.clockExternal, 0, 2)
-        clocklayout.addWidget(QLabel("Ext Phase Adjust"), 1, 0)
-        clocklayout.addWidget(self.phase, 1, 1)
-        layout.addWidget(clocksettings, 2, 0)
 
         ###### Sample Memory Setup
         samplesettings = QGroupBox("Sample Settings")
@@ -213,20 +187,160 @@ class OpenADCQt():
         self.samples.valueChanged.connect(self.samplesChanged)
         layout.addWidget(samplesettings, 2, 1)
 
-        ###### Status Information
-        status = QGroupBox("Status")
-        statuslayout = QGridLayout()
-        status.setLayout(statuslayout)
-        self.freqDisp = QLCDNumber(9)
-        self.lockLabel = QLabel("DCM Locked: ?")
-        statuslayout.addWidget(QLabel("Ext Freq:"),0,0)
-        statuslayout.addWidget(self.freqDisp, 0, 1)
-        statuslayout.addWidget(self.lockLabel,1,0)
+        ##### ADC Clock Setup
+        clocksettings = QGroupBox("ADC Clock Settings")
+        clocklayout = QVBoxLayout()
+        clocksettings.setLayout(clocklayout)
+        
+        self.phase = QSpinBox()
+        self.phase.setMinimum(-255)
+        self.phase.setMaximum(255)
+        self.phase.valueChanged.connect(self.ADCsetclock)       
+
+        self.cbClockSource = QComboBox()
+        #DCM Used, Mask, Bits
+        self.cbClockSource.addItem("EXTCLK Direct", ["extclk", 4, "clkgen"])
+        self.cbClockSource.addItem("EXTCLK x4 via DCM", ["dcm", 4, "extclk"])
+        self.cbClockSource.addItem("EXTCLK x1 via DCM", ["dcm", 1, "extclk"])
+        self.cbClockSource.addItem("CLKGEN x4 via DCM", ["dcm", 4, "clkgen"])
+        self.cbClockSource.addItem("CLKGEN x1 via DCM", ["dcm", 1, "clkgen"])
+        self.cbClockSource.currentIndexChanged.connect(self.ADCSetClockSource)
+
+        self.adcfreqDisp = QLCDNumber(9)
+        self.adcfreqDisp.setSegmentStyle(QLCDNumber.Flat)
+
+        self.adcdcmLockedButton = QPushButton("UNLOCKED")
+        self.adcdcmLockedButton.clicked.connect(self.resetDCM)
+
+        cslayout = QHBoxLayout()
+        cslayout.addWidget(QLabel("Source:"))
+        cslayout.addWidget(self.cbClockSource)
+        clocklayout.addLayout(cslayout)
+
+        palayout = QHBoxLayout()
+        palayout.addWidget(QLabel("Phase Adjust:"))
+        palayout.addWidget(self.phase)
+        clocklayout.addLayout(palayout)
+
+        frlayout = QHBoxLayout()
+        frlayout.addWidget(QLabel("ADC Freq:"))
+        frlayout.addWidget(self.adcfreqDisp)
+        clocklayout.addLayout(frlayout)
+
+        btlayout = QHBoxLayout()
+        btlayout.addWidget(self.adcdcmLockedButton)
+        clocklayout.addLayout(btlayout)
+
+        #TEMP
         statusRefreshPB = QPushButton("Refresh")
         statusRefreshPB.clicked.connect(self.statusRefresh)
-        statuslayout.addWidget(statusRefreshPB,1,1)
-        self.freqDisp.setSegmentStyle(QLCDNumber.Flat)
-        layout.addWidget(status, 3, 0)    
+        btlayout.addWidget(statusRefreshPB)
+        
+        layout.addWidget(clocksettings, 3, 0)
+        
+        ##### EXTCLK Setup
+        extclocksettings = QGroupBox("EXTCLK Settings")
+        extclocklayout = QVBoxLayout()
+        extclocksettings.setLayout(extclocklayout)
+
+        self.extcbClockSource = QComboBox()
+        self.extcbClockSource.addItem("Default")
+
+        self.extfreqDisp = QLCDNumber(9)
+        self.extfreqDisp.setSegmentStyle(QLCDNumber.Flat)
+
+        cslayout = QHBoxLayout()
+        cslayout.addWidget(QLabel("Source:"))
+        cslayout.addWidget(self.extcbClockSource)
+        extclocklayout.addLayout(cslayout)
+
+        frlayout = QHBoxLayout()
+        frlayout.addWidget(QLabel("EXT Freq:"))
+        frlayout.addWidget(self.extfreqDisp)
+        extclocklayout.addLayout(frlayout)
+
+        layout.addWidget(extclocksettings, 2, 0)
+
+        ##### CLKGEN Setup
+        genclocksettings = QGroupBox("CLKGEN Settings")
+        genclocklayout = QVBoxLayout()
+        genclocksettings.setLayout(genclocklayout)
+
+        self.gencbClockSource = QComboBox()
+        self.gencbClockSource.addItem("System", 0x08, 0x00)
+        self.gencbClockSource.addItem("EXTCLK", 0x08, 0x08)
+
+        self.cbGenClockMul = QComboBox()
+        self.cbGenClockMul.addItem("x2")
+        
+        self.cbGenClockDiv = QComboBox()
+        self.cbGenClockDiv.addItem("/1")
+        
+        self.genoutputcbClockSource = QComboBox()
+        #self.genoutputcbClockSource.addItem("Disabled")
+        self.genoutputcbClockSource.addItem("/4")
+
+        self.gendcmLockedButton = QPushButton("UNLOCKED")
+        self.gendcmLockedButton.clicked.connect(self.resetDCM)
+
+        cgsource = QHBoxLayout()
+        cgsource.addWidget(QLabel("CLKFX = "))
+        cgsource.addWidget(self.gencbClockSource)
+        cgsource.addWidget(self.cbGenClockMul)
+        cgsource.addWidget(self.cbGenClockDiv)
+
+        cgdevice = QHBoxLayout()
+        cgdevice.addWidget(QLabel("DEVCLK = CLKFX"))
+        cgdevice.addWidget(self.genoutputcbClockSource)
+
+        genclocklayout.addLayout(cgsource)
+        genclocklayout.addLayout(cgdevice)
+        genclocklayout.addWidget(self.gendcmLockedButton)
+        
+        layout.addWidget(genclocksettings, 3, 1)
+
+        ###### Clock Setup
+##
+##
+##        bgClockSource = QButtonGroup()
+##        self.clockInternal = QRadioButton("Internal");
+##        self.clockExternal = QRadioButton("External");
+##        bgClockSource.addButton(self.clockInternal)
+##        bgClockSource.addButton(self.clockExternal)
+##        self.clockInternal.clicked.connect(self.ADCSetClockSource)
+##        self.clockExternal.clicked.connect(self.ADCSetClockSource)
+##
+##        #Set default
+##        self.clockInternal.setChecked(True)
+##
+##        clocksettings = QGroupBox("Clock Settings")
+##        clocklayout = QGridLayout()
+##        clocksettings.setLayout(clocklayout)
+##        clocklayout.addWidget(QLabel("Clock Source"), 0, 0)
+##        clocklayout.addWidget(self.clockInternal, 0, 1)
+##        clocklayout.addWidget(self.clockExternal, 0, 2)
+##        clocklayout.addWidget(QLabel("Ext Phase Adjust"), 1, 0)
+##        clocklayout.addWidget(self.phase, 1, 1)
+##        layout.addWidget(clocksettings, 2, 0)
+##        
+##
+##        ###### Status Information
+##        status = QGroupBox("Clock Routing")
+##        statuslayout = QGridLayout()
+##        status.setLayout(statuslayout)
+##        self.freqDisp = QLCDNumber(9)
+##        self.lockLabel = QLabel("ADC DCM Locked: ?")
+##        statuslayout.addWidget(QLabel("Ext Freq:"),0,0)
+##        statuslayout.addWidget(self.freqDisp, 0, 1)
+##        statuslayout.addWidget(self.lockLabel,1,0)
+##        statusRefreshPB = QPushButton("Refresh")
+##        statusRefreshPB.clicked.connect(self.statusRefresh)
+##        clockResetPB = QPushButton("Reset DCM")
+##        clockResetPB.clicked.connect(self.resetDCM)
+##        statuslayout.addWidget(statusRefreshPB,1,1)
+##        statuslayout.addWidget(clockResetPB,2, 0)
+##        self.freqDisp.setSegmentStyle(QLCDNumber.Flat)
+##        layout.addWidget(status, 3, 0)    
 
         vlayout.addLayout(layout)
 
@@ -265,12 +379,7 @@ class OpenADCQt():
         else:
             self.hilowmode = openadc.SETTINGS_GAIN_LOW
             self.gainlow.setChecked(True)
-
-        if sets & openadc.SETTINGS_CLK_EXT:
-            self.clockExternal.setChecked(True)
-        else:
-            self.clockInternal.setChecked(True)
-            
+           
         self.gain.setValue(self.sc.getGain())
 
         phase = self.sc.getPhase();
@@ -402,22 +511,38 @@ class OpenADCQt():
         #print "Setting: %d %X %X"%(intval, MSB, LSB)
 
     def ADCSetClockSource(self):
-        if self.clockInternal.isChecked():
-            self.sc.setClockSource("int")
-
-        if self.clockExternal.isChecked():
-            self.sc.setClockSource("ext")
+        print "NEW: %d"%self.cbClockSource.currentIndex()
+        settings = self.cbClockSource.itemData(self.cbClockSource.currentIndex())
+        self.sc.setADCClk(settings[0], settings[1], settings[2])        
 
     def statusRefresh(self):
-        self.freqDisp.display(self.sc.getExtFrequency())
-        status = self.sc.getStatus()
-        
-        if status & 0x08 == 0x00:
-            self.lockLabel.setText("DCM Locked: FALSE")
-            self.dcmLocked = False
+        self.adcfreqDisp.display(self.sc.getAdcFrequency())
+        self.extfreqDisp.display(self.sc.getExtFrequency())
+
+        #Check if DCM are locked
+        statuses = self.sc.getDCMStatus()
+
+        if statuses[0] == True:
+            self.adcdcmLockedButton.setText("locked")
         else:
-            self.lockLabel.setText("DCM Locked: True")
-            self.dcmLocked = True
+            self.adcdcmLockedButton.setText("UNLOCKED")
+
+        if statuses[1] == True:
+            self.gendcmLockedButton.setText("locked")
+        else:
+            self.gendcmLockedButton.setText("UNLOCKED")
+
+        #Update other settings too
+        adcDCM = self.sc.getADCClk()
+        
+        indx = self.cbClockSource.findData(adcDCM)
+        if indx < 0:
+            print "internal error?"
+        else:
+            self.cbClockSource.setCurrentIndex(indx)
+                                                         
+    def resetDCM(self):
+        self.sc.resetDCMs()
 
     def reset(self):
         self.sc.setReset(True)
