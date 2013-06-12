@@ -106,7 +106,9 @@ class OpenADCQt():
 
     def setupLayout(self, MainWindow, includePreview=True):
         vlayout = QVBoxLayout()
-        layout = QGridLayout()
+
+        self.tb = QToolBox()
+        vlayout.addWidget(self.tb)
         
         ###### Gain Setup
         self.gain = QSpinBox()
@@ -129,7 +131,7 @@ class OpenADCQt():
         self.gainhigh.clicked.connect(self.ADCsetgainmode)
 
         #Add to layout
-        gainsettings = QGroupBox("Gain Settings");
+        gainsettings = QWidget();
         gainlayout = QGridLayout()
         gainsettings.setLayout(gainlayout)
         gainlayout.addWidget(QLabel("Gain Mode: "), 0, 0);
@@ -138,7 +140,9 @@ class OpenADCQt():
         gainlayout.addWidget(QLabel("Setting: "), 0, 3);
         gainlayout.addWidget(self.gain, 0, 4)
         gainlayout.addWidget(self.gainresults, 1, 0)
-        layout.addWidget(gainsettings, 1, 0)
+        #layout.addWidget(gainsettings, 1, 0)
+        self.tb.addItem(gainsettings, "Gain Settings")
+        
 
         #Set default
         self.gainlow.setChecked(True)
@@ -160,21 +164,22 @@ class OpenADCQt():
         self.trigmodehigh.clicked.connect(self.ADCsettrigmode)
         
         #Add to layout
-        triggersettings = QGroupBox("Trigger Mode")
+        triggersettings = QWidget()
         triglayout = QGridLayout()
         triggersettings.setLayout(triglayout)
         triglayout.addWidget(self.trigmoderising, 0, 0);
         triglayout.addWidget(self.trigmodefalling, 0, 1);
         triglayout.addWidget(self.trigmodehigh, 1, 0);
         triglayout.addWidget(self.trigmodelow, 1, 1);
-        layout.addWidget(triggersettings, 1, 1)
+
+        self.tb.addItem(triggersettings, "Trigger Settings")
 
         #Set default
         self.trigmodelow.setChecked(True)
 
 
         ###### Sample Memory Setup
-        samplesettings = QGroupBox("Sample Settings")
+        samplesettings = QWidget()
         samplelayout = QGridLayout()
         samplesettings.setLayout(samplelayout)
         self.samples = QSpinBox()
@@ -185,7 +190,13 @@ class OpenADCQt():
         samplelayout.addWidget(QLabel("Samples/Capture"), 1, 0)
         samplelayout.addWidget(self.samples, 1, 1)
         self.samples.valueChanged.connect(self.samplesChanged)
-        layout.addWidget(samplesettings, 2, 1)
+        self.tb.addItem(samplesettings, "Sample Settings")
+
+
+        #### Master Clock
+        mclock = QWidget()
+        mclocklayout = QVBoxLayout()
+        mclock.setLayout(mclocklayout)
 
         ##### ADC Clock Setup
         clocksettings = QGroupBox("ADC Clock Settings")
@@ -236,7 +247,8 @@ class OpenADCQt():
         statusRefreshPB.clicked.connect(self.statusRefresh)
         btlayout.addWidget(statusRefreshPB)
         
-        layout.addWidget(clocksettings, 3, 0)
+        mclocklayout.addWidget(clocksettings)
+        
         
         ##### EXTCLK Setup
         extclocksettings = QGroupBox("EXTCLK Settings")
@@ -259,7 +271,7 @@ class OpenADCQt():
         frlayout.addWidget(self.extfreqDisp)
         extclocklayout.addLayout(frlayout)
 
-        layout.addWidget(extclocksettings, 2, 0)
+        mclocklayout.addWidget(extclocksettings)        
 
         ##### CLKGEN Setup
         genclocksettings = QGroupBox("CLKGEN Settings")
@@ -297,52 +309,10 @@ class OpenADCQt():
         genclocklayout.addLayout(cgdevice)
         genclocklayout.addWidget(self.gendcmLockedButton)
         
-        layout.addWidget(genclocksettings, 3, 1)
+        mclocklayout.addWidget(genclocksettings)
 
-        ###### Clock Setup
-##
-##
-##        bgClockSource = QButtonGroup()
-##        self.clockInternal = QRadioButton("Internal");
-##        self.clockExternal = QRadioButton("External");
-##        bgClockSource.addButton(self.clockInternal)
-##        bgClockSource.addButton(self.clockExternal)
-##        self.clockInternal.clicked.connect(self.ADCSetClockSource)
-##        self.clockExternal.clicked.connect(self.ADCSetClockSource)
-##
-##        #Set default
-##        self.clockInternal.setChecked(True)
-##
-##        clocksettings = QGroupBox("Clock Settings")
-##        clocklayout = QGridLayout()
-##        clocksettings.setLayout(clocklayout)
-##        clocklayout.addWidget(QLabel("Clock Source"), 0, 0)
-##        clocklayout.addWidget(self.clockInternal, 0, 1)
-##        clocklayout.addWidget(self.clockExternal, 0, 2)
-##        clocklayout.addWidget(QLabel("Ext Phase Adjust"), 1, 0)
-##        clocklayout.addWidget(self.phase, 1, 1)
-##        layout.addWidget(clocksettings, 2, 0)
-##        
-##
-##        ###### Status Information
-##        status = QGroupBox("Clock Routing")
-##        statuslayout = QGridLayout()
-##        status.setLayout(statuslayout)
-##        self.freqDisp = QLCDNumber(9)
-##        self.lockLabel = QLabel("ADC DCM Locked: ?")
-##        statuslayout.addWidget(QLabel("Ext Freq:"),0,0)
-##        statuslayout.addWidget(self.freqDisp, 0, 1)
-##        statuslayout.addWidget(self.lockLabel,1,0)
-##        statusRefreshPB = QPushButton("Refresh")
-##        statusRefreshPB.clicked.connect(self.statusRefresh)
-##        clockResetPB = QPushButton("Reset DCM")
-##        clockResetPB.clicked.connect(self.resetDCM)
-##        statuslayout.addWidget(statusRefreshPB,1,1)
-##        statuslayout.addWidget(clockResetPB,2, 0)
-##        self.freqDisp.setSegmentStyle(QLCDNumber.Flat)
-##        layout.addWidget(status, 3, 0)    
-
-        vlayout.addLayout(layout)
+        self.tb.addItem(mclock, "Clock Setup")
+ 
 
         ###### Graphical Preview Window
         if includePreview:
