@@ -147,30 +147,59 @@ class OpenADCQt():
         #Set default
         self.gainlow.setChecked(True)
 
-        ###### Trigger Setup
-        triggerModeGroup = QButtonGroup()
-        self.trigmoderising = QRadioButton("Rising Edge");
-        self.trigmodefalling = QRadioButton("Falling Edge");
-        self.trigmodelow = QRadioButton("Low Level");
-        self.trigmodehigh = QRadioButton("High Level");
-        triggerModeGroup.addButton(self.trigmoderising)
-        triggerModeGroup.addButton(self.trigmodefalling)
-        triggerModeGroup.addButton(self.trigmodelow)
-        triggerModeGroup.addButton(self.trigmodehigh)
+        ###### Trigger Setup - Basic
+        basictriggerModeGroup = QButtonGroup()
+        self.trigmoderising = QRadioButton("Rising Edge")
+        self.trigmodefalling = QRadioButton("Falling Edge")
+        self.trigmodelow = QRadioButton("Low Level")
+        self.trigmodehigh = QRadioButton("High Level")
+        basictriggerModeGroup.addButton(self.trigmoderising)
+        basictriggerModeGroup.addButton(self.trigmodefalling)
+        basictriggerModeGroup.addButton(self.trigmodelow)
+        basictriggerModeGroup.addButton(self.trigmodehigh)
 
         self.trigmoderising.clicked.connect(self.ADCsettrigmode)
         self.trigmodefalling.clicked.connect(self.ADCsettrigmode)
         self.trigmodelow.clicked.connect(self.ADCsettrigmode)
         self.trigmodehigh.clicked.connect(self.ADCsettrigmode)
+
+        ###### Trigger Setup - General
+        triggerModeGroup = QButtonGroup()
+        self.trigmodeextsimple = QRadioButton("Ext - Simple")
+        self.trigmodeintsimple = QRadioButton("Int - Simple")
+        self.trigmodeextsimple = QRadioButton("Advanced")
+        triggerModeGroup.addButton(self.trigmodeextsimple)
+        triggerModeGroup.addButton(self.trigmodeintsimple)
+        triggerModeGroup.addButton(self.trigmodeextsimple)
+        self.trigmodeextsimple.setClicked(True)
+        self.trigmodeextsimple.clicked.connect(self.ADCsettrigmode)
+        self.trigmodeintsimple.clicked.connect(self.ADCsettrigmode)
+        self.trigmodeextsimple.clicked.connect(self.ADCsettrigmode)
+        self.trigmodeintsimple.setEnabled(False)
+        
         
         #Add to layout
         triggersettings = QWidget()
-        triglayout = QGridLayout()
+        triglayout = QHBoxLayout()
         triggersettings.setLayout(triglayout)
-        triglayout.addWidget(self.trigmoderising, 0, 0);
-        triglayout.addWidget(self.trigmodefalling, 0, 1);
-        triglayout.addWidget(self.trigmodehigh, 1, 0);
-        triglayout.addWidget(self.trigmodelow, 1, 1);
+        
+        simpletrig = QGroupBox("Simple Trigger")        
+        simpletriglayout = QGridLayout()
+        simpletrig.setLayout(simpletriglayout)
+        simpletriglayout.addWidget(self.trigmoderising, 0, 0)
+        simpletriglayout.addWidget(self.trigmodefalling, 0, 1)
+        simpletriglayout.addWidget(self.trigmodehigh, 1, 0)
+        simpletriglayout.addWidget(self.trigmodelow, 1, 1)
+        triglayout.addWidget(simpletrig)
+
+        trigmode = QGroupBox("Trigger Mode")
+        trigmodelayout = QVBoxLayout()
+        triglmode.setLayout(trigmodelayout)
+        trigmodelayout.addWidget(self.trigmodeextsimple)
+        trigmodelayout.addWidget(self.trigmodeintsimple)
+        trigmodelayout.addWidget(self.trigmodeadv)
+        triglayout.addWidget(trigmode)
+        
 
         self.tb.addItem(triggersettings, "Trigger Settings")
 
