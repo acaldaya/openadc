@@ -11,6 +11,7 @@ import sys
 import os
 import threading
 import time
+import datetime
 import serial
 import logging
 import math
@@ -26,6 +27,7 @@ ADDR_ADVCLK     = 6
 ADDR_SYSFREQ    = 7
 ADDR_ADCFREQ    = 8
 ADDR_PHASE      = 9
+ADDR_OFFSET     = 26
 ADDR_SAMPLES    = 16
 ADDR_DDR        = 20
 ADDR_MULTIECHO  = 34
@@ -41,7 +43,7 @@ SETTINGS_TRIG_LOW  = 0x00
 SETTINGS_ARM       = 0x08
 SETTINGS_WAIT_YES  = 0x20
 SETTINGS_WAIT_NO   = 0x00
-SETTINGS_CLK_EXT   = 0x40
+SETTINGS_TRIG_NOW  = 0x40
 
 STATUS_ARM_MASK    = 0x01
 STATUS_FIFO_MASK   = 0x02
@@ -73,6 +75,8 @@ class serialOpenADCInterface:
         self.offset = 0.5
 
         self.ddrMode = False
+        
+        self.timeout = 5
 
     def testAndTime(self):
         totalbytes = 0
@@ -193,16 +197,29 @@ class serialOpenADCInterface:
                self.setSettings(self.getSettings() | SETTINGS_RESET);
         else:
                 self.setSettings(self.getSettings() | SETTINGS_RESET);
-               
 
-    def setClockSource(self, source):
-        if source == "int":
-            self.setSettings(self.getSettings() & ~SETTINGS_CLK_EXT);
-        elif source == "ext":
-            self.setSettings(self.getSettings() | SETTINGS_CLK_EXT);
-        else:
-            raise ValueError, "Invalid clock source, only 'int' or 'ext' allowed"
-
+    def triggerNow(self):
+        initial = self.getSettings()
+        self.setSettings(initial | SETTINGS_TRIG_NOW)
+        time.sleep(0.01)
+        self.setSettings(initial & ~SETTINGS_TRIG_NOW)
+        
+    def setTriggerOffset(self,  offset):
+        cmd = bytearray(4)
+        cmd[0] = ((offset >> 0) & 0xFF)
+        cmd[1] = ((offset >> 8) & 0xFF)
+        cmd[2] = ((offset >> 16) & 0xFF)
+        cmd[3] = ((offset >> 24) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_OFFSET, cmd)
+        
+    def getTriggerOffset(self):
+        cmd = self.sendMessage(CODE_READ, ADDR_OFFSET, maxResp=4)        
+        offset = cmd[0]
+        offset |= cmd[1] << 8
+        offset |= cmd[2] << 16
+        offset |= cmd[3] << 24              
+        return offset 
+        
     def setGain(self, gain):
         '''Set the Gain range 0-78'''
         cmd = bytearray(1)
@@ -352,10 +369,7 @@ class serialOpenADCInterface:
         freq = freq | (temp[0] << 0);
         freq = freq | (temp[1] << 8);
         freq = freq | (temp[2] << 16);
-        freq = freq | (temp[3] << 24);
-
-        print freq
-        
+        freq = freq | (temp[3] << 24);        
         return long(freq)
 
     def getExtFrequency(self):
@@ -372,12 +386,8 @@ class serialOpenADCInterface:
         freq = freq | (temp[2] << 16);
         freq = freq | (temp[3] << 24);
 
-        print freq
-
         #samplefreq = 40E6 / pow(2,25)
         measured = freq * samplefreq
-
-        print measured
 
         #Board samples 40E6/2^25, so convert to Hz
         return long(measured)
@@ -396,12 +406,8 @@ class serialOpenADCInterface:
         freq = freq | (temp[2] << 16);
         freq = freq | (temp[3] << 24);
 
-        print freq
-
         #samplefreq = 40E6 / pow(2,25)
         measured = freq * samplefreq
-
-        print measured
 
         #Board samples 40E6/2^25, so convert to Hz
         return long(measured)
@@ -491,14 +497,17 @@ class serialOpenADCInterface:
        #Wait for trigger
        status = self.getStatus()
 
-       timeout = 0;
+       starttime = datetime.datetime.now()
+       
        while ((status & STATUS_ARM_MASK) == STATUS_ARM_MASK) | ((status & STATUS_FIFO_MASK) == 0):
            status = self.getStatus()
            time.sleep(0.05)
            
-           #timeout = timeout + 1
-           #if timeout > 100:
-           #    return False
+           diff = datetime.datetime.now() - starttime
+           
+           if (diff.total_seconds() > self.timeout):
+               print "TIMEOUT OCCURED - TRIGGER FORCED"
+               self.triggerNow()     
 
        self.setSettings(self.getSettings() & ~0x08);
        return True
