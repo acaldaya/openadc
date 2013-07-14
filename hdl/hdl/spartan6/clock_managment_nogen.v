@@ -124,7 +124,7 @@ module clock_managment(
 	.STATUS(dcm_status), // 8-bit output: DCM_SP status output
 	.CLKFB(dcm_clk), // 1-bit input: Clock feedback input
 	.CLKIN(ext_clk), // 1-bit input: Clock input
-	.PSCLK(phase_clk), // 1-bit input: Phase shift clock input
+	.PSCLK(~phase_clk), // 1-bit input: Phase shift clock input
 	.PSEN(dcm_psen), // 1-bit input: Phase shift enable
 	.PSINCDEC(dcm_psincdec), // 1-bit input: Phase shift increment/decrement input
 	.RST(reset) // 1-bit input: Active high reset input

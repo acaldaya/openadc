@@ -82,12 +82,22 @@ class previewWindow():
         self.dock.close()
         
 
-class OpenADCQt():
-    def __init__(self, MainWindow=None, includePreview=True):
+class OpenADCQt(QObject):
+    
+    dataUpdated = Signal(list)
+    
+    def __init__(self, MainWindow=None, includePreview=True, setupLayout=True):
+        super(OpenADCQt,  self).__init__()
         self.offset = 0.5
         self.ser = None
         self.sc = None
-        self.setupLayout(MainWindow, includePreview)
+
+        self.datapoints = []
+
+        self.preview = None
+
+        if setupLayout:
+            self.setupLayout(MainWindow, includePreview)
 
     def setEnabled(self, mode):        
         self.gainlow.setEnabled(mode)
@@ -98,19 +108,16 @@ class OpenADCQt():
         self.trigmodefalling.setEnabled(mode)
         self.trigmodehigh.setEnabled(mode)
         self.trigmodelow.setEnabled(mode)
+        self.trigmodeextsimple.setEnabled(mode)
 
         self.phase.setEnabled(mode)
         #self.clockInternal.setEnabled(mode)
-        #self.clockExternal.setEnabled(mode)
-        
+        #self.clockExternal.setEnabled(mode)    
 
-    def setupLayout(self, MainWindow, includePreview=True):
-        vlayout = QVBoxLayout()
-
-        self.tb = QToolBox()
-        vlayout.addWidget(self.tb)
-        
+    def setupWidgets(self):        
         ###### Gain Setup
+        self.gainWidget = QWidget()
+        
         self.gain = QSpinBox()
         self.gain.setMinimum(0)
         self.gain.setMaximum(78)
@@ -129,20 +136,15 @@ class OpenADCQt():
         #Connect events
         self.gainlow.clicked.connect(self.ADCsetgainmode)
         self.gainhigh.clicked.connect(self.ADCsetgainmode)
-
-        #Add to layout
-        gainsettings = QWidget();
+        
         gainlayout = QGridLayout()
-        gainsettings.setLayout(gainlayout)
+        self.gainWidget.setLayout(gainlayout)
         gainlayout.addWidget(QLabel("Gain Mode: "), 0, 0);
         gainlayout.addWidget(self.gainhigh, 0, 1)
         gainlayout.addWidget(self.gainlow, 0, 2)
         gainlayout.addWidget(QLabel("Setting: "), 0, 3);
         gainlayout.addWidget(self.gain, 0, 4)
         gainlayout.addWidget(self.gainresults, 1, 0)
-        #layout.addWidget(gainsettings, 1, 0)
-        self.tb.addItem(gainsettings, "Gain Settings")
-        
 
         #Set default
         self.gainlow.setChecked(True)
@@ -165,25 +167,38 @@ class OpenADCQt():
 
         ###### Trigger Setup - General
         triggerModeGroup = QButtonGroup()
-        self.trigmodeextsimple = QRadioButton("Ext - Simple")
-        self.trigmodeintsimple = QRadioButton("Int - Simple")
-        self.trigmodeextsimple = QRadioButton("Advanced")
+        self.trigmodeextsimple = QRadioButton("Digital")
+        self.trigmodeintsimple = QRadioButton("Analog")
         triggerModeGroup.addButton(self.trigmodeextsimple)
         triggerModeGroup.addButton(self.trigmodeintsimple)
-        triggerModeGroup.addButton(self.trigmodeextsimple)
-        self.trigmodeextsimple.setClicked(True)
+        self.trigmodeextsimple.setChecked(True)
         self.trigmodeextsimple.clicked.connect(self.ADCsettrigmode)
         self.trigmodeintsimple.clicked.connect(self.ADCsettrigmode)
-        self.trigmodeextsimple.clicked.connect(self.ADCsettrigmode)
         self.trigmodeintsimple.setEnabled(False)
+                
+        ###### Trigger Setup - Timeout
+        self.trigTimeout = QDoubleSpinBox()
+        self.trigTimeout.setMinimum(0.01)
+        self.trigTimeout.setMaximum(5)
+        self.trigTimeout.setSuffix("S")
+        self.trigTimeout.setDecimals(2)
+        self.trigTimeout.valueChanged.connect(self.timeoutValidate)
         
+        self.timeoutInf = QCheckBox("Timeout Infinite")
+        self.timeoutInf.clicked.connect(self.timeoutValidate)
         
+        ###### Trigger Setup - Offset
+        self.trigOffset = QSpinBox()
+        self.trigOffset.setMinimum(0)
+        self.trigOffset.setMaximum(100000) #Artificial limit - HW can do 2^32 max
+        self.trigOffset.valueChanged.connect(self.offsetChanged)
+                
         #Add to layout
-        triggersettings = QWidget()
+        self.triggerWidget = QWidget()
         triglayout = QHBoxLayout()
-        triggersettings.setLayout(triglayout)
+        self.triggerWidget.setLayout(triglayout)
         
-        simpletrig = QGroupBox("Simple Trigger")        
+        simpletrig = QGroupBox("Level/Edge")        
         simpletriglayout = QGridLayout()
         simpletrig.setLayout(simpletriglayout)
         simpletriglayout.addWidget(self.trigmoderising, 0, 0)
@@ -192,25 +207,33 @@ class OpenADCQt():
         simpletriglayout.addWidget(self.trigmodelow, 1, 1)
         triglayout.addWidget(simpletrig)
 
-        trigmode = QGroupBox("Trigger Mode")
+        trigmode = QGroupBox("Mode")
         trigmodelayout = QVBoxLayout()
-        triglmode.setLayout(trigmodelayout)
+        trigmode.setLayout(trigmodelayout)
         trigmodelayout.addWidget(self.trigmodeextsimple)
         trigmodelayout.addWidget(self.trigmodeintsimple)
-        trigmodelayout.addWidget(self.trigmodeadv)
         triglayout.addWidget(trigmode)
         
-
-        self.tb.addItem(triggersettings, "Trigger Settings")
-
+        trigtime = QGroupBox("Timeout")
+        trigtimelayout = QVBoxLayout()
+        trigtime.setLayout(trigtimelayout)
+        trigtimelayout.addWidget(self.trigTimeout)
+        trigtimelayout.addWidget(self.timeoutInf)
+        triglayout.addWidget(trigtime)
+        
+        trigoffset = QGroupBox("Offset")
+        trigoffsetlayout = QHBoxLayout()
+        trigoffset.setLayout(trigoffsetlayout)
+        trigoffsetlayout.addWidget(self.trigOffset)
+        triglayout.addWidget(trigoffset)
+        
         #Set default
         self.trigmodelow.setChecked(True)
-
-
+        
         ###### Sample Memory Setup
-        samplesettings = QWidget()
+        self.samplesWidget = QWidget()
         samplelayout = QGridLayout()
-        samplesettings.setLayout(samplelayout)
+        self.samplesWidget.setLayout(samplelayout)
         self.samples = QSpinBox()
         self.samples.setMinimum(100)
 
@@ -219,13 +242,11 @@ class OpenADCQt():
         samplelayout.addWidget(QLabel("Samples/Capture"), 1, 0)
         samplelayout.addWidget(self.samples, 1, 1)
         self.samples.valueChanged.connect(self.samplesChanged)
-        self.tb.addItem(samplesettings, "Sample Settings")
-
-
-        #### Master Clock
-        mclock = QWidget()
+    
+        ####### Master Clock
+        self.clockWidget = QWidget()
         mclocklayout = QVBoxLayout()
-        mclock.setLayout(mclocklayout)
+        self.clockWidget.setLayout(mclocklayout)
 
         ##### ADC Clock Setup
         clocksettings = QGroupBox("ADC Clock Settings")
@@ -340,16 +361,23 @@ class OpenADCQt():
         
         mclocklayout.addWidget(genclocksettings)
 
-        self.tb.addItem(mclock, "Clock Setup")
+    def setupLayout(self, MainWindow, includePreview=True):
+        self.setupWidgets()
+    
+        vlayout = QVBoxLayout()
+        self.tb = QToolBox()
+        vlayout.addWidget(self.tb)
+        self.tb.addItem(self.gainWidget, "Gain Settings")
+        self.tb.addItem(self.triggerWidget, "Trigger Settings")
+        self.tb.addItem(self.samplesWidget, "Sample Settings")
+        self.tb.addItem(self.clockWidget, "Clock Setup")
  
 
         ###### Graphical Preview Window
         if includePreview:
             self.preview = previewWindow()
             self.preview.addDock(MainWindow)
-            vlayout.addWidget(self.preview.getSetupWidget())
-        else:
-            self.preview = None
+            vlayout.addWidget(self.preview.getSetupWidget())           
                   
         self.masterLayout = vlayout
 
@@ -367,8 +395,10 @@ class OpenADCQt():
         self.samples.setMaximum(samples)
         self.maxSamplesLabel.setText("Max Samples: %d"%samples)
         
+    def offsetChanged(self, newoffset):
+        self.sc.setTriggerOffset(newoffset)
+        
     def readAllSettings(self):
-
         #Read all settings as needed
         sets = self.sc.getSettings();
 
@@ -399,6 +429,8 @@ class OpenADCQt():
         samps = self.sc.getMaxSamples()
         self.setMaxSample(samps)
         self.samples.setValue(samps)
+
+        self.trigOffset.setValue(int(self.sc.getTriggerOffset()))
 
         self.statusRefresh()
 
@@ -478,7 +510,9 @@ class OpenADCQt():
 
         self.datapoints = self.sc.readData(NumberPoints, progress)
 
-        if update & (self.preview != None):               
+        self.dataUpdated.emit(self.datapoints)
+
+        if update & (self.preview is not None):               
             self.preview.updateData(self.datapoints)
 
         return True
@@ -504,6 +538,14 @@ class OpenADCQt():
 
         cur = self.sc.getSettings() & ~(openadc.SETTINGS_TRIG_HIGH | openadc.SETTINGS_WAIT_YES);
         self.sc.setSettings(cur | self.trigmode)
+
+    def timeoutValidate(self, arg=None):
+        if self.trigTimeout.isChecked():
+            self.trigTimeout.setEnabled(False)
+            self.sc.timeout = 1E99
+        else:
+            self.trigTimeout.setEnabled(True)
+            self.sc.timeout = self.trigTimeout.value()
 
     def ADCsetclock(self, int=0):
         self.sc.setPhase(self.phase.value())               

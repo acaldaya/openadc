@@ -108,6 +108,10 @@ module clock_managment(
 	.PSINCDEC(dcm_psincdec), // 1-bit input: Phase shift increment/decrement input
 	.RST(reset) // 1-bit input: Active high reset input
 	);
+
+/*
+	assign ADC_clk_extsrc = ext_clk;
+*/
 	
 	// DCM_SP: Digital Clock Manager
 	// Spartan-6

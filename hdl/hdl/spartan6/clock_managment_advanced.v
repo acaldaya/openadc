@@ -143,8 +143,8 @@ module clock_managment_advanced(
 	// Xilinx HDL Libraries Guide, version 14.3
 	DCM_CLKGEN #(
 	.CLKFXDV_DIVIDE(4), // CLKFXDV divide value (2, 4, 8, 16, 32)
-	.CLKFX_DIVIDE(1), // Divide value - D - (1-256)
-	.CLKFX_MD_MAX(4.0), // Specify maximum M/D ratio for timing anlysis
+	.CLKFX_DIVIDE(2), // Divide value - D - (1-256)
+	.CLKFX_MD_MAX(2.0), // Specify maximum M/D ratio for timing anlysis
 	.CLKFX_MULTIPLY(2), // Multiply value - M - (2-256)
 	.CLKIN_PERIOD(0), // Input clock period specified in nS
 	.SPREAD_SPECTRUM("NONE"), // Spread Spectrum mode "NONE"
