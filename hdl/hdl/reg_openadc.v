@@ -50,8 +50,7 @@ module reg_openadc(
 	
 	input [5:0]    reg_hypaddress,
 	output  [15:0] reg_hyplen,
-	
-			
+				
 	/* Interface to gain module */
 	output [7:0]	gain,
 	output			hilow,
@@ -120,7 +119,7 @@ module reg_openadc(
 	 reg [31:0] registers_adcclk_frequency;
 	 reg [31:0] registers_ddr_address;
 	 reg [31:0] registers_samples;
-	 reg [127:0] registers_offset;
+	 reg [31:0] registers_offset;
 	 reg [15:0]	phase_out;
 	 reg [8:0]  phase_in;
 	 reg        phase_loadout;
@@ -168,6 +167,7 @@ module reg_openadc(
 	 assign trigger_mode = registers_settings[2];
 	 assign cmd_arm = registers_settings[3];
 	 assign trigger_wait = registers_settings[5];	 
+	 assign trigger_now = registers_settings[6];
 	 
 	 assign registers_advclocksettings_read[4:0] = registers_advclocksettings[4:0];
 	 assign registers_advclocksettings_read[5] = clkblock_gen_locked_i;

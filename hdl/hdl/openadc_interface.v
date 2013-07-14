@@ -69,6 +69,7 @@ module openadc_interface(
 	 input			ADC_clk_feedback,
 	 input         DUT_CLK_i,
 	 input         DUT_trigger_i,
+	 input			adv_trigger_i,
 	 output        amp_gain,
 	 output        amp_hilo
 	 
@@ -239,6 +240,8 @@ module openadc_interface(
 	//0 = arm as soon as cmd_arm goes high (e.g.: if trigger is already in active state, trigger)
 	wire trigger_wait;
 	wire cmd_arm;
+	wire trigger_now;
+	wire [31:0] trigger_offset;
 	       
 	trigger_unit tu_inst(
 	 .reset(reset),
@@ -255,6 +258,7 @@ module openadc_interface(
 	 .trigger_now_i(trigger_now),
 	 .arm_i(cmd_arm),
 	 .arm_o(armed),
+	 .trigger_offset_i(trigger_offset),
 	 .capture_go_o(adc_capture_go),
 	 .capture_done_i(adc_capture_done));		 
 			 
@@ -452,6 +456,7 @@ module openadc_interface(
 		.trigger_source(trigger_source),
 		.trigger_level(trigger_level),
 		.trigger_now(trigger_now),
+		.trigger_offset(trigger_offset),
 		.extclk_frequency(extclk_frequency),							
 		.adcclk_frequency(adcclk_frequency),
 		.phase_o(phase_requested),
@@ -489,9 +494,9 @@ module openadc_interface(
 		.fifo_rd_en(ddrfifo_rd_en),
 		.fifo_rd_clk(ddrfifo_rd_clk)
 	);
-
+	
 	assign reg_stream = reg_stream_fifo | reg_stream_openadc | reg_stream_i;
-	assign reg_hyplen = reg_hyplen_fifo | reg_hyplen_openadc | reg_hyplen_i;
+	assign reg_hyplen = reg_hyplen_fifo | reg_hyplen_openadc | reg_hyplen_i; 
 	
 	assign reg_reset_o = reset;
 	assign reg_address_o = reg_address;

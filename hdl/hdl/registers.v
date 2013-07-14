@@ -23,6 +23,11 @@
 		      1 = Wait for trigger to go inactive before arming
 				0 = Arm immediatly, which if trigger line is currently in active state
 				    will also immediatly trigger
+					 
+		  F = (bit 6) Trigger Now
+		      1 = Trigger Now
+				0 = Normal
+					 
 		  I = (bit 7) Select trigger source: int/ext
 		      1 = Internal (e.g.: based on ADC reading)
 				0 = External (e.g.: based on trigger-in line)
@@ -142,16 +147,12 @@
 	    [ LSB ] (Byte 0)
 		 [ MSB ] (Byte 1)
 	 
-	 0x1A - Offset of trigger to start of capture, clock cycles (8 Bytes)
+	 0x1A - Offset of trigger to start of capture, ADC clock cycles (4 Bytes)
 	   
 		 [ LSB ] (Byte 0)
 		 [     ] (Byte 1)
 		 [     ] (Byte 2)
-		 [     ] (Byte 3)
-		 [     ] (Byte 4)
-		 [     ] (Byte 5)
-		 [     ] (Byte 6)
-		 [ MSB ] (Byte 7)
+		 [ MSB ] (Byte 3)
 	 */
 	 
     `define GAIN_ADDR    	0
@@ -183,7 +184,7 @@
 	 `define SAMPLES_LEN    4
 	 
 	 `define OFFSET_ADDR    26
-	 `define OFFSET_LEN		8
+	 `define OFFSET_LEN		4
 	 
 	  
 	 

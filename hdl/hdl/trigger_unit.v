@@ -70,17 +70,37 @@ module trigger_unit(
 	
 	wire 	adc_capture_done;
 	reg 	adc_capture_go;
+	reg 	adc_capture_go_delayed;
 	
 	assign adc_capture_done = capture_done_i;
-	assign capture_go_o = adc_capture_go;
+	assign capture_go_o = adc_capture_go_delayed;
 	
+	reg [31:0] adc_delay_cnt;
+	
+	always @(posedge adc_clk) begin
+		if (adc_capture_go == 1'b0) begin
+			adc_delay_cnt <= 0;
+		end else begin
+			adc_delay_cnt <= adc_delay_cnt + 1;
+		end
+	end
+	
+	always @(posedge adc_clk or negedge adc_capture_go) begin		
+		if (adc_capture_go == 0)
+			adc_capture_go_delayed <= 1'b0;
+			
+		else
+			if (adc_delay_cnt == trigger_offset_i)
+				adc_capture_go_delayed <= adc_capture_go;		
+	end
+		
 	//ADC Trigger Stuff
 	reg reset_arm;
 	always @(posedge adc_clk) begin
 		if (reset) begin
 			reset_arm <= 0;
 		end else begin
-			if ((trigger == trigger_level_i) & armed) begin				
+			if (((trigger == trigger_level_i) & armed) | (trigger_now_i)) begin				
 				reset_arm <= 1;
 			end else if ((arm_i == 0) & (adc_capture_go == 0)) begin
 				reset_arm <= 0;
@@ -95,7 +115,7 @@ module trigger_unit(
 		if (int_reset_capture) begin
 			adc_capture_go <= 0;
 		end else begin
-			if ((trigger == trigger_level_i) & armed) begin
+			if (((trigger == trigger_level_i) & armed) | (trigger_now_i)) begin
 				adc_capture_go <= 1;
 			end
 		end
