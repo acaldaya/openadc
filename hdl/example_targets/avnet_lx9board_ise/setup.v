@@ -9,6 +9,10 @@
 	`define UART_CLK 40000000
 	`define UART_BAUD 512000
 	`define MAX_SAMPLES 24573
+	`define HW_TYPE 1
+	`define HW_VER  0
+	`define SYSTEM_CLK 100000000
+	`define CLOCK_ADVANCED
 `endif
 
 //Baud rate of the UART

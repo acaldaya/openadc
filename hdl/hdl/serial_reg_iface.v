@@ -16,7 +16,7 @@ module serial_reg_iface(
 	 input rx_i,
 	 output tx_o,
 	 
-	 output 			cmdfifo_rxf,
+	 output reg		cmdfifo_rxf,
 	 output			cmdfifo_txe,
 	 input			cmdfifo_rd,
 	 input			cmdfifo_wr,	
@@ -25,17 +25,14 @@ module serial_reg_iface(
     );
 
 	wire clk;
-	wire reset;
 	wire tx_out;
 	wire rx_in;
 	
 	assign clk = clk_i;
 	assign rx_in = rx_i;
 	assign tx_o = tx_out;
-	assign reset = reset_i;
 
 
-	reg cmdfifo_rxf;
 	reg [7:0] dataout;
 	wire [7:0] data;
 	wire data_ready;
@@ -69,7 +66,9 @@ module serial_reg_iface(
                 
     async_receiver AR (.clk(clk),
                    .RxD(rx_in),
+						 .RxD_idle(),
                    .RxD_data_ready(data_ready),
+						 .RxD_data_error(),
                    .RxD_data(data),
 						 .RxD_endofpacket());
 endmodule

@@ -69,7 +69,6 @@ module openadc_interface(
 	 input			ADC_clk_feedback,
 	 input         DUT_CLK_i,
 	 input         DUT_trigger_i,
-	 input			adv_trigger_i,
 	 output        amp_gain,
 	 output        amp_hilo
 	 
@@ -170,7 +169,7 @@ module openadc_interface(
 	always @(posedge DUT_CLK_i or negedge freq_measure) begin
 		if (freq_measure == 1'b0) begin
 			extclk_frequency_int <= 32'd0;
-		end else if (freq_measure == 1'b1) begin
+		end else begin
 			extclk_frequency_int <= extclk_frequency_int + 32'd1;
 		end
 	end
@@ -179,11 +178,10 @@ module openadc_interface(
 	always @(posedge ADC_clk_sample or negedge freq_measure) begin
 		if (freq_measure == 1'b0) begin
 			adcclk_frequency_int <= 32'd0;
-		end else if (freq_measure == 1'b1) begin
+		end else begin
 			adcclk_frequency_int <= adcclk_frequency_int + 32'd1;
 		end
-	end
-	
+	end	
 		
 	reg [31:0] extclk_frequency;
 	always @(negedge freq_measure) begin
@@ -246,7 +244,6 @@ module openadc_interface(
 	trigger_unit tu_inst(
 	 .reset(reset),
 	 .clk(slowclock),				
-
     .adc_clk(ADC_clk_sample),		
 	 .adc_data(ADC_Data_tofifo),
 
@@ -273,6 +270,7 @@ module openadc_interface(
 	`else
 	assign reg_status[6] = 1'b0;
 	`endif
+	assign reg_status[7] = 1'b0;
 
 	wire [7:0] PWM_incr;
 
@@ -312,6 +310,7 @@ module openadc_interface(
 	 end
 	 
 	 reg ftdi_rxfn_dly;
+	 
 	 always @(negedge slowclock or negedge ftdi_rxfn) begin
 		if (ftdi_rxfn == 0) begin
 			ftdi_rxfn_dly <= 0;
@@ -477,6 +476,7 @@ module openadc_interface(
 	wire [15:0] reg_hyplen_fifo;
 	reg_openadc_adcfifo registers_fiforead(
 		.reset_i(reset_i),
+		.reset_o(),
 		.clk(reg_clk),
 		.reg_address(reg_address), 
 		.reg_bytecnt(reg_bytecnt), 
@@ -503,6 +503,7 @@ module openadc_interface(
 	assign reg_bytecnt_o = reg_bytecnt;
 	assign reg_datao_o = reg_datao;
 	assign reg_read_o = reg_read;
+	assign reg_size_o = reg_size;
 	assign reg_write_o = reg_write;
 	assign reg_addrvalid_o = reg_addrvalid;
 	assign reg_hypaddress_o = reg_hypaddress;
@@ -515,6 +516,7 @@ module openadc_interface(
     .clk_sys(clk_100mhz_buf),
     .clk_ext(DUT_CLK_i),   
 	 .adc_clk(ADC_clk),
+	 .target_clk(),
 	 .clkadc_source(ADC_clk_selection),
 	 .clkgen_source(clkgen_selection),
 	 .systemsample_clk(ADC_clk_sample),
@@ -605,6 +607,8 @@ module openadc_interface(
 	 );
 `else		
 
+	assign reg_status[4] = 1'b0;
+	assign reg_status[5] = 1'b0;
 
 //`define CHIPSCOPE 1
 	fifo_top fifo_top_inst(
@@ -640,11 +644,11 @@ module openadc_interface(
 	 /* To avoid modifying UCF file we keep these even in FIFO mode */
 	 assign LPDDR_A = 0;
 	 assign LPDDR_BA = 0;
-	 assign LPDDR_DQ = 'bz;
+	 assign LPDDR_DQ = 16'bz;
 	 assign LPDDR_LDM = 0;
 	 assign LPDDR_UDM = 0;
-	 assign LPDDR_LDQS = 'bz;
-	 assign LPDDR_UDQS = 'bz;
+	 assign LPDDR_LDQS = 1'bz;
+	 assign LPDDR_UDQS = 1'bz;
 	 assign LPDDR_CKE = 0;
 	 assign LPDDR_CAS_n = 1;
 	 assign LPDDR_RAS_n = 1;

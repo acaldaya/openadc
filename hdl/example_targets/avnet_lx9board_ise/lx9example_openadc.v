@@ -113,7 +113,7 @@ module interface(
 		.DUT_trigger_i(DUT_trigger_i),
 		.amp_gain(amp_gain),
 		.amp_hilo(amp_hilo),
-		
+
 		.reg_stream_i(1'b0),
 		.reg_datai_i(8'd0),
 		.reg_hyplen_i(16'd0),	

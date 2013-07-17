@@ -123,6 +123,29 @@
 		 
 		 S = Start (write), Status (read)
 		 
+	 0x0A - Version Information (6 Bytes)
+		 [ X  X  X  X  RV RV RV RV ] (Byte 0)
+		 [ HT HT HT HT HT HV HV HV ] (Byte 1)
+		 [ Build Timestamp         ]
+		 [ Build Timestamp         ]
+		 [ Build Timestamp         ]
+		 [ Build Timestamp         ]
+		 
+		  RV = Register Version (4 bits)
+		   0 = Original, basic clock module
+			1 = Updated w/ offset, adv clock module
+			
+		  HT = Hardware Type (5 bits)
+			0 = Unknown/Generic
+			1 = LX9 Microboard
+			2 = SASEBO-W
+			3 = ChipWhisperer Rev2 on LX25
+			4 = Reserved
+			5 = ZedBoard
+		  
+		  HV = Hardware Revision (3 bits)
+		   Specific to Hardware Type
+		 
 	 0x10 - Number of samples to capture on trigger (4 Bytes)
 	    On reset set to maximum number of samples possible.
 	    [ LSB ] (Byte 0)
@@ -180,11 +203,16 @@
 	 `define PHASE_ADDR     9 	 
 	 `define PHASE_LEN      2
 	 
+	 `define VERSION_ADDR	10
+	 `define VERSION_LEN		6
+	 
 	 `define SAMPLES_ADDR   16
 	 `define SAMPLES_LEN    4
 	 
 	 `define OFFSET_ADDR    26
 	 `define OFFSET_LEN		4
+	 
+	 `define REGISTER_VERSION 1
 	 
 	  
 	 

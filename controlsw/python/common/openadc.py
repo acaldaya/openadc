@@ -27,6 +27,7 @@ ADDR_ADVCLK     = 6
 ADDR_SYSFREQ    = 7
 ADDR_ADCFREQ    = 8
 ADDR_PHASE      = 9
+ADDR_VERSIONS   = 10
 ADDR_OFFSET     = 26
 ADDR_SAMPLES    = 16
 ADDR_DDR        = 20
@@ -77,6 +78,8 @@ class serialOpenADCInterface:
         self.ddrMode = False
         
         self.timeout = 5
+
+        self.sysFreq = 0
 
     def testAndTime(self):
         totalbytes = 0
@@ -224,7 +227,7 @@ class serialOpenADCInterface:
         '''Set the Gain range 0-78'''
         cmd = bytearray(1)
         cmd[0] = gain               
-        self.sendMessage(CODE_WRITE, ADDR_GAIN, cmd);
+        self.sendMessage(CODE_WRITE, ADDR_GAIN, cmd)
 
     def getGain(self):
         result = self.sendMessage(CODE_READ, ADDR_GAIN)
@@ -239,7 +242,7 @@ class serialOpenADCInterface:
         cmd = bytearray(2)
         cmd[0] = LSB;
         cmd[1] = MSB | 0x02;
-        self.sendMessage(CODE_WRITE, ADDR_PHASE, cmd, False);
+        self.sendMessage(CODE_WRITE, ADDR_PHASE, cmd, False)
 
     def getPhase(self):
         result = self.sendMessage(CODE_READ, ADDR_PHASE, maxResp=2);
@@ -265,9 +268,25 @@ class serialOpenADCInterface:
         else:
             return None
 
+    def getVersions(self):
+        result = self.sendMessage(CODE_READ, ADDR_VERSIONS, maxResp=6)
+
+        regver = result[0] & 0xff
+        hwtype = result[1] >> 3
+        hwver = result[1] & 0x07
+        hwList = ["Default/Unknown", "LX9 MicroBoard", "SASEBO-W", "ChipWhisperer Rev2 LX25",
+                  "Reserved?", "ZedBoard", "Papilio Pro"]
+
+        try:
+            textType = hwList[hwtype]
+        except:
+            textType = "Invalid/Unknown"
+
+        return (regver, hwtype, textType, hwver)
+        
+
     def getADCClk(self):
         result = self.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
-        print"%x"%result[0]
         result[0] = result[0] & 0x07
 
         if result[0] & 0x04:
@@ -361,7 +380,10 @@ class serialOpenADCInterface:
         result[0] = result[0] & ~(0x10)
         self.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
 
-    def getSysFrequency(self):
+    def getSysFrequency(self, force=False):
+        if (self.sysFreq > 0) & (force == False):
+               return self.sysFreq
+           
         '''Return the system clock frequency in specific firmware version'''
         freq = 0x00000000;
 
@@ -369,8 +391,11 @@ class serialOpenADCInterface:
         freq = freq | (temp[0] << 0);
         freq = freq | (temp[1] << 8);
         freq = freq | (temp[2] << 16);
-        freq = freq | (temp[3] << 24);        
-        return long(freq)
+        freq = freq | (temp[3] << 24);
+
+        self.sysFreq = long(freq)
+        
+        return self.sysFreq
 
     def getExtFrequency(self):
         '''Return the external frequency measured on 'CLOCK' pin. Returned value
@@ -378,7 +403,7 @@ class serialOpenADCInterface:
         freq = 0x00000000;
 
         #Get sample frequency
-        samplefreq = float(self.getSysFrequency()) / float(pow(2,25))
+        samplefreq = float(self.getSysFrequency()) / float(pow(2,26))
 
         temp = self.sendMessage(CODE_READ, ADDR_FREQ, maxResp=4)
         freq = freq | (temp[0] << 0);
@@ -386,10 +411,7 @@ class serialOpenADCInterface:
         freq = freq | (temp[2] << 16);
         freq = freq | (temp[3] << 24);
 
-        #samplefreq = 40E6 / pow(2,25)
-        measured = freq * samplefreq
-
-        #Board samples 40E6/2^25, so convert to Hz
+        measured = freq * samplefreq * 0.8
         return long(measured)
 
     def getAdcFrequency(self):
@@ -398,7 +420,7 @@ class serialOpenADCInterface:
         freq = 0x00000000;
 
         #Get sample frequency
-        samplefreq = float(self.getSysFrequency()) / float(pow(2,25))
+        samplefreq = float(self.getSysFrequency()) / float(pow(2,26))
 
         temp = self.sendMessage(CODE_READ, ADDR_ADCFREQ, maxResp=4)
         freq = freq | (temp[0] << 0);
@@ -406,10 +428,8 @@ class serialOpenADCInterface:
         freq = freq | (temp[2] << 16);
         freq = freq | (temp[3] << 24);
 
-        #samplefreq = 40E6 / pow(2,25)
-        measured = freq * samplefreq
+        measured = freq * samplefreq * 0.8
 
-        #Board samples 40E6/2^25, so convert to Hz
         return long(measured)
 
     def setMaxSamples(self, samples):

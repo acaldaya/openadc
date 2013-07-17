@@ -54,7 +54,13 @@ module clock_managment_advanced(
 	 wire dcm_psdone;
 	 wire [7:0] dcm_status;
 
-	 dcm_phaseshift_interface dcmps(.clk_i(phase_clk),
+	 /* Resync if needed */
+	 //NOTE: Due to requirement of PHASECLK location in DCM_CLKGEN
+	 //      instance, ISE does some routing which can result in an
+	 //      error about clock & non-clock loads. Need to look into that.
+	 assign phase_clk_buf = phase_clk;
+
+	 dcm_phaseshift_interface dcmps(.clk_i(phase_clk_buf),
 											  .reset_i(reset),
 											  .default_value_i(9'd0),
 											  .value_i(phase_requested),
@@ -119,7 +125,10 @@ module clock_managment_advanced(
 	DCM_extclock_gen (
 	.CLK2X(dcm_clk),
 	.CLK0(ADC_clk),
+	.CLK2X180(),
+	.CLK90(),
 	.CLK180(),
+	.CLK270(),
 	.CLKFX(ADC_clk_times4), // 1-bit output: Digital Frequency Synthesizer output (DFS)
 	.CLKDV(), //TODO: Use this output for additional options
 	.LOCKED(dcm_locked_int), // 1-bit output: DCM_SP Lock Output
@@ -127,7 +136,7 @@ module clock_managment_advanced(
 	.STATUS(dcm_status), // 8-bit output: DCM_SP status output
 	.CLKFB(dcm_clk), // 1-bit input: Clock feedback input
 	.CLKIN(dcm_clk_in), // 1-bit input: Clock input
-	.PSCLK(phase_clk), // 1-bit input: Phase shift clock input
+	.PSCLK(phase_clk_buf), // 1-bit input: Phase shift clock input
 	.PSEN(dcm_psen), // 1-bit input: Phase shift enable
 	.PSINCDEC(dcm_psincdec), // 1-bit input: Phase shift increment/decrement input
 	.RST(reset) // 1-bit input: Active high reset input
@@ -135,7 +144,7 @@ module clock_managment_advanced(
 
 	wire clkgenfx_dev_out;
 	wire dcm2_locked_int;
-	wire [7:0] dcm2_status;
+	wire [2:1] dcm2_status;
 	assign dcm_gen_locked = dcm2_locked_int & (~dcm2_status[2]);
 
 	// DCM_CLKGEN: Frequency Aligned Digital Clock Manager
@@ -152,7 +161,7 @@ module clock_managment_advanced(
 	)
 	DCM_CLKGEN_inst (
 	.CLKFX(clkgenfx_out), // 1-bit output: Generated clock output
-	.CLKFX180(), // 1-bit output: Generated clock output 180 degree out of phase from CLKFX.
+	.CLKFX180(), // 1-bit output: Generated clock output 180 degree out of phase from CLKFX.	
 	.CLKFXDV(clkgenfx_dev_out), // 1-bit output: Divided clock output
 	.LOCKED(dcm2_locked_int), // 1-bit output: Locked output
 	.PROGDONE(), // 1-bit output: Active high output to indicate the successful re-programming

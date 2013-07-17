@@ -68,13 +68,18 @@ NET clk_40mhz        LOC = V10 |IOSTANDARD = LVCMOS33;               # "USER_CLO
 NET clk_100mhz          LOC = C10 |IOSTANDARD = LVCMOS33;               # "CLOCK_Y3"
 NET clk_40mhz TNM_NET = clk_40mhz;
 TIMESPEC TS_USER_CLOCK = PERIOD clk_40mhz 40000 kHz;
-#NET clk_66mhz TNM_NET = clk_66mhz;
-#TIMESPEC TS_CLOCK_Y2 = PERIOD clk_66mhz 66666.7 kHz;
 NET clk_100mhz TNM_NET = clk_100mhz;
 TIMESPEC TS_clk_100mhz = PERIOD "clk_100mhz" 100000 KHz HIGH 50%;
 
-//NET fastclock TNM_NET = ADCClock;
+NET "oadc/genclocks/clkgenfx_out" TNM_NET = clkgenfx_out;
+TIMESPEC TS_clkgenfx_out = PERIOD "clkgenfx_out" 133000 KHz HIGH 50%;
+
+NET "oadc/genclocks/ADC_clk" TNM_NET = ADCClock;
 TIMESPEC TS_ADCClock = PERIOD "ADCClock" 133000 KHz HIGH 50%;
+
+NET "oadc/genclocks/ADC_clk_times4" TNM_NET = ADC_clk_times4;
+TIMESPEC TS_ADC_clk_times4 = PERIOD "ADC_clk_times4" 133000 KHz HIGH 50%;
+
 #NET "ADC_Data<0>" CLOCK_DEDICATED_ROUTE = FALSE;
 NET "DUT_CLK_i" CLOCK_DEDICATED_ROUTE = FALSE;
 
@@ -82,6 +87,8 @@ NET "DUT_CLK_i" CLOCK_DEDICATED_ROUTE = FALSE;
 #PIN "ddr/u_ddr_interface/memc3_infrastructure_inst/U_BUFG_CLK0.O" CLOCK_DEDICATED_ROUTE = FALSE;
 #PIN "ADC_clk_sample_BUFG.O" CLOCK_DEDICATED_ROUTE = FALSE;
 NET "clk_100mhz" CLOCK_DEDICATED_ROUTE = FALSE;
+	
+NET "clk_40mhz" CLOCK_DEDICATED_ROUTE = FALSE;
 	
 ############################################################################	
 # User LEDs			

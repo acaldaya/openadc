@@ -123,9 +123,14 @@ module reg_openadc(
 	 reg [15:0]	phase_out;
 	 reg [8:0]  phase_in;
 	 reg        phase_loadout;
-	 reg			phase_done;		
-	
+	 //reg			phase_done;		
+	 wire [47:0] version_data;	
 	 wire [31:0] system_frequency = 32'd`SYSTEM_CLK;
+	 
+	 assign version_data[15:11] = 5'd`HW_TYPE;
+	 assign version_data[10:8] = 3'd`HW_VER;
+	 assign version_data[7:4] = 0;
+	 assign version_data[3:0] = 4'd`REGISTER_VERSION;
 	
     assign trigger_offset = registers_offset;
 	 
@@ -135,10 +140,10 @@ module reg_openadc(
 	 always @(posedge clk) begin
 		if (reset | phase_loadout) begin
 			phase_in <= 0;
-			phase_done <= 0;
+			//phase_done <= 0;
 		end else if (phase_done_i) begin
 			phase_in <= phase_i;
-			phase_done <= 1;
+			//phase_done <= 1;
 		end
 	 end
 	 	 
@@ -154,6 +159,7 @@ module reg_openadc(
 				`EXTFREQ_ADDR: reg_hyplen_reg <= `EXTFREQ_LEN;
 				`ADCFREQ_ADDR: reg_hyplen_reg <= `ADCFREQ_LEN;
 				`PHASE_ADDR: reg_hyplen_reg <= `PHASE_LEN;
+				`VERSION_ADDR: reg_hyplen_reg <= `VERSION_LEN;
 				`SAMPLES_ADDR: reg_hyplen_reg <= `SAMPLES_LEN;
 				`OFFSET_ADDR: reg_hyplen_reg <= `OFFSET_LEN;
 				`ADVCLOCK_ADDR: reg_hyplen_reg <= `ADVCLOCK_LEN;
@@ -236,6 +242,7 @@ module reg_openadc(
 				`EXTFREQ_ADDR: begin reg_datao_valid_reg <= 1; end
 				`ADCFREQ_ADDR: begin reg_datao_valid_reg <= 1; end
 				`PHASE_ADDR: begin reg_datao_valid_reg <= 1; end
+				`VERSION_ADDR: begin reg_datao_valid_reg <= 1; end
 				`SAMPLES_ADDR: begin reg_datao_valid_reg <= 1; end	
 				`OFFSET_ADDR: begin reg_datao_valid_reg <= 1; end	
 				`ADVCLOCK_ADDR: begin reg_datao_valid_reg <= 1; end
@@ -257,6 +264,7 @@ module reg_openadc(
 				`EXTFREQ_ADDR: reg_datao_reg <= registers_extclk_frequency[reg_bytecnt*8 +: 8]; 
 				`ADCFREQ_ADDR: reg_datao_reg <= registers_adcclk_frequency[reg_bytecnt*8 +: 8]; 
 				`PHASE_ADDR: reg_datao_reg <= phase_in[reg_bytecnt*8 +: 8]; 
+				`VERSION_ADDR: reg_datao_reg <= version_data[reg_bytecnt*8 +: 8];
 				`SAMPLES_ADDR: reg_datao_reg <= registers_samples[reg_bytecnt*8 +: 8];
 				`OFFSET_ADDR: reg_datao_reg <= registers_offset[reg_bytecnt*8 +: 8];
 				`ADVCLOCK_ADDR: reg_datao_reg <= registers_advclocksettings_read[reg_bytecnt*8 +: 8];

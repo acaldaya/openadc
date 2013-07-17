@@ -15,6 +15,10 @@ import logging
 import math
 import serial
 import openadc
+
+from PySide.QtCore import *
+from PySide.QtGui import *
+
 try:
     import pyqtgraph as pg
 except ImportError:
@@ -23,9 +27,11 @@ except ImportError:
     print "Install pyqtgraph from http://www.pyqtgraph.org"
     print "*************************************************"
     print "*************************************************"
+
+def freqToText(freqInHz):
+    fmhz = float(freqInHz) / 1000000.0
+    return "%1.4f MHz"%fmhz
     
-from PySide.QtCore import *
-from PySide.QtGui import *
 
 class previewWindow():
     def __init__(self):
@@ -96,6 +102,9 @@ class OpenADCQt(QObject):
 
         self.preview = None
 
+        self.timerStatusRefresh = QTimer(self)
+        self.timerStatusRefresh.timeout.connect(self.statusRefresh)
+
         if setupLayout:
             self.setupLayout(MainWindow, includePreview)
 
@@ -114,7 +123,25 @@ class OpenADCQt(QObject):
         #self.clockInternal.setEnabled(mode)
         #self.clockExternal.setEnabled(mode)    
 
-    def setupWidgets(self):        
+    def setupWidgets(self):
+
+        ###### Various System Information
+        self.systemWidget = QWidget()
+        syslayout = QGridLayout()
+        self.systemWidget.setLayout(syslayout)
+        self.verText = QLineEdit()
+        self.verText.setReadOnly(True)
+        self.synText = QLineEdit()
+        self.synText.setReadOnly(True)
+        self.sysFreq = QLineEdit()
+        self.sysFreq.setReadOnly(True)
+        syslayout.addWidget(QLabel("HW Version:"), 0, 0)
+        syslayout.addWidget(self.verText, 0, 1)
+        syslayout.addWidget(QLabel("HW Synth Date:"), 1, 0)
+        syslayout.addWidget(self.synText, 1, 1)
+        syslayout.addWidget(QLabel("System Freq:"), 2, 0)
+        syslayout.addWidget(self.sysFreq, 2, 1)
+        
         ###### Gain Setup
         self.gainWidget = QWidget()
         
@@ -248,9 +275,23 @@ class OpenADCQt(QObject):
         mclocklayout = QVBoxLayout()
         self.clockWidget.setLayout(mclocklayout)
 
+
+        #Refresh Settings
+        reflayout = QHBoxLayout()
+        reflayout.addStretch()
+        statusRefreshCB = QCheckBox("Auto Refresh")
+        statusRefreshCB.stateChanged.connect(self.statusRefreshAuto)
+        statusRefreshPB = QPushButton("Refresh Clock Status")
+        statusRefreshPB.clicked.connect(self.statusRefresh)
+        reflayout.addWidget(statusRefreshCB)
+        reflayout.addWidget(statusRefreshPB)
+        reflayout.addStretch()
+        mclocklayout.addLayout(reflayout)
+        
+
         ##### ADC Clock Setup
         clocksettings = QGroupBox("ADC Clock Settings")
-        clocklayout = QVBoxLayout()
+        clocklayout = QHBoxLayout()
         clocksettings.setLayout(clocklayout)
         
         self.phase = QSpinBox()
@@ -267,8 +308,8 @@ class OpenADCQt(QObject):
         self.cbClockSource.addItem("CLKGEN x1 via DCM", ["dcm", 1, "clkgen"])
         self.cbClockSource.currentIndexChanged.connect(self.ADCSetClockSource)
 
-        self.adcfreqDisp = QLCDNumber(9)
-        self.adcfreqDisp.setSegmentStyle(QLCDNumber.Flat)
+        self.adcfreqDisp = QLineEdit()
+        self.adcfreqDisp.setReadOnly(True)
 
         self.adcdcmLockedButton = QPushButton("UNLOCKED")
         self.adcdcmLockedButton.clicked.connect(self.resetDCM)
@@ -290,26 +331,19 @@ class OpenADCQt(QObject):
 
         btlayout = QHBoxLayout()
         btlayout.addWidget(self.adcdcmLockedButton)
-        clocklayout.addLayout(btlayout)
-
-        #TEMP
-        statusRefreshPB = QPushButton("Refresh")
-        statusRefreshPB.clicked.connect(self.statusRefresh)
-        btlayout.addWidget(statusRefreshPB)
-        
-        mclocklayout.addWidget(clocksettings)
-        
+        clocklayout.addLayout(btlayout)        
+        mclocklayout.addWidget(clocksettings)        
         
         ##### EXTCLK Setup
         extclocksettings = QGroupBox("EXTCLK Settings")
-        extclocklayout = QVBoxLayout()
+        extclocklayout = QHBoxLayout()
         extclocksettings.setLayout(extclocklayout)
 
         self.extcbClockSource = QComboBox()
         self.extcbClockSource.addItem("Default")
 
-        self.extfreqDisp = QLCDNumber(9)
-        self.extfreqDisp.setSegmentStyle(QLCDNumber.Flat)
+        self.extfreqDisp = QLineEdit()
+        self.extfreqDisp.setReadOnly(True)
 
         cslayout = QHBoxLayout()
         cslayout.addWidget(QLabel("Source:"))
@@ -336,7 +370,7 @@ class OpenADCQt(QObject):
         self.cbGenClockMul.addItem("x2")
         
         self.cbGenClockDiv = QComboBox()
-        self.cbGenClockDiv.addItem("/1")
+        self.cbGenClockDiv.addItem("/2")
         
         self.genoutputcbClockSource = QComboBox()
         #self.genoutputcbClockSource.addItem("Disabled")
@@ -367,6 +401,7 @@ class OpenADCQt(QObject):
         vlayout = QVBoxLayout()
         self.tb = QToolBox()
         vlayout.addWidget(self.tb)
+        self.tb.addItem(self.systemWidget, "System Information")
         self.tb.addItem(self.gainWidget, "Gain Settings")
         self.tb.addItem(self.triggerWidget, "Trigger Settings")
         self.tb.addItem(self.samplesWidget, "Sample Settings")
@@ -432,7 +467,17 @@ class OpenADCQt(QObject):
 
         self.trigOffset.setValue(int(self.sc.getTriggerOffset()))
 
+        self.updateSystemLabel()
+
         self.statusRefresh()
+
+    def updateSystemLabel(self):
+        verinfo = self.sc.getVersions()
+
+        self.verText.setText("Registers = %d, Hardware = %d (%s), Version = %d"%(
+                            verinfo[0], verinfo[1], verinfo[2], verinfo[3]))
+        self.synText.setText("Unknown")
+        self.sysFreq.setText(freqToText(self.sc.getSysFrequency()))
 
     def updateGainLabel(self):
         #GAIN (dB) = 50 (dB/V) * VGAIN - 6.5 dB, (HILO = LO)
@@ -552,13 +597,18 @@ class OpenADCQt(QObject):
         #print "Setting: %d %X %X"%(intval, MSB, LSB)
 
     def ADCSetClockSource(self):
-        print "NEW: %d"%self.cbClockSource.currentIndex()
         settings = self.cbClockSource.itemData(self.cbClockSource.currentIndex())
         self.sc.setADCClk(settings[0], settings[1], settings[2])        
 
+    def statusRefreshAuto(self, doAuto):        
+        if doAuto:
+            self.timerStatusRefresh.start(1000)
+        else:
+            self.timerStatusRefresh.stop()     
+
     def statusRefresh(self):
-        self.adcfreqDisp.display(self.sc.getAdcFrequency())
-        self.extfreqDisp.display(self.sc.getExtFrequency())
+        self.adcfreqDisp.setText(freqToText(self.sc.getAdcFrequency()))
+        self.extfreqDisp.setText(freqToText(self.sc.getExtFrequency()))
 
         #Check if DCM are locked
         statuses = self.sc.getDCMStatus()

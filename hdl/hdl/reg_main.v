@@ -146,7 +146,6 @@ module reg_main(
 	 reg [7:0]					totalbytes_lsb; //LSB from input 
 	 reg [15:0]					bytecnt;
     reg [3:0]              state = `IDLE;
-	 reg [3:0]					laststate;
 	 reg [3:0]              state_new;
     reg [5:0]              address;
 
@@ -154,13 +153,9 @@ module reg_main(
 	 assign reg_bytecnt = bytecnt;
 	 assign reg_size = total_bytes;
 
-	 assign cmdfifo_ready = 1'b0;	 
+	 //assign cmdfifo_ready = 1'b0;	 
 	 assign reg_hypaddress = ftdi_din[5:0];	 	 
 		 		 
-	 always @(posedge ftdi_clk) begin
-		laststate <= state;
-	 end
-	  
 	 //always @(posedge ftdi_clk) begin
 	 always @(reg_datai) begin
 		ftdi_dout <= reg_datai;
