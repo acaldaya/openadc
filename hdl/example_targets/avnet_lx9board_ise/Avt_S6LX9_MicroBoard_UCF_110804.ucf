@@ -86,9 +86,14 @@ NET "DUT_CLK_i" CLOCK_DEDICATED_ROUTE = FALSE;
 #TODO FIX THIS
 #PIN "ddr/u_ddr_interface/memc3_infrastructure_inst/U_BUFG_CLK0.O" CLOCK_DEDICATED_ROUTE = FALSE;
 #PIN "ADC_clk_sample_BUFG.O" CLOCK_DEDICATED_ROUTE = FALSE;
-NET "clk_100mhz" CLOCK_DEDICATED_ROUTE = FALSE;
-	
+NET "clk_100mhz" CLOCK_DEDICATED_ROUTE = FALSE;	
 NET "clk_40mhz" CLOCK_DEDICATED_ROUTE = FALSE;
+	
+	
+INST "clk_40mhz_IBUFG_BUFG" LOC = BUFGMUX_X2Y1;
+	
+#PIN "clk_40mhz_IBUFG_BUFG.O" CLOCK_DEDICATED_ROUTE = FALSE;
+#PIN "oadc/genclocks/DCM_extclock_gen.PSCLK" CLOCK_DEDICATED_ROUTE = FALSE;
 	
 ############################################################################	
 # User LEDs			

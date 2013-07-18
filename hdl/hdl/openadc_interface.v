@@ -147,8 +147,8 @@ module openadc_interface(
    wire        reset;                     
 	  
    //Divide clock by 2^24 for heartbeat LED
-	//Divide clock by 2^25 for frequency measurement
-   reg [25:0] timer_heartbeat;
+	//Divide clock by 2^23 for frequency measurement
+   reg [24:0] timer_heartbeat;
    always @(posedge slowclock)
       if (reset) begin
          timer_heartbeat <= 26'b0;
@@ -164,7 +164,7 @@ module openadc_interface(
 	//Frequency Measurement
 	wire freq_measure;
 	//BUFG buf_freqmeasure (.I(timer_heartbeat[25]), .O(freq_measure));
-	assign freq_measure = timer_heartbeat[25];
+	assign freq_measure = timer_heartbeat[23];
 	reg [31:0] extclk_frequency_int;	
 	always @(posedge DUT_CLK_i or negedge freq_measure) begin
 		if (freq_measure == 1'b0) begin
@@ -197,11 +197,48 @@ module openadc_interface(
     
 	wire chipscope_clk;
 	
+	wire [9:0] ADC_Data_delayed;
+	genvar index;
+	generate
+	for (index=0; index < 10; index=index+1)
+	  begin: gen_iodelay_adcdata
+		IODELAY2 #(
+			.COUNTER_WRAPAROUND("WRAPAROUND"), // "STAY_AT_LIMIT" or "WRAPAROUND"
+			.DATA_RATE("SDR"), // "SDR" or "DDR"
+			.DELAY_SRC("IDATAIN"), // "IO", "ODATAIN" or "IDATAIN"
+			.IDELAY2_VALUE(0), // Delay value when IDELAY_MODE="PCI" (0-255)
+			.IDELAY_MODE("NORMAL"), // "NORMAL" or "PCI"
+			.IDELAY_TYPE("DEFAULT"), // "FIXED", "DEFAULT", "VARIABLE_FROM_ZERO", "VARIABLE_FROM_HALF_MAX"
+			.IDELAY_VALUE(20), // Amount of taps for fixed input delay (0-255)
+			.ODELAY_VALUE(0), // Amount of taps fixed output delay (0-255)
+			.SERDES_MODE("NONE"), // "NONE", "MASTER" or "SLAVE"
+			.SIM_TAPDELAY_VALUE(75) // Per tap delay used for simulation in ps
+			)
+		IODELAY2_inst (
+			.BUSY(), // 1-bit output: Busy output after CAL
+			.DATAOUT(), // 1-bit output: Delayed data output to ISERDES/input register
+			.DATAOUT2(ADC_Data_delayed[index]), // 1-bit output: Delayed data output to general FPGA fabric
+			.DOUT(), // 1-bit output: Delayed data output
+			.TOUT(), // 1-bit output: Delayed 3-state output
+			.CAL(~reset_intermediate), // 1-bit input: Initiate calibration input
+			.CE(1'b0), // 1-bit input: Enable INC input
+			.CLK(ADC_clk_sample), // 1-bit input: Clock input
+			.IDATAIN(ADC_Data[index]), // 1-bit input: Data input (connect to top-level port or I/O buffer)
+			.INC(INC), // 1-bit input: Increment / decrement input
+			.IOCLK0(ADC_clk_sample), // 1-bit input: Input from the I/O clock network
+			.IOCLK1(), // 1-bit input: Input from the I/O clock network
+			.ODATAIN(), // 1-bit input: Output data input from output register or OSERDES2.
+			.RST(reset_intermediate), // 1-bit input: Reset to zero or 1/2 of total delay period
+			.T() // 1-bit input: 3-state input signal
+		);
+	  end
+	 endgenerate
+	
 	reg [9:0] ADC_Data_tofifo;
 	wire [9:0] trigger_level;
 	
 	always @(posedge ADC_clk_sample) begin
-		ADC_Data_tofifo <= ADC_Data;
+		ADC_Data_tofifo <= ADC_Data_delayed;
 		
 		//Input Validation Test #1: Uncomment the following
 		//ADC_Data_tofifo <= 10'hAA;

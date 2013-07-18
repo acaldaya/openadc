@@ -403,7 +403,7 @@ class serialOpenADCInterface:
         freq = 0x00000000;
 
         #Get sample frequency
-        samplefreq = float(self.getSysFrequency()) / float(pow(2,26))
+        samplefreq = float(self.getSysFrequency()) / float(pow(2,24))
 
         temp = self.sendMessage(CODE_READ, ADDR_FREQ, maxResp=4)
         freq = freq | (temp[0] << 0);
@@ -420,7 +420,7 @@ class serialOpenADCInterface:
         freq = 0x00000000;
 
         #Get sample frequency
-        samplefreq = float(self.getSysFrequency()) / float(pow(2,26))
+        samplefreq = float(self.getSysFrequency()) / float(pow(2,24))
 
         temp = self.sendMessage(CODE_READ, ADDR_ADCFREQ, maxResp=4)
         freq = freq | (temp[0] << 0);
