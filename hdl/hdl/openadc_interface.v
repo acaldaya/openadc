@@ -222,7 +222,7 @@ module openadc_interface(
 			.TOUT(), // 1-bit output: Delayed 3-state output
 			.CAL(~reset_intermediate), // 1-bit input: Initiate calibration input
 			.CE(1'b0), // 1-bit input: Enable INC input
-			.CLK(ADC_clk_sample), // 1-bit input: Clock input
+			.CLK(), // 1-bit input: Clock input
 			.IDATAIN(ADC_Data[index]), // 1-bit input: Data input (connect to top-level port or I/O buffer)
 			.INC(INC), // 1-bit input: Increment / decrement input
 			.IOCLK0(ADC_clk_sample), // 1-bit input: Input from the I/O clock network
