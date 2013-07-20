@@ -21,8 +21,8 @@
 //
 //////////////////////////////////////////////////////////////////////////////////
 module varwidth_fifo_withpre #(
-	 parameter number_samples = 2000, 
-	 parameter addr_width = 11, //TODO: calculate this from number_samples
+	 parameter max_samples = 2000, 
+	 parameter addr_width = 11, //TODO: calculate this from max_samples
 	 
 	 parameter wr_data_width = 10,
 	 parameter wr_pad_width = 2,
@@ -36,20 +36,33 @@ module varwidth_fifo_withpre #(
 	 (
 	 input wire rst,
 	 
+	 input wire [31:0] number_samples,
+	 
 	 input wire [wr_data_width-1:0] wr_data,
 	 input wire wr_ce,
 	 input wire wr_clk,
 	 
-	 input wire [31:0] wr_circular_depth,
-	 output wire wr_full,
+	 input wire [31:0] wr_circular_depth, //ABSOLUTELY MUST be a multiple of wr_data_per_addr 
+	 output wire wr_done,
 	 input wire wr_trigger, //set to 1 for a single clock cycle to store in main fifo
 	 
 	 output wire [rd_data_width-1:0] rd_data,
 	 input wire rd_ce,
-	 input wire rd_clk
+	 input wire rd_clk,
+	 output wire rd_done
 	 );
 	 	 	 
+	 //Goes to '1' when capture done
+	 reg capture_done;			 
+	 //Goes to '1' when capturing to main buffer (e.g. after trigger)
+	 reg capture_in_progress;
+	 
+	 //Goes to '1' when reading
+	 reg reading_in_progress;
+	 
 	 wire localrst;
+	 
+	 assign wr_done = capture_done;
 	 
 	 //Localrst gets asserted if circ_cnt > max_circ_cnt, which will happen if the user
 	 //changes the size of the max_circ_cnt dynamically
@@ -69,7 +82,7 @@ module varwidth_fifo_withpre #(
 		if (localrst) begin
 			circ_cnt <= 0;
 		//valid write cycle
-		end else if (wr_ce) begin
+		end else if (wr_ce & ~capture_done) begin
 			//If haven't counted all the way until top yet
 			if (max_circ_cnt != circ_cnt)
 				circ_cnt <= circ_cnt + 1;
@@ -84,7 +97,7 @@ module varwidth_fifo_withpre #(
 		end
 			
 		//valid write cycle
-		else if (wr_ce)
+		else if (wr_ce & ~capture_done & ~capture_in_progress)
 			//We've counted up once, just going through motions now
 			if (max_circ_cnt == circ_cnt) begin
 				//Special handing for last address
@@ -118,7 +131,7 @@ module varwidth_fifo_withpre #(
 			max_circ_addr <= 0;
 			circ_addr <= 0;
 		//Address increment requested
-		end else if (circ_next_addr) begin				
+		end else if (circ_next_addr & ~capture_done & ~capture_in_progress) begin				
 			//If we are below the maximum value, just increment
 			if (circ_addr != max_circ_addr) begin
 				circ_addr <= circ_addr + 1;
@@ -141,7 +154,6 @@ module varwidth_fifo_withpre #(
 	reg [wr_addr_width-1:0] main_addr;
 	reg [31:0] main_cnt;
 	
-	reg capture_in_progress;
 	reg fifo_full;
 		
 	always @(posedge wr_clk)
@@ -176,6 +188,46 @@ module varwidth_fifo_withpre #(
 			main_ws <= 0;
 			main_addr <= max_circ_addr + 1;
 		end
+		
+	/***** Generic Logic *****/
+	always @(posedge wr_clk)
+		if (localrst) begin
+			capture_done <= 0;
+		end else if (wr_ce) begin
+			if (main_cnt == number_samples)
+				capture_done <= 1;
+		end
+		
+	/***** Circular Buffer Read Logic *****/
+	reg [31:0] rd_circ_cnt;
+	reg [4:0] rd_circ_ws;
+	reg [addr_width-1:0] rd_circ_addr;
+		
+	always @(posedge rd_clk)
+		if (localrst || (capture_done != 0))
+			reading_in_progress <= 0;
+		else if (rd_ce)
+			reading_in_progress <= 1;
+		
+	always @(posedge rd_clk) begin
+		if (reading_in_progress) begin
+			rd_circ_cnt <= rd_circ_cnt - 1;
+		end else begin
+			rd_circ_cnt <= circ_cnt;
+		end	
+	end
+	
+	assign circ_next_addr = (((max_circ_addr == circ_addr) && (max_circ_ws == circ_ws)) || (rd_circ_ws == (rd_data_per_addr-1))) && rd_ce; 
+	 		
+	
+	always @(posedge rd_clk) begin
+		if (reading_in_progress) begin
+			rd_circ_addr <= rd_circ_addr + 1;
+		end else begin
+			rd_circ_addr <= circ_addr + 1;
+		end	
+	end
+	
 	
 	/***** BRAM Connections *****/	
 	wire [wr_data_width-1:0] bram_wr_data;
@@ -187,7 +239,7 @@ module varwidth_fifo_withpre #(
 	wire [4:0] bram_rd_ws;
 	wire bram_rd_ce;
 	
-	assign bram_wr_ce = wr_ce;
+	assign bram_wr_ce = wr_ce & ~capture_done;
 	//if capture_in_progress == 1 we select the 'main' ws & addr, otherwise 'circ'
 	assign bram_wr_ws = (capture_in_progress) ? main_ws : circ_ws;
 	assign bram_wr_addr = (capture_in_progress) ? main_addr : circ_addr;

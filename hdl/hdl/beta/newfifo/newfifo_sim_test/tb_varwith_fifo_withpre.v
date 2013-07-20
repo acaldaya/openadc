@@ -40,14 +40,15 @@ module tb_varwith_fifo_withpre;
 	wire [7:0] rd_data;
 
 	// Instantiate the Unit Under Test (UUT)
-	varwidth_fifo_withpre #(.number_samples(100)) uut (
+	varwidth_fifo_withpre #(.max_samples(100)) uut (
 		.rst(rst), 
+		.number_samples(100),
 		.wr_data(wr_data), 
 		.wr_ce(wr_ce), 
 		.wr_clk(wr_clk), 
 		.wr_circular_depth(wr_circular_depth), 
 		.wr_trigger(wr_trigger),
-		.wr_full(wr_full), 
+		.wr_done(wr_full), 
 		.rd_data(rd_data), 
 		.rd_ce(rd_ce), 
 		.rd_clk(rd_clk)
