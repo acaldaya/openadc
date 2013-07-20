@@ -581,8 +581,11 @@ class serialOpenADCInterface:
               
               #print "Address=%x"%self.getDDRAddress()
 
-              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, BytesPerPackage);
-              #print len(data)
+              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, BytesPerPackage+2000);
+              print len(data)
+
+              #for p in data:
+              #       print "%x "%p,
 
               datapoints = datapoints + self.processData(data)
 
@@ -608,6 +611,9 @@ class serialOpenADCInterface:
             print("Unexpected sync byte: 0x%x"%data[0])
             return None
 
+        trigfound = False
+        trigsamp = 0
+
         for i in range(1, len(data)-3, 4):            
             #Convert
             temppt = (data[i + 3]<<0) | (data[i + 2]<<8) | (data[i + 1]<<16) | (data[i + 0]<<24)
@@ -620,6 +626,17 @@ class serialOpenADCInterface:
             intpt1 = temppt & 0x3FF;
             intpt2 = (temppt >> 10) & 0x3FF;
             intpt3 = (temppt >> 20) & 0x3FF;
+            
+            if trigfound == False:
+                mergpt = temppt >> 30;
+                if (mergpt != 3):
+                       trigfound = True
+
+                       trigsamp = trigsamp + mergpt
+                       
+                       print "Trigger found at %d"%trigsamp
+                else:                     
+                   trigsamp += 3
 	
             #input validation test: uncomment following and use
             #ramp input on FPGA
