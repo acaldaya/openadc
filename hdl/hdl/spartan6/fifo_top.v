@@ -244,10 +244,10 @@ module fifo_top(
   .empty(fifo_read_fifoempty), // output empty
   .prog_full_thresh(prog_full_thresh), // input [12 : 0] prog_full_thresh
   .prog_full(prog_full), // output prog_full
-  .rd_data_count(samples_o[31:3])
+  .rd_data_count(samples_o[31:4])
 );
 
-	assign samples_o[2:0] = 3'b000;
+	assign samples_o[3:0] = 4'b0000;
 
 `ifdef CHIPSCOPE
 	wire [127:0] cs_data;

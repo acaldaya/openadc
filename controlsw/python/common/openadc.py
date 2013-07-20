@@ -30,6 +30,8 @@ ADDR_PHASE      = 9
 ADDR_VERSIONS   = 10
 ADDR_OFFSET     = 26
 ADDR_SAMPLES    = 16
+ADDR_PRESAMPLES = 17
+ADDR_BYTESTORX  = 18
 ADDR_DDR        = 20
 ADDR_MULTIECHO  = 34
 
@@ -445,12 +447,44 @@ class serialOpenADCInterface:
         samples = 0x00000000;
 
         temp = self.sendMessage(CODE_READ, ADDR_SAMPLES, maxResp=4)
-        samples = samples | (temp[0] << 0);
-        samples = samples | (temp[1] << 8);
-        samples = samples | (temp[2] << 16);
-        samples = samples | (temp[3] << 24);
+        samples = samples | (temp[0] << 0)
+        samples = samples | (temp[1] << 8)
+        samples = samples | (temp[2] << 16)
+        samples = samples | (temp[3] << 24)
 
         return samples
+
+    def getBytesInFifo(self):
+        samples = 0
+        temp = self.sendMessage(CODE_READ, ADDR_BYTESTORX, maxResp=4)
+        samples = samples | (temp[0] << 0)
+        samples = samples | (temp[1] << 8)
+        samples = samples | (temp[2] << 16)
+        samples = samples | (temp[3] << 24)
+        return samples
+
+    def setPreSamples(self, samples):
+        #enforce samples is multiple of 3
+        samples = int(samples / 3)
+           
+        cmd = bytearray(4)
+        cmd[0] = ((samples >> 0) & 0xFF)
+        cmd[1] = ((samples >> 8) & 0xFF)
+        cmd[2] = ((samples >> 16) & 0xFF)
+        cmd[3] = ((samples >> 24) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_PRESAMPLES, cmd)
+        return samples*3
+
+    def getPreSamples(self):
+        samples = 0x00000000;
+
+        temp = self.sendMessage(CODE_READ, ADDR_PRESAMPLES, maxResp=4)
+        samples = samples | (temp[0] << 0)
+        samples = samples | (temp[1] << 8)
+        samples = samples | (temp[2] << 16)
+        samples = samples | (temp[3] << 24)
+
+        return samples*3
 
     def flushInput(self):
         try:
@@ -580,6 +614,8 @@ class serialOpenADCInterface:
               #so no need to write new address
               
               #print "Address=%x"%self.getDDRAddress()
+
+              print "bytes = %d"%self.getBytesInFifo()
 
               data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, BytesPerPackage+2000);
               print len(data)
