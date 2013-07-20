@@ -88,16 +88,10 @@ module tb_dram_varwidth;
 		ram_write(10'h1, 4'h1, 10'h0BA);
 		ram_write(10'h1, 4'h2, 10'h02A);
 		
-		ram_display(10'h0, 4'h0);
-		ram_display(10'h0, 4'h1);
-		ram_display(10'h0, 4'h2);
-		ram_display(10'h0, 4'h3);
+		#50;
 		
-		ram_display(10'h1, 4'h0);
-		ram_display(10'h1, 4'h1);
-		ram_display(10'h1, 4'h2);
-		ram_display(10'h1, 4'h3);
-		
+		ram_display(10'h0);		
+		ram_display(10'h1);		
 				
 	end
 	
@@ -124,9 +118,10 @@ task ram_write;
 		end
 endtask 
  
-task ram_display;
+task ram_read;
 		input [9:0] address;
 		input [4:0] ws;
+		output [7:0] data;
 		
 		begin			
 			@(negedge rd_clk);
@@ -138,10 +133,26 @@ task ram_display;
 			#1;
 			rd_ce = 0;
 			
-			$display("%h.%d = %h\n", address, ws, rd_data);
+			data = rd_data;
 		end
 endtask 
  
-  
+task ram_display;
+		input [9:0] address;
+
+		reg [31:0] data;
+		
+		begin			
+			ram_read(address, 0, data[7:0]);
+			ram_read(address, 1, data[15:8]);
+			ram_read(address, 2, data[23:16]);
+			ram_read(address, 3, data[31:24]);
+			
+			$display("%h %h %h", data[9:0], data[19:10], data[29:20]);
+			
+			//$display("%h.%d = %h\n", address, ws, rd_data);
+		end
+endtask 
+   
 endmodule
 
