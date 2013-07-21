@@ -615,10 +615,13 @@ class serialOpenADCInterface:
               
               #print "Address=%x"%self.getDDRAddress()
 
-              print "bytes = %d"%self.getBytesInFifo()
+              #print "bytes = %d"%self.getBytesInFifo()
 
-              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, BytesPerPackage+2000);
-              print len(data)
+              bytesToRead = self.getBytesInFifo()
+
+              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, bytesToRead+50000) #BytesPerPackage)
+
+              print "%d %d"%(bytesToRead, len(data))
 
               #for p in data:
               #       print "%x "%p,

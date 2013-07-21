@@ -151,6 +151,18 @@ module fifo_top(
 	assign adcfifo_in[19:10] = adcfifo_adcsample1;
 	assign adcfifo_in[9:0] = adcfifo_adcsample0;
 		
+	/* Stretch fifo_empty */
+	wire fifo_empty;
+	reg fifo_empty_longer1;
+	reg fifo_empty_longer2;
+	reg fifo_empty_longer3;
+	assign fifo_read_fifoempty = fifo_empty | fifo_empty_longer1 | fifo_empty_longer2 | fifo_empty_longer3;
+	always @(posedge fifo_read_fifoclk) begin
+		fifo_empty_longer1 <= fifo_empty;
+		fifo_empty_longer2 <= fifo_empty_longer1;
+		fifo_empty_longer3 <= fifo_empty_longer2;
+	end
+		
 	wire [31:0] prog_full_thresh;
 	assign prog_full_thresh = presample_i;
 	
@@ -170,7 +182,7 @@ module fifo_top(
 	reg presample_possible;
 	
 	always @(posedge adc_sampleclk)
-		if (reset_i | fifo_read_fifoempty)
+		if (reset_i | fifo_empty_longer3)
 			presample_possible <= 1;
 		else if (adc_capture_go)
 			presample_possible <= 0;
@@ -178,10 +190,10 @@ module fifo_top(
 	always @(posedge adc_sampleclk)
 		presample <= (prog_full_thresh == 0) ? 0 : (~adc_capture_go & presample_possible);
 	
-	/* Convert 32-bit to 8-bit */
+	/* Convert 128-bit to 8-bit */
 	reg [15:0] byte_select;
 	always @(posedge fifo_read_fifoclk)
-		if (reset_i | fifo_read_fifoempty)
+		if (reset_i | fifo_empty_longer3)
 			byte_select <= 16'b0000000000000001;
 		else if (fifo_read_fifoen)
 			byte_select <= (byte_select == 16'b0000000000000001) ?  16'b0000000000000010 :
@@ -203,7 +215,7 @@ module fifo_top(
 	
 	reg read_en;
 	always @(posedge fifo_read_fifoclk)
-		if (reset_i | presample | adc_capture_go | fifo_read_fifoempty)
+		if (reset_i | presample | adc_capture_go | fifo_empty)
 			read_en <= 0;
 		else
 			read_en <= (byte_select == 16'b1000000000000000) ? 1 : 0;
@@ -232,6 +244,35 @@ module fifo_top(
 		
 	wire rd_clk;
 		
+	/* 
+	We use a 32-bit in to 128-bit out FIFO. The 32-bit input allows us
+	to pack 3 10-bit samples into each word, and the remaining 2 bits
+	tell us which of the samples caused the trigger to happen.
+			
+	FIFO needs to be configured with:
+	*Interface Type: Native
+	*FIFO Implementation: Independant Clocks, Block RAM
+	*Read Mode: First-Word Fall-Through
+	*Write Width: 32-bit
+	*Write Depth: Set as you desire, needs to match setup.v
+	*Read Width: 128-bit
+	*Optional Flags: None
+	*Handshaking Options: None
+	*Initalization:
+	       +Reset Pin
+			 +Enable Reset Syncronization
+			 +Full Flags Reset Value = 0
+			 +Use Dout reset value = 0
+	*Programmable Flags
+			 +Programmable Full Type: Signle Programmable Full Threshold Input Port
+	*Data Count Options
+			 +Use extra logic for more accurate Data Counts
+			 +Read Data Count
+	
+	
+	
+	*/
+		
 	fifoonly_adcfifo fifoonly_adcfifo_inst (
   .rst(reset_i), // input rst
   .wr_clk(adc_sampleclk), // input wr_clk
@@ -241,7 +282,7 @@ module fifo_top(
   .rd_en((fifo_read_fifoen & read_en) | drain_fifo), // input rd_en
   .dout(fifo_data), // output [127 : 0] dout
   .full(adcfifo_full), // output full
-  .empty(fifo_read_fifoempty), // output empty
+  .empty(fifo_empty), // output empty
   .prog_full_thresh(prog_full_thresh), // input [12 : 0] prog_full_thresh
   .prog_full(prog_full), // output prog_full
   .rd_data_count(samples_o[31:4])

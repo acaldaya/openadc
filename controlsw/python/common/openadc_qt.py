@@ -263,12 +263,17 @@ class OpenADCQt(QObject):
         self.samplesWidget.setLayout(samplelayout)
         self.samples = QSpinBox()
         self.samples.setMinimum(100)
+        self.preSamples = QSpinBox()
+        self.preSamples.setMinimum(0)        
 
         self.maxSamplesLabel = QLabel("Max Samples: ?")
         samplelayout.addWidget(self.maxSamplesLabel, 0, 0)
         samplelayout.addWidget(QLabel("Samples/Capture"), 1, 0)
         samplelayout.addWidget(self.samples, 1, 1)
+        samplelayout.addWidget(QLabel("Pre-Trigger Samples:"), 2, 0)
+        samplelayout.addWidget(self.preSamples, 2, 1)
         self.samples.valueChanged.connect(self.samplesChanged)
+        self.preSamples.valueChanged.connect(self.preSamplesChanged)
     
         ####### Master Clock
         self.clockWidget = QWidget()
@@ -428,6 +433,7 @@ class OpenADCQt(QObject):
 
     def setMaxSample(self, samples):
         self.samples.setMaximum(samples)
+        self.preSamples.setMaximum(samples-9)
         self.maxSamplesLabel.setText("Max Samples: %d"%samples)
         
     def offsetChanged(self, newoffset):
@@ -464,6 +470,8 @@ class OpenADCQt(QObject):
         samps = self.sc.getMaxSamples()
         self.setMaxSample(samps)
         self.samples.setValue(samps)
+
+        self.preSamples.setValue(self.sc.getPreSamples())
 
         self.trigOffset.setValue(int(self.sc.getTriggerOffset()))
 
@@ -512,6 +520,10 @@ class OpenADCQt(QObject):
 
     def samplesChanged(self, samples):
         self.sc.setMaxSamples(samples)
+
+    def preSamplesChanged(self, presamples):
+        value = self.sc.setPreSamples(presamples)
+        self.preSamples.setValue(value)
 
     def processData(self, data):
         fpData = []
