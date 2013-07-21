@@ -146,13 +146,20 @@
 		  HV = Hardware Revision (3 bits)
 		   Specific to Hardware Type
 		 
-	 0x10 - Number of samples to capture on trigger (4 Bytes)
+	 0x10 - Number of samples to capture per operation (4 Bytes)
 	    On reset set to maximum number of samples possible.
 	    [ LSB ] (Byte 0)
 		 [     ] (Byte 1)
 		 [     ] (Byte 2)
 		 [ MSB ] (Byte 3)
-	 
+		 
+	 0x11 - Number of samples to capture BEFORE trigger occurs (4 Bytes)
+	   This number must be less than value from register 0x10.
+	    [ LSB ] (Byte 0)
+		 [     ] (Byte 1)
+		 [     ] (Byte 2)
+		 [ MSB ] (Byte 3)
+		 
 	 0x14 - DDR address to read from (4 Bytes)
 	 
 	    This must be 32-bit aligned, e.g. lower 2 bits are zero.
@@ -208,6 +215,12 @@
 	 
 	 `define SAMPLES_ADDR   16
 	 `define SAMPLES_LEN    4
+	 
+	 `define PRESAMPLES_ADDR 17
+	 `define PRESAMPLES_LEN 4
+	 
+	 `define RETSAMPLES_ADDR 18
+	 `define RETSAMPLES_LEN 4
 	 
 	 `define OFFSET_ADDR    26
 	 `define OFFSET_LEN		4

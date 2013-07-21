@@ -30,6 +30,8 @@ ADDR_PHASE      = 9
 ADDR_VERSIONS   = 10
 ADDR_OFFSET     = 26
 ADDR_SAMPLES    = 16
+ADDR_PRESAMPLES = 17
+ADDR_BYTESTORX  = 18
 ADDR_DDR        = 20
 ADDR_MULTIECHO  = 34
 
@@ -78,6 +80,7 @@ class serialOpenADCInterface:
         self.ddrMode = False
         
         self.timeout = 5
+        self.presamples_desired = 0
 
         self.sysFreq = 0
 
@@ -445,12 +448,54 @@ class serialOpenADCInterface:
         samples = 0x00000000;
 
         temp = self.sendMessage(CODE_READ, ADDR_SAMPLES, maxResp=4)
-        samples = samples | (temp[0] << 0);
-        samples = samples | (temp[1] << 8);
-        samples = samples | (temp[2] << 16);
-        samples = samples | (temp[3] << 24);
+        samples = samples | (temp[0] << 0)
+        samples = samples | (temp[1] << 8)
+        samples = samples | (temp[2] << 16)
+        samples = samples | (temp[3] << 24)
 
         return samples
+
+    def getBytesInFifo(self):
+        samples = 0
+        temp = self.sendMessage(CODE_READ, ADDR_BYTESTORX, maxResp=4)
+        samples = samples | (temp[0] << 0)
+        samples = samples | (temp[1] << 8)
+        samples = samples | (temp[2] << 16)
+        samples = samples | (temp[3] << 24)
+        return samples
+
+    def setPreSamples(self, samples):           
+        #enforce samples is multiple of 3
+        samplesact = int(samples / 3)
+
+        #Account for shitty hardware design
+        if samplesact > 0:
+               samplesact = samplesact + 16
+           
+        cmd = bytearray(4)
+        cmd[0] = ((samplesact >> 0) & 0xFF)
+        cmd[1] = ((samplesact >> 8) & 0xFF)
+        cmd[2] = ((samplesact >> 16) & 0xFF)
+        cmd[3] = ((samplesact >> 24) & 0xFF)
+        self.sendMessage(CODE_WRITE, ADDR_PRESAMPLES, cmd)
+
+        self.presamples_actual = samplesact*3
+        self.presamples_desired = samples
+        
+        return self.presamples_actual
+
+    def getPreSamples(self):
+        samples = 0x00000000;
+
+        temp = self.sendMessage(CODE_READ, ADDR_PRESAMPLES, maxResp=4)
+        samples = samples | (temp[0] << 0)
+        samples = samples | (temp[1] << 8)
+        samples = samples | (temp[2] << 16)
+        samples = samples | (temp[3] << 24)
+
+        self.presamples = samples*3
+
+        return samples*3
 
     def flushInput(self):
         try:
@@ -581,10 +626,22 @@ class serialOpenADCInterface:
               
               #print "Address=%x"%self.getDDRAddress()
 
-              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, BytesPerPackage);
-              #print len(data)
+              #print "bytes = %d"%self.getBytesInFifo()
 
-              datapoints = datapoints + self.processData(data)
+              bytesToRead = self.getBytesInFifo()
+
+              if bytesToRead == 0:
+                     bytesToRead = BytesPerPackage
+
+              #print bytesToRead
+
+              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, bytesToRead) #BytesPerPackage)
+
+
+              #for p in data:
+              #       print "%x "%p,
+
+              datapoints = datapoints + self.processData(data, 0)
 
               if progressDialog:
                      progressDialog.setValue(status)
@@ -600,13 +657,16 @@ class serialOpenADCInterface:
 
        return datapoints
 
-    def processData(self, data):
+    def processData(self, data, pad=float('NaN'), pretrigger_out=None):
         fpData = []
         lastpt = -100;
 
         if data[0] != 0xAC:
             print("Unexpected sync byte: 0x%x"%data[0])
             return None
+
+        trigfound = False
+        trigsamp = 0
 
         for i in range(1, len(data)-3, 4):            
             #Convert
@@ -620,6 +680,15 @@ class serialOpenADCInterface:
             intpt1 = temppt & 0x3FF;
             intpt2 = (temppt >> 10) & 0x3FF;
             intpt3 = (temppt >> 20) & 0x3FF;
+            
+            if trigfound == False:
+                mergpt = temppt >> 30;
+                if (mergpt != 3):
+                       trigfound = True
+                       trigsamp = trigsamp + mergpt                       
+                       #print "Trigger found at %d"%trigsamp
+                else:                     
+                   trigsamp += 3
 	
             #input validation test: uncomment following and use
             #ramp input on FPGA
@@ -634,6 +703,15 @@ class serialOpenADCInterface:
             fpData.append(float(intpt3) / 1024.0 - self.offset)
 
         #print len(fpData)
+
+        #Ensure that the trigger point matches the requested by padding/chopping
+        diff = self.presamples_desired - trigsamp
+        if diff > 0:
+               fpData = [pad]*diff + fpData
+        else:
+               fpData = fpData[-diff:]
+
+        #print "%d %d"%(len(fpData), diff)
 
         return fpData
 

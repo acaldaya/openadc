@@ -3,7 +3,7 @@ Copyright (c) 1995-2012 Xilinx, Inc.  All rights reserved.
 
 promgen -w -p mcs -c FF -o C:\E\Documents\openadc\openadc_git\hdl\example_targets\avnet_lx9board_ise//openadc_lx9 -s 16384 -u 0000 C:/E/Documents/openadc/openadc_git/hdl/example_targets/avnet_lx9board_ise/interface.bit -spi 
 
-PROM C:\E\Documents\openadc\openadc_git\hdl\example_targets\avnet_lx9board_ise\openadc_lx9.prm map: Thu Jul 18 14:59:39 2013
+PROM C:\E\Documents\openadc\openadc_git\hdl\example_targets\avnet_lx9board_ise\openadc_lx9.prm map: Sun Jul 21 14:15:35 2013
 
 Calculating PROM checksum with fill value ff
 
@@ -11,7 +11,7 @@ Format        Mcs86 (32-bit)
 Size          16384K
 PROM start    0000:0000
 PROM end      00ff:ffff
-PROM checksum f9f4be19
+PROM checksum f9fb7536
 
         Addr1        Addr2                     Date File(s)
-    0000:0000    0005:327b     Jul 18 14:43:07 2013 C:/E/Documents/openadc/openadc_git/hdl/example_targets/avnet_lx9board_ise/interface.bit
+    0000:0000    0005:3393     Jul 21 14:12:52 2013 C:/E/Documents/openadc/openadc_git/hdl/example_targets/avnet_lx9board_ise/interface.bit

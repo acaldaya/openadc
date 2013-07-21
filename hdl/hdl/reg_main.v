@@ -364,26 +364,25 @@ module reg_main(
 						
 					end else begin
 						//No more data to read
-						
-						if (ftdi_txe_n == 0) begin
-							//We can write one more byte if needed							
+												
+						if ((bytecnt != (total_bytes-16'd1)))  begin
+							//Was in stream mode, exit immediatly
 							state <= `IDLE;
-							
-							//If last byte (e.g.: was NOT in stream mode) 
-							//we write
-							if ((bytecnt == (total_bytes-16'd1)))  begin
+							regout_addrvalid <= 0;
+							ftdi_wr_n <= 1;
+						end else begin
+							//Was NOT in stream mode, write last byte first
+							if (ftdi_txe_n == 0) begin
+								//Do write
 								ftdi_wr_n <= 0;
 								regout_addrvalid <= 1;
+								state <= `IDLE;
 							end else begin
-								regout_addrvalid <= 0;
+								//Hold on - cannot write yet
+								regout_addrvalid <= 1;
 								ftdi_wr_n <= 1;
-							end
-							
-						end else begin
-							//Cannot write another byte, hold on
-							regout_addrvalid <= 1;
-							ftdi_wr_n <= 1;
-						end					
+							end							
+						end							
 					end
 				
 				end

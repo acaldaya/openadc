@@ -248,7 +248,11 @@ module openadc_interface(
 		//syncronization
 		//ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
 		
-		//Input Validation Test #3: 
+		//Input Validation Test #3: used for checking trigger location
+		//if (DUT_trigger_i == 0)
+		//	ADC_Data_tofifo <= 10'd512;
+		//else
+		//	ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
 	end
    	
 	wire [7:0] 	reg_status;
@@ -330,6 +334,8 @@ module openadc_interface(
 	wire [7:0] cmdfifo_din;
 	wire [7:0] cmdfifo_dout;
 	
+	wire [31:0] presamples;
+	wire [31:0] samples_cnt;
 	wire [31:0] maxsamples_limit;
 	wire [31:0] maxsamples;
 	
@@ -500,13 +506,15 @@ module openadc_interface(
 		.phase_i(phase_actual),
 		.phase_done_i(phase_done),
 		.phase_clk_o(phase_clk),
+		.presamples_o(presamples),
 		.maxsamples_i(maxsamples_limit),
 		.maxsamples_o(maxsamples),
+		.samples_i(samples_cnt),
 		.adc_clk_src_o(ADC_clk_selection),
 		.clkgen_src_o(clkgen_selection),
 		.clkblock_reset_o(clockreset),
 		.clkblock_dcm_locked_i(dcm_locked),
-		.clkblock_gen_locked_i(dcm_gen_locked)
+		.clkblock_gen_locked_i(dcm_gen_locked)		
 		);
 	
 	wire reg_stream_fifo;
@@ -669,8 +677,10 @@ module openadc_interface(
 	 .fifo_read_fifoempty(ddrfifo_empty),
 	 .fifo_read_data(ddrfifo_dout),
 
+	 .presample_i(presamples),
 	 .max_samples_i(maxsamples),
-	 .max_samples_o(maxsamples_limit)
+	 .max_samples_o(maxsamples_limit),
+	 .samples_o(samples_cnt)
 
 `ifdef CHIPSCOPE
 	 ,.chipscope_control(chipscope_control)

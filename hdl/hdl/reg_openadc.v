@@ -84,8 +84,10 @@ module reg_openadc(
 	output			clkblock_reset_o,
 	input				clkblock_dcm_locked_i,
 	input				clkblock_gen_locked_i,
+	output [31:0]  presamples_o,
 	output [31:0]	maxsamples_o,
-	input  [31:0]  maxsamples_i
+	input  [31:0]  maxsamples_i,
+	input  [31:0]  samples_i	
     );
 	 
 	 wire	  reset;
@@ -119,6 +121,7 @@ module reg_openadc(
 	 reg [31:0] registers_adcclk_frequency;
 	 reg [31:0] registers_ddr_address;
 	 reg [31:0] registers_samples;
+	 reg [31:0] registers_presamples;
 	 reg [31:0] registers_offset;
 	 reg [15:0]	phase_out;
 	 reg [8:0]  phase_in;
@@ -162,6 +165,8 @@ module reg_openadc(
 				`VERSION_ADDR: reg_hyplen_reg <= `VERSION_LEN;
 				`SAMPLES_ADDR: reg_hyplen_reg <= `SAMPLES_LEN;
 				`OFFSET_ADDR: reg_hyplen_reg <= `OFFSET_LEN;
+				`PRESAMPLES_ADDR: reg_hyplen_reg <= `PRESAMPLES_LEN;
+				`RETSAMPLES_ADDR: reg_hyplen_reg <= `RETSAMPLES_LEN;
 				`ADVCLOCK_ADDR: reg_hyplen_reg <= `ADVCLOCK_LEN;
 				`SYSTEMCLK_ADDR: reg_hyplen_reg <= `SYSTEMCLK_LEN;
 				default: reg_hyplen_reg<= 0;
@@ -186,6 +191,7 @@ module reg_openadc(
 	 
 	 assign gain = registers_gain;
 	 assign maxsamples_o = registers_samples;
+	 assign presamples_o = registers_presamples;
 	 
 	 reg extclk_locked;
 	 reg adcclk_locked;
@@ -244,6 +250,8 @@ module reg_openadc(
 				`PHASE_ADDR: begin reg_datao_valid_reg <= 1; end
 				`VERSION_ADDR: begin reg_datao_valid_reg <= 1; end
 				`SAMPLES_ADDR: begin reg_datao_valid_reg <= 1; end	
+				`PRESAMPLES_ADDR: begin reg_datao_valid_reg <= 1; end	
+				`RETSAMPLES_ADDR: begin reg_datao_valid_reg <= 1; end					
 				`OFFSET_ADDR: begin reg_datao_valid_reg <= 1; end	
 				`ADVCLOCK_ADDR: begin reg_datao_valid_reg <= 1; end
 				`SYSTEMCLK_ADDR: begin reg_datao_valid_reg <= 1; end
@@ -266,6 +274,8 @@ module reg_openadc(
 				`PHASE_ADDR: reg_datao_reg <= phase_in[reg_bytecnt*8 +: 8]; 
 				`VERSION_ADDR: reg_datao_reg <= version_data[reg_bytecnt*8 +: 8];
 				`SAMPLES_ADDR: reg_datao_reg <= registers_samples[reg_bytecnt*8 +: 8];
+				`PRESAMPLES_ADDR: reg_datao_reg <= registers_presamples[reg_bytecnt*8 +: 8];
+				`RETSAMPLES_ADDR: reg_datao_reg <= samples_i[reg_bytecnt*8 +: 8];
 				`OFFSET_ADDR: reg_datao_reg <= registers_offset[reg_bytecnt*8 +: 8];
 				`ADVCLOCK_ADDR: reg_datao_reg <= registers_advclocksettings_read[reg_bytecnt*8 +: 8];
 				`SYSTEMCLK_ADDR: reg_datao_reg <= system_frequency[reg_bytecnt*8 +: 8];
@@ -280,13 +290,16 @@ module reg_openadc(
 			registers_settings <= 0;
 			registers_echo <= 0;
 			registers_samples <= maxsamples_i;
+			registers_presamples <= 0;
 			registers_offset <= 0;
+			registers_advclocksettings <= 32'h00000002;
 		end else if (reg_write) begin
 			case (reg_address)
 				`GAIN_ADDR: registers_gain <= reg_datai;
 				`SETTINGS_ADDR: registers_settings <= reg_datai;
 				`ECHO_ADDR: registers_echo <= reg_datai;
 				`SAMPLES_ADDR: registers_samples[reg_bytecnt*8 +: 8] <= reg_datai;	
+				`PRESAMPLES_ADDR: registers_presamples[reg_bytecnt*8 +: 8] <= reg_datai;
 				`OFFSET_ADDR: registers_offset[reg_bytecnt*8 +: 8] <= reg_datai;
 				`ADVCLOCK_ADDR: registers_advclocksettings[reg_bytecnt*8 +: 8] <= reg_datai;
 				default: ;
