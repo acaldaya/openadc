@@ -238,7 +238,7 @@ module openadc_interface(
 	wire [9:0] trigger_level;
 	
 	always @(posedge ADC_clk_sample) begin
-		//ADC_Data_tofifo <= ADC_Data_delayed;
+		ADC_Data_tofifo <= ADC_Data_delayed;
 		
 		//Input Validation Test #1: Uncomment the following
 		//ADC_Data_tofifo <= 10'hAA;
@@ -248,11 +248,11 @@ module openadc_interface(
 		//syncronization
 		//ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
 		
-		//Input Validation Test #3: 
-		if (DUT_trigger_i == 0)
-			ADC_Data_tofifo <= 10'd512;
-		else
-			ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
+		//Input Validation Test #3: used for checking trigger location
+		//if (DUT_trigger_i == 0)
+		//	ADC_Data_tofifo <= 10'd512;
+		//else
+		//	ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
 	end
    	
 	wire [7:0] 	reg_status;

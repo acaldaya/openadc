@@ -2,10 +2,10 @@
 # Copyright (c) 1995-2012 Xilinx, Inc.  All rights reserved.
 
 SOFTWARE_VERSION P.49d
-DATE            07/18/2013 - 14:59
+DATE            07/21/2013 - 14:15
 SOURCE          C:\E\Documents\openadc\openadc_git\hdl\example_targets\avnet_lx9board_ise\openadc_lx9.mcs
 DEVICE          16384K
 DATA_WIDTH      1
 FILL_DATA       0xFF
-SIGNATURE       0xF9F4BE19
-START_ADDRESS   0x00000000 END_ADDRESS 0x0005327B DIRECTION_UP   "C:/E/Documents/openadc/openadc_git/hdl/example_targets/avnet_lx9board_ise/interface.bit" 6slx9csg324
+SIGNATURE       0xF9FB7536
+START_ADDRESS   0x00000000 END_ADDRESS 0x00053393 DIRECTION_UP   "C:/E/Documents/openadc/openadc_git/hdl/example_targets/avnet_lx9board_ise/interface.bit" 6slx9csg324
