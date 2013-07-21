@@ -80,7 +80,7 @@ class serialOpenADCInterface:
         self.ddrMode = False
         
         self.timeout = 5
-        self.presamples = 0
+        self.presamples_desired = 0
 
         self.sysFreq = 0
 
@@ -466,18 +466,23 @@ class serialOpenADCInterface:
 
     def setPreSamples(self, samples):           
         #enforce samples is multiple of 3
-        samples = int(samples / 3)
+        samplesact = int(samples / 3)
+
+        #Account for shitty hardware design
+        if samplesact > 0:
+               samplesact = samplesact + 16
            
         cmd = bytearray(4)
-        cmd[0] = ((samples >> 0) & 0xFF)
-        cmd[1] = ((samples >> 8) & 0xFF)
-        cmd[2] = ((samples >> 16) & 0xFF)
-        cmd[3] = ((samples >> 24) & 0xFF)
+        cmd[0] = ((samplesact >> 0) & 0xFF)
+        cmd[1] = ((samplesact >> 8) & 0xFF)
+        cmd[2] = ((samplesact >> 16) & 0xFF)
+        cmd[3] = ((samplesact >> 24) & 0xFF)
         self.sendMessage(CODE_WRITE, ADDR_PRESAMPLES, cmd)
 
-        self.presamples = samples*3
+        self.presamples_actual = samplesact*3
+        self.presamples_desired = samples
         
-        return self.presamples
+        return self.presamples_actual
 
     def getPreSamples(self):
         samples = 0x00000000;
@@ -628,7 +633,7 @@ class serialOpenADCInterface:
               if bytesToRead == 0:
                      bytesToRead = BytesPerPackage
 
-              print bytesToRead
+              #print bytesToRead
 
               data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, bytesToRead) #BytesPerPackage)
 
@@ -652,7 +657,7 @@ class serialOpenADCInterface:
 
        return datapoints
 
-    def processData(self, data, pad=float('NaN')):
+    def processData(self, data, pad=float('NaN'), pretrigger_out=None):
         fpData = []
         lastpt = -100;
 
@@ -681,7 +686,7 @@ class serialOpenADCInterface:
                 if (mergpt != 3):
                        trigfound = True
                        trigsamp = trigsamp + mergpt                       
-                       print "Trigger found at %d"%trigsamp
+                       #print "Trigger found at %d"%trigsamp
                 else:                     
                    trigsamp += 3
 	
@@ -700,7 +705,7 @@ class serialOpenADCInterface:
         #print len(fpData)
 
         #Ensure that the trigger point matches the requested by padding/chopping
-        diff = self.presamples - trigsamp
+        diff = self.presamples_desired - trigsamp
         if diff > 0:
                fpData = [pad]*diff + fpData
         else:

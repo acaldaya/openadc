@@ -103,7 +103,7 @@ class OpenADCQt(QObject):
         self.datapoints = []
 
         self.preview = None
-        self.preSamplesActualValue = 0
+        self.preSamplesValue = 0
 
         self.timerStatusRefresh = QTimer(self)
         self.timerStatusRefresh.timeout.connect(self.statusRefresh)
@@ -532,7 +532,7 @@ class OpenADCQt(QObject):
     def preSamplesChanged(self, presamples):
         value = self.sc.setPreSamples(presamples)        
         self.preSamplesActual.setText("=%d"%value)
-        self.preSamplesActualValue = value
+        self.preSamplesValue = presamples
 
     def processData(self, data):
         fpData = []
@@ -579,7 +579,7 @@ class OpenADCQt(QObject):
         self.dataUpdated.emit(self.datapoints)
 
         if update & (self.preview is not None):               
-            self.preview.updateData(self.datapoints, -self.preSamplesActualValue)
+            self.preview.updateData(self.datapoints, -self.preSamplesValue)
 
         return True
         
