@@ -292,6 +292,7 @@ module reg_openadc(
 			registers_samples <= maxsamples_i;
 			registers_presamples <= 0;
 			registers_offset <= 0;
+			registers_advclocksettings <= 32'h00000002;
 		end else if (reg_write) begin
 			case (reg_address)
 				`GAIN_ADDR: registers_gain <= reg_datai;

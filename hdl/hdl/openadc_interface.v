@@ -246,9 +246,13 @@ module openadc_interface(
 		//Input Validation Test #2: uncomment following, which should
 		//put a perfect ramp. Tests FIFO & USB interface for proper
 		//syncronization
-		ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
+		//ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
 		
 		//Input Validation Test #3: 
+		if (DUT_trigger_i == 0)
+			ADC_Data_tofifo <= 10'd512;
+		else
+			ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
 	end
    	
 	wire [7:0] 	reg_status;

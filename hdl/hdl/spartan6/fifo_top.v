@@ -104,7 +104,7 @@ module fifo_top(
 	end
 		
 	always@(posedge adc_sampleclk) begin
-		if (reset_i) begin
+		if ((adc_capture_go | presample) == 0) begin
 			adcfifo_merge_cnt <= 'b00;
 		end else begin		
 			if (adcfifo_merge_cnt == 'b00)
@@ -143,7 +143,7 @@ module fifo_top(
 		if (~adc_capture_go)
 			mergeloc <= 2'b11;
 		else if (adc_capture_go && (mergeloc == 2'b11))
-			mergeloc <= adcfifo_merge_cnt;
+			mergeloc <= adcfifo_merge_cnt; //(adcfifo_merge_cnt == 'b10) ? 'b00 : adcfifo_merge_cnt + 1;	;
 		end
 	
 	assign adcfifo_in[31:30] = mergeloc;
@@ -162,6 +162,8 @@ module fifo_top(
 		fifo_empty_longer2 <= fifo_empty_longer1;
 		fifo_empty_longer3 <= fifo_empty_longer2;
 	end
+	
+	
 		
 	wire [31:0] prog_full_thresh;
 	assign prog_full_thresh = presample_i;
@@ -269,12 +271,22 @@ module fifo_top(
 			 +Use extra logic for more accurate Data Counts
 			 +Read Data Count
 	
+	We use 128-bit output for the pretrigger ability. Pretrigger is done by emptying
+	the fifo while we fill it to keep a certain number of words in the fifo. The problem
+	is the ADC clock might be much faster than the read clock - so we empty 4x more samples
+	than we load on every clock. This allows up to 4x faster ADC than the fifo read clock.
+	
+	Fifo read clock depends on HW, typically 30-100 MHz. The ADC clock will be < 120 MHz.
+	
+	Downside of this is that when the FIFO EMPTY goes high, there may be a 'partially filled' 128-bit
+	bucket left. This bucket will screw with syncronization next time around, so we reset the FIFO
+	after the empty flag goes high to totally clear it out.
 	
 	
 	*/
 		
 	fifoonly_adcfifo fifoonly_adcfifo_inst (
-  .rst(reset_i), // input rst
+  .rst(reset_i | (fifo_empty_longer2 & ~fifo_empty_longer3)), // input rst
   .wr_clk(adc_sampleclk), // input wr_clk
   .rd_clk(fifo_read_fifoclk), // input rd_clk
   .din(adcfifo_in), // input [31 : 0] din

@@ -74,15 +74,17 @@ class previewWindow():
         '''Returns the setup widget for the preview graph'''
         return self.settings
 
-    def updateData(self, data):
+    def updateData(self, data, start=0):
         if self.persistant.isChecked():
             if self.autocolour.isChecked():
                 nc = (self.colour.value() + 1) % 8
                 self.colour.setValue(nc)            
         else:
             self.pw.clear()
+
+        xaxis = range(start, len(data)+start)
             
-        self.pw.plot(data, pen=(self.colour.value(),8))
+        self.pw.plot(xaxis, data, pen=(self.colour.value(),8))
 
     def hideGraph(self):
         self.dock.close()
@@ -101,6 +103,7 @@ class OpenADCQt(QObject):
         self.datapoints = []
 
         self.preview = None
+        self.preSamplesActualValue = 0
 
         self.timerStatusRefresh = QTimer(self)
         self.timerStatusRefresh.timeout.connect(self.statusRefresh)
@@ -264,7 +267,8 @@ class OpenADCQt(QObject):
         self.samples = QSpinBox()
         self.samples.setMinimum(100)
         self.preSamples = QSpinBox()
-        self.preSamples.setMinimum(0)        
+        self.preSamples.setMinimum(0)
+        self.preSamples.setSingleStep(3)
 
         self.maxSamplesLabel = QLabel("Max Samples: ?")
         samplelayout.addWidget(self.maxSamplesLabel, 0, 0)
@@ -274,6 +278,10 @@ class OpenADCQt(QObject):
         samplelayout.addWidget(self.preSamples, 2, 1)
         self.samples.valueChanged.connect(self.samplesChanged)
         self.preSamples.valueChanged.connect(self.preSamplesChanged)
+
+
+        self.preSamplesActual = QLabel()
+        samplelayout.addWidget(self.preSamplesActual, 2, 2)
     
         ####### Master Clock
         self.clockWidget = QWidget()
@@ -433,7 +441,7 @@ class OpenADCQt(QObject):
 
     def setMaxSample(self, samples):
         self.samples.setMaximum(samples)
-        self.preSamples.setMaximum(samples-9)
+        self.preSamples.setMaximum(samples)
         self.maxSamplesLabel.setText("Max Samples: %d"%samples)
         
     def offsetChanged(self, newoffset):
@@ -522,8 +530,9 @@ class OpenADCQt(QObject):
         self.sc.setMaxSamples(samples)
 
     def preSamplesChanged(self, presamples):
-        value = self.sc.setPreSamples(presamples)
-        self.preSamples.setValue(value)
+        value = self.sc.setPreSamples(presamples)        
+        self.preSamplesActual.setText("=%d"%value)
+        self.preSamplesActualValue = value
 
     def processData(self, data):
         fpData = []
@@ -570,7 +579,7 @@ class OpenADCQt(QObject):
         self.dataUpdated.emit(self.datapoints)
 
         if update & (self.preview is not None):               
-            self.preview.updateData(self.datapoints)
+            self.preview.updateData(self.datapoints, -self.preSamplesActualValue)
 
         return True
         
