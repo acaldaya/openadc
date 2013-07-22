@@ -12,7 +12,6 @@ import os
 import threading
 import time
 import datetime
-import serial
 import logging
 import math
 import random
@@ -63,26 +62,497 @@ def SIGNEXT(x, b):
        x = x & ((1 << b) - 1)
        return (x ^ m) - m
 
-class serialOpenADCInterface:
+class OpenADCSettings:
+    def __init__(self, oaiface=None):   
+        self.parm_hwinfo = HWInformation()
+        self.parm_gain = GainSettings()
+        self.parm_trigger = TriggerSettings()
+        self.parm_clock = ClockSettings()
+        
+        self.params = [
+            self.parm_hwinfo, 
+            self.parm_gain, 
+            self.parm_trigger, 
+            self.parm_clock
+            ]
+            
+        if oaiface is not None:
+            self.setInterface(oaiface)  
+        
+    def setInterface(self, oaiface):
+        self.oa = oaiface
+        for p in self.params:
+            p.setInterface(oaiface)
+
+    def parameters(self,  doupdate=True):
+        """Return a dict of all parameter/settings. Useful for saving."""       
+        paramdict = []
+        for p in self.params:
+            paramref = p.param               
+            paramdict.append(paramref)
+            
+        if doupdate:
+            for p in paramdict:
+                for set in p['children']:
+                    try:
+                        if 'children' in set:
+                            for subset in set['children']:
+                                if set['type'] != 'action':
+                                    subset['value']=subset['get']
+                        else:
+                            if set['type'] != 'action':
+                                set['value'] = set['get']()
+                    except KeyError:
+                        print "Error in %s.%s - no 'get'"%(p['name'], set['name'])
+        
+        return paramdict
+
+    def setParameters(self, paramdict):
+        """Set all parameters/settings from a dict. Can pass only part of the dictionary too for changes."""
+        return
+            
+class HWInformation:
+    def __init__(self):
+        self.name = "Hardware Information"
+        self.sysFreq = 0
+        self.param = {'name': 'HW Information', 'type': 'group', 'children': [
+                {'name': 'Version', 'type': 'str', 'value': "unknown", 'get':self.versions, 'readonly':True},
+                {'name': 'Synth Date', 'type': 'str', 'value': "unknown", 'get':self.synthDate, 'readonly':True},
+                {'name': 'System Freq', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'get':self.sysFrequency, 'readonly':True},
+                {'name': 'Max Samples', 'type': 'int', 'value': 0, 'get':self.maxSamples, 'readonly':True}
+                ]}
+        
+    def setInterface(self, oa):
+        self.oa = oa
+        oa.hwInfo = self
+
+    def versions(self):
+        result = self.oa.sendMessage(CODE_READ, ADDR_VERSIONS, maxResp=6)
+
+        regver = result[0] & 0xff
+        hwtype = result[1] >> 3
+        hwver = result[1] & 0x07
+        hwList = ["Default/Unknown", "LX9 MicroBoard", "SASEBO-W", "ChipWhisperer Rev2 LX25",
+                  "Reserved?", "ZedBoard", "Papilio Pro"]
+
+        try:
+            textType = hwList[hwtype]
+        except:
+            textType = "Invalid/Unknown"
+
+        return (regver, hwtype, textType, hwver)  
+      
+    def synthDate(self):
+       return "unknown" 
+       
+    def maxSamples(self):
+        return self.oa.hwMaxSamples
+
+    def sysFrequency(self, force=False):
+        if (self.sysFreq > 0) & (force == False):
+               return self.sysFreq
+           
+        '''Return the system clock frequency in specific firmware version'''
+        freq = 0x00000000;
+
+        temp = self.oa.sendMessage(CODE_READ, ADDR_SYSFREQ, maxResp=4)
+        freq = freq | (temp[0] << 0);
+        freq = freq | (temp[1] << 8);
+        freq = freq | (temp[2] << 16);
+        freq = freq | (temp[3] << 24);
+
+        self.sysFreq = long(freq)
+        
+        return self.sysFreq
+
+class GainSettings:
+    def __init__(self):
+        self.name = "Gain Setting"
+        self.param = {'name': 'Gain Setting', 'type': 'group', 'children': [
+                {'name': 'Mode', 'type': 'list', 'values': {"high", "low"}, 'value':"low", 'set':self.setMode,  'get':self.mode},
+                {'name': 'Setting', 'type': 'int', 'value':0, 'limits': (0, 78),  'set':self.setGain,  'get':self.gain},
+                {'name': 'Result', 'type': 'float', 'suffix':'dB', 'readonly':True, 'get':self.gainDB},
+                ]}
+    
+    def setInterface(self, oa):
+        self.oa = oa
+        
+    def setMode(self, gainmode):
+        '''Set the gain Mode'''
+        if gainmode == "high":
+            self.oa.setSettings(self.oa.settings() | SETTINGS_GAIN_HIGH)
+        elif gainmode == "low":           
+            self.setSettings(self.oa.settings() & ~SETTINGS_GAIN_HIGH)
+        else:
+            raise ValueError, "Invalid Gain Mode, only 'low' or 'high' allowed"
+ 
+    def mode(self):
+        return "low"
+        
+    def setGain(self, gain):
+        '''Set the Gain range 0-78'''
+        if (gain < 0) | (gain > 78):
+            raise ValueError,  "Invalid Gain, range 0-78 Only"
+            
+        cmd = bytearray(1)
+        cmd[0] = gain               
+        self.oa.sendMessage(CODE_WRITE, ADDR_GAIN, cmd)
+
+    def gain(self):
+        result = self.oa.sendMessage(CODE_READ, ADDR_GAIN)
+        return result[0]
+        
+    def gainDB(self):
+        return 0
+
+class TriggerSettings:
+    def __init__(self):
+        self.name = "Trigger Settings"
+        self.param = {'name': 'Trigger Setup', 'type':'group', 'children': [
+            {'name': 'Source', 'type': 'list', 'values':["digital",  "analog"],  'value':"digital", 'set':self.setSource,  'get':self.source}, 
+            {'name': 'Mode',   'type':'list',  'values':["rising edge", "falling edge", "low", "high"], 'value':'low', 'set':self.setMode, 'get':self.mode}, 
+            {'name': 'Offset', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setOffset, 'get':self.offset}, 
+            {'name': 'Pre-Trigger Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setPresamples, 'get':self.presamples}, 
+            {'name': 'Total Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setMaxSamples, 'get':self.maxSamples}, 
+        ]}
+
+    def setInterface(self, oa):
+        self.oa = oa
+
+    def setMaxSamples(self, samples):
+        self.oa.setMaxSamples(samples)
+        
+    def maxSamples(self):
+        self.oa.maxSamples()
+
+    def setOffset(self,  offset):
+        cmd = bytearray(4)
+        cmd[0] = ((offset >> 0) & 0xFF)
+        cmd[1] = ((offset >> 8) & 0xFF)
+        cmd[2] = ((offset >> 16) & 0xFF)
+        cmd[3] = ((offset >> 24) & 0xFF)
+        self.oa.sendMessage(CODE_WRITE, ADDR_OFFSET, cmd)
+        
+    def offset(self):
+        cmd = self.oa.sendMessage(CODE_READ, ADDR_OFFSET, maxResp=4)        
+        offset = cmd[0]
+        offset |= cmd[1] << 8
+        offset |= cmd[2] << 16
+        offset |= cmd[3] << 24              
+        return offset 
+
+
+    def setPresamples(self, samples):           
+        #enforce samples is multiple of 3
+        samplesact = int(samples / 3)
+
+        #Account for shitty hardware design
+        if samplesact > 0:
+               samplesact = samplesact + 16
+           
+        cmd = bytearray(4)
+        cmd[0] = ((samplesact >> 0) & 0xFF)
+        cmd[1] = ((samplesact >> 8) & 0xFF)
+        cmd[2] = ((samplesact >> 16) & 0xFF)
+        cmd[3] = ((samplesact >> 24) & 0xFF)
+        self.oa.sendMessage(CODE_WRITE, ADDR_PRESAMPLES, cmd)
+
+        self.presamples_actual = samplesact*3
+        self.presamples_desired = samples
+        
+        return self.presamples_actual
+
+    def presamples(self):
+        samples = 0x00000000;
+
+        temp = self.oa.sendMessage(CODE_READ, ADDR_PRESAMPLES, maxResp=4)
+        samples = samples | (temp[0] << 0)
+        samples = samples | (temp[1] << 8)
+        samples = samples | (temp[2] << 16)
+        samples = samples | (temp[3] << 24)
+
+        self.presamples = samples*3
+
+        return samples*3
+
+    def setSource(self,  src):
+        return
+        
+    def source(self):
+        return "digital"
+
+    def setMode(self,  mode):
+        """ Input to trigger module options: 'rising edge', 'falling edge', 'high', 'low' """
+        if mode == 'rising edge':
+            trigmode = SETTINGS_TRIG_HIGH | SETTINGS_WAIT_YES;
+
+        elif mode == 'falling edge':
+            trigmode = SETTINGS_TRIG_LOW | SETTINGS_WAIT_YES;
+
+        elif mode == 'high':
+            trigmode = SETTINGS_TRIG_HIGH | SETTINGS_WAIT_NO;
+
+        elif mode == 'low':
+            trigmode = SETTINGS_TRIG_LOW | SETTINGS_WAIT_NO;
+
+        else:
+            raise ValueError,  "%s invalid trigger mode"%mode
+
+        cur = self.oa.settings() & ~(SETTINGS_TRIG_HIGH | SETTINGS_WAIT_YES);
+        self.oa.setSettings(cur | trigmode)
+        
+    def mode(self):
+        sets = self.oa.settings()
+        case = sets & (SETTINGS_TRIG_HIGH | SETTINGS_WAIT_YES);
+        
+        if case == SETTINGS_TRIG_HIGH | SETTINGS_WAIT_YES:
+            mode = "rising edge"
+        elif case == SETTINGS_TRIG_LOW | SETTINGS_WAIT_YES:
+            mode = "falling edge"
+        elif case == SETTINGS_TRIG_HIGH | SETTINGS_WAIT_NO:
+            mode = "high"
+        else:
+            mode = "low"
+            
+        return mode
+
+class ClockSettings:
+    def __init__(self):
+        self.name = "Clock Setup"
+        self.param = {'name': 'Clock Setup', 'type':'group', 'children': [
+            {'name':'Refresh Status', 'type':'action'}, 
+            {'name':'Relock DCMs', 'type':'action'}, 
+        
+            {'name': 'ADC Clock', 'type':'group', 'children': [
+                {'name': 'Source', 'type':'list', 'values':{"EXTCLK Direct":["extclk", 4, "clkgen"], "EXTCLK x4 via DCM":["dcm", 4, "extclk"], "EXTCLK x1 via DCM":["dcm", 1, "extclk"], "CLKGEN x4 via DCM":["dcm", 4, "clkgen"], "CLKGEN x1 via DCM":["dcm", 1, "clkgen"]},  'value':["dcm", 1, "extclk"], 'set':self.setAdcSource,  'get':self.adcSource}, 
+                {'name': 'Phase Adjust', 'type':'int', 'value':0, 'limits':[-100, 100], 'set':self.setPhase, 'get':self.phase}, 
+                {'name': 'DCM Locked', 'type':'bool',  'value':False, 'get':self.dcmADCLocked, 'readonly':True}, 
+                {'name': 'ADC Freq', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.adcFrequency},
+            ]},            
+            {'name': 'EXTCLK Input Freq', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.extFrequency},
+            {'name':'CLKGEN Settings', 'type':'group', 'children': [
+                {'name':'Input Source', 'type':'list', 'values':["system", "extclk"], 'value':"system", 'set':self.setClkgenSrc, 'get':self.clkgenSrc}, 
+                {'name':'Multiply', 'type':'list', 'values':{'2x':2}, 'value':2, 'set':self.setClkgenMul, 'get':self.clkgenMul}, 
+                {'name':'Divide', 'type':'list', 'values':{'/2':2}, 'value':2, 'set':self.setClkgenDiv, 'get':self.clkgenDiv}, 
+                {'name':'TargetDivide', 'type':'list', 'values':{'/4':4}, 'value':4, 'set':self.setClkgenDivTarget, 'get':self.clkgenDivTarget},
+                {'name':'DCM Locked', 'type':'bool',  'value':False, 'get':self.clkgenLocked, 'readonly':True},                
+            ]},             
+        ]} 
+        
+    def setInterface(self, oa):
+        self.oa = oa
+        
+    def setClkgenMul(self, mul):
+       return
+    
+    def clkgenMul(self, mul):
+       return 2
+       
+    def setClkgenDiv(self, div):
+       return
+       
+    def clkgenDiv(self, div):
+       return 2
+    
+    def setClkgenDivTarget(self, div):
+       return
+       
+    def clkgenDivTarget(self, div):
+       return 4
+
+    def adcSource(self):
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        result[0] = result[0] & 0x07
+
+        if result[0] & 0x04:
+            dcminput = "extclk"
+        else:
+            dcminput = "clkgen"
+
+        if result[0] & 0x02:
+            dcmout = 1
+        else:
+            dcmout = 4
+
+        if result[0] & 0x01:
+            source = "extclk"
+        else:
+            source = "dcm"
+
+        return (source, dcmout, dcminput)
+
+    def setAdcSource(self, source="dcm", dcmout=4, dcminput="clkgen"):
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+
+        result[0] = result[0] & ~0x07
+
+        if dcminput == "clkgen":
+            pass
+        elif dcminput == "extclk":
+            result[0] = result[0] | 0x04
+        else:
+            raise ValueError("dcminput must be 'clkgen' or 'extclk'")
+
+        if dcmout == 4:
+            pass
+        elif dcmout == 1:
+            result[0] = result[0] | 0x02
+        else:
+            raise ValueError("dcmout must be 1 or 4") 
+
+        if source == "dcm":
+            pass
+        elif source == "extclk":
+            result[0] = result[0] | 0x01
+        else:
+            raise ValueError("source must be 'dcm' or 'extclk'")
+
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+        
+    def setClkgenSrc(self, source="system"):
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+
+        result[0] = result[0] & ~0x08
+
+        if source == "system":
+            pass
+        elif source == "extclk":
+            result[0] = result[0] | 0x08
+        else:
+            raise ValueError("source must be 'system' or 'extclk'")             
+
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+        
+    def clkgenSrc(self):
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        if result[0] & 0x08:
+            return "extclk"
+        else:
+            return "system"
+        
+    def setPhase(self, phase):
+        '''Set the phase adjust, range -255 to 255'''
+
+        LSB = phase & 0x00FF;
+        MSB = (phase & 0x0100) >> 8;
+       
+        cmd = bytearray(2)
+        cmd[0] = LSB;
+        cmd[1] = MSB | 0x02;
+        self.oa.sendMessage(CODE_WRITE, ADDR_PHASE, cmd, False)
+
+    def phase(self):
+        result = self.oa.sendMessage(CODE_READ, ADDR_PHASE, maxResp=2);
+
+        if (result[1] & 0x02):            
+            LSB = result[0]
+            MSB = result[1] & 0x01
+
+            phase = LSB | (MSB << 8)
+
+            #Sign Extend
+            phase = SIGNEXT(phase, 9)
+
+            return phase
+        else:
+            return None
+
+    def dcmADCLocked(self):
+        result = self.DCMStatus()
+        return result[0]
+        
+    def clkgenLocked(self):
+        result = self.DCMStatus()
+        return result[1]
+
+    def DCMStatus(self):
+         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+         if (result[0] & 0x80) == 0:
+             print "ERROR: ADVCLK register not present. Version mismatch"
+             return (False, False)
+
+         if (result[0] & 0x40) == 0:
+             dcmADCLocked = False
+         else:
+             dcmADCLocked = True
+
+         if (result[0] & 0x20) == 0:
+             dcmCLKGENLocked = False
+         else:
+             dcmCLKGENLocked = True
+
+         return (dcmADCLocked, dcmCLKGENLocked)
+
+    def resetDcms(self):
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+
+        #Set reset high
+        result[0] = result[0] | 0x10
+
+        result[0] = result[0] | 0x0E
+        
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+
+        #Set reset low
+        result[0] = result[0] & ~(0x10)
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+
+    def extFrequency(self):
+        """Return frequency of clock measured on EXTCLOCK pin in Hz"""
+        freq = 0x00000000;
+
+        #Get sample frequency
+        samplefreq = float(self.oa.hwInfo.sysFrequency()) / float(pow(2,24))
+
+        temp = self.oa.sendMessage(CODE_READ, ADDR_FREQ, maxResp=4)
+        freq = freq | (temp[0] << 0);
+        freq = freq | (temp[1] << 8);
+        freq = freq | (temp[2] << 16);
+        freq = freq | (temp[3] << 24);
+
+        measured = freq * samplefreq * 0.8
+        return long(measured)
+
+    def adcFrequency(self):
+        """Return the external frequency measured on 'CLOCK' pin. Returned value
+           is in Hz"""
+        freq = 0x00000000;
+
+        #Get sample frequency
+        samplefreq = float(self.oa.hwInfo.sysFrequency()) / float(pow(2,24))
+
+        temp = self.oa.sendMessage(CODE_READ, ADDR_ADCFREQ, maxResp=4)
+        freq = freq | (temp[0] << 0);
+        freq = freq | (temp[1] << 8);
+        freq = freq | (temp[2] << 16);
+        freq = freq | (temp[3] << 24);
+
+        measured = freq * samplefreq * 0.8
+
+        return long(measured)
+
+
+class OpenADCInterface:        
     def __init__(self, serial_instance, debug=None):
         self.serial = serial_instance
         self.log = logging.getLogger('serialUsb')
+        self.timeout = 5
+        self.offset = 0.5
+        self.ddrMode = False        
+        self.presamples_desired = 0
+        self.sysFreq = 0
 
-        self.getSettings();
+        self.settings();
+
+        #self.params = OpenADCSettings(self)
 
         #Send clearing function
-        nullmessage = bytearray([0]*20)
-        
+        nullmessage = bytearray([0]*20)        
         self.serial.write(str(nullmessage));
-
-        self.offset = 0.5
-
-        self.ddrMode = False
         
-        self.timeout = 5
-        self.presamples_desired = 0
+        self.setReset(True)
+        self.setReset(False)
 
-        self.sysFreq = 0
 
     def testAndTime(self):
         totalbytes = 0
@@ -177,91 +647,31 @@ class serialOpenADCInterface:
                     else:
                         print "<Timeout>"
 
+### Generic
     def setSettings(self, state):
         cmd = bytearray(1)
         cmd[0] = state        
         self.sendMessage(CODE_WRITE, ADDR_SETTINGS, cmd);
 
-    def getSettings(self):
+    def settings(self):
         sets = self.sendMessage(CODE_READ, ADDR_SETTINGS)
         if sets:
             return sets[0]
         else:
             return 0
 
-    def setGainMode(self, gainmode):
-        '''Set the gain Mode'''
-        if gainmode == "high":
-            self.setSettings(self.getSettings() | SETTINGS_GAIN_HIGH);
-        elif gainmode == "low":           
-            self.setSettings(self.getSettings() & ~SETTINGS_GAIN_HIGH);
-        else:
-            raise ValueError, "Invalid Gain Mode, only 'low' or 'high' allowed"
-
-    def setReset(self, value):
+    def setReset(self, value):           
         if value:
-               self.setSettings(self.getSettings() | SETTINGS_RESET);
+               self.setSettings(self.settings() | SETTINGS_RESET);
+               self.hwMaxSamples = self.maxSamples()
         else:
-                self.setSettings(self.getSettings() | SETTINGS_RESET);
-
+                self.setSettings(self.settings() | SETTINGS_RESET);
+                
     def triggerNow(self):
-        initial = self.getSettings()
+        initial = self.settings()
         self.setSettings(initial | SETTINGS_TRIG_NOW)
         time.sleep(0.01)
         self.setSettings(initial & ~SETTINGS_TRIG_NOW)
-        
-    def setTriggerOffset(self,  offset):
-        cmd = bytearray(4)
-        cmd[0] = ((offset >> 0) & 0xFF)
-        cmd[1] = ((offset >> 8) & 0xFF)
-        cmd[2] = ((offset >> 16) & 0xFF)
-        cmd[3] = ((offset >> 24) & 0xFF)
-        self.sendMessage(CODE_WRITE, ADDR_OFFSET, cmd)
-        
-    def getTriggerOffset(self):
-        cmd = self.sendMessage(CODE_READ, ADDR_OFFSET, maxResp=4)        
-        offset = cmd[0]
-        offset |= cmd[1] << 8
-        offset |= cmd[2] << 16
-        offset |= cmd[3] << 24              
-        return offset 
-        
-    def setGain(self, gain):
-        '''Set the Gain range 0-78'''
-        cmd = bytearray(1)
-        cmd[0] = gain               
-        self.sendMessage(CODE_WRITE, ADDR_GAIN, cmd)
-
-    def getGain(self):
-        result = self.sendMessage(CODE_READ, ADDR_GAIN)
-        return result[0]
-
-    def setPhase(self, phase):
-        '''Set the phase adjust, range -255 to 255'''
-
-        LSB = phase & 0x00FF;
-        MSB = (phase & 0x0100) >> 8;
-       
-        cmd = bytearray(2)
-        cmd[0] = LSB;
-        cmd[1] = MSB | 0x02;
-        self.sendMessage(CODE_WRITE, ADDR_PHASE, cmd, False)
-
-    def getPhase(self):
-        result = self.sendMessage(CODE_READ, ADDR_PHASE, maxResp=2);
-
-        if (result[1] & 0x02):            
-            LSB = result[0]
-            MSB = result[1] & 0x01
-
-            phase = LSB | (MSB << 8)
-
-            #Sign Extend
-            phase = SIGNEXT(phase, 9)
-
-            return phase
-        else:
-            return None
 
     def getStatus(self):
         result = self.sendMessage(CODE_READ, ADDR_STATUS)
@@ -269,171 +679,7 @@ class serialOpenADCInterface:
         if len(result) == 1:
             return result[0]
         else:
-            return None
-
-    def getVersions(self):
-        result = self.sendMessage(CODE_READ, ADDR_VERSIONS, maxResp=6)
-
-        regver = result[0] & 0xff
-        hwtype = result[1] >> 3
-        hwver = result[1] & 0x07
-        hwList = ["Default/Unknown", "LX9 MicroBoard", "SASEBO-W", "ChipWhisperer Rev2 LX25",
-                  "Reserved?", "ZedBoard", "Papilio Pro"]
-
-        try:
-            textType = hwList[hwtype]
-        except:
-            textType = "Invalid/Unknown"
-
-        return (regver, hwtype, textType, hwver)
-        
-
-    def getADCClk(self):
-        result = self.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
-        result[0] = result[0] & 0x07
-
-        if result[0] & 0x04:
-            dcminput = "extclk"
-        else:
-            dcminput = "clkgen"
-
-        if result[0] & 0x02:
-            dcmout = 1
-        else:
-            dcmout = 4
-
-        if result[0] & 0x01:
-            source = "extclk"
-        else:
-            source = "dcm"
-
-        return (source, dcmout, dcminput)
-
-    def setClkGen(self, source="system"):
-        result = self.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
-
-        result[0] = result[0] & ~0x08
-
-        if source == "system":
-            pass
-        elif source == "extclk":
-            result[0] = result[0] | 0x08
-        else:
-            raise ValueError("source must be 'system' or 'extclk'")             
-
-        self.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
-
-    def setADCClk(self, source="dcm", dcmout=4, dcminput="clkgen"):
-        result = self.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
-
-        result[0] = result[0] & ~0x07
-
-        if dcminput == "clkgen":
-            pass
-        elif dcminput == "extclk":
-            result[0] = result[0] | 0x04
-        else:
-            raise ValueError("dcminput must be 'clkgen' or 'extclk'")
-
-        if dcmout == 4:
-            pass
-        elif dcmout == 1:
-            result[0] = result[0] | 0x02
-        else:
-            raise ValueError("dcmout must be 1 or 4") 
-
-        if source == "dcm":
-            pass
-        elif source == "extclk":
-            result[0] = result[0] | 0x01
-        else:
-            raise ValueError("source must be 'dcm' or 'extclk'")
-
-        self.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
-
-    def getDCMStatus(self):
-         result = self.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
-         if (result[0] & 0x80) == 0:
-             print "ERROR: ADVCLK register not present. Version mismatch"
-             return (False, False)
-
-         if (result[0] & 0x40) == 0:
-             dcmADCLocked = False
-         else:
-             dcmADCLocked = True
-
-         if (result[0] & 0x20) == 0:
-             dcmCLKGENLocked = False
-         else:
-             dcmCLKGENLocked = True
-
-         return (dcmADCLocked, dcmCLKGENLocked)
-
-    def resetDCMs(self):
-        result = self.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
-
-        #Set reset high
-        result[0] = result[0] | 0x10
-
-        result[0] = result[0] | 0x0E
-        
-        self.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
-
-        #Set reset low
-        result[0] = result[0] & ~(0x10)
-        self.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
-
-    def getSysFrequency(self, force=False):
-        if (self.sysFreq > 0) & (force == False):
-               return self.sysFreq
-           
-        '''Return the system clock frequency in specific firmware version'''
-        freq = 0x00000000;
-
-        temp = self.sendMessage(CODE_READ, ADDR_SYSFREQ, maxResp=4)
-        freq = freq | (temp[0] << 0);
-        freq = freq | (temp[1] << 8);
-        freq = freq | (temp[2] << 16);
-        freq = freq | (temp[3] << 24);
-
-        self.sysFreq = long(freq)
-        
-        return self.sysFreq
-
-    def getExtFrequency(self):
-        '''Return the external frequency measured on 'CLOCK' pin. Returned value
-           requires conversion to Hz'''
-        freq = 0x00000000;
-
-        #Get sample frequency
-        samplefreq = float(self.getSysFrequency()) / float(pow(2,24))
-
-        temp = self.sendMessage(CODE_READ, ADDR_FREQ, maxResp=4)
-        freq = freq | (temp[0] << 0);
-        freq = freq | (temp[1] << 8);
-        freq = freq | (temp[2] << 16);
-        freq = freq | (temp[3] << 24);
-
-        measured = freq * samplefreq * 0.8
-        return long(measured)
-
-    def getAdcFrequency(self):
-        '''Return the external frequency measured on 'CLOCK' pin. Returned value
-           requires conversion to Hz'''
-        freq = 0x00000000;
-
-        #Get sample frequency
-        samplefreq = float(self.getSysFrequency()) / float(pow(2,24))
-
-        temp = self.sendMessage(CODE_READ, ADDR_ADCFREQ, maxResp=4)
-        freq = freq | (temp[0] << 0);
-        freq = freq | (temp[1] << 8);
-        freq = freq | (temp[2] << 16);
-        freq = freq | (temp[3] << 24);
-
-        measured = freq * samplefreq * 0.8
-
-        return long(measured)
+            return None        
 
     def setMaxSamples(self, samples):
         cmd = bytearray(4)
@@ -443,16 +689,14 @@ class serialOpenADCInterface:
         cmd[3] = ((samples >> 24) & 0xFF)
         self.sendMessage(CODE_WRITE, ADDR_SAMPLES, cmd)
 
-    def getMaxSamples(self):
+    def maxSamples(self):
         '''Return the number of samples captured in one go'''
         samples = 0x00000000;
-
         temp = self.sendMessage(CODE_READ, ADDR_SAMPLES, maxResp=4)
         samples = samples | (temp[0] << 0)
         samples = samples | (temp[1] << 8)
         samples = samples | (temp[2] << 16)
         samples = samples | (temp[3] << 24)
-
         return samples
 
     def getBytesInFifo(self):
@@ -463,39 +707,6 @@ class serialOpenADCInterface:
         samples = samples | (temp[2] << 16)
         samples = samples | (temp[3] << 24)
         return samples
-
-    def setPreSamples(self, samples):           
-        #enforce samples is multiple of 3
-        samplesact = int(samples / 3)
-
-        #Account for shitty hardware design
-        if samplesact > 0:
-               samplesact = samplesact + 16
-           
-        cmd = bytearray(4)
-        cmd[0] = ((samplesact >> 0) & 0xFF)
-        cmd[1] = ((samplesact >> 8) & 0xFF)
-        cmd[2] = ((samplesact >> 16) & 0xFF)
-        cmd[3] = ((samplesact >> 24) & 0xFF)
-        self.sendMessage(CODE_WRITE, ADDR_PRESAMPLES, cmd)
-
-        self.presamples_actual = samplesact*3
-        self.presamples_desired = samples
-        
-        return self.presamples_actual
-
-    def getPreSamples(self):
-        samples = 0x00000000;
-
-        temp = self.sendMessage(CODE_READ, ADDR_PRESAMPLES, maxResp=4)
-        samples = samples | (temp[0] << 0)
-        samples = samples | (temp[1] << 8)
-        samples = samples | (temp[2] << 16)
-        samples = samples | (temp[3] << 24)
-
-        self.presamples = samples*3
-
-        return samples*3
 
     def flushInput(self):
         try:
@@ -556,7 +767,7 @@ class serialOpenADCInterface:
         return addr
         
     def arm(self):
-       self.setSettings(self.getSettings() | 0x08);
+       self.setSettings(self.settings() | 0x08);
 
     def capture(self):
        #Wait for trigger
@@ -574,7 +785,7 @@ class serialOpenADCInterface:
                print "TIMEOUT OCCURED - TRIGGER FORCED"
                self.triggerNow()     
 
-       self.setSettings(self.getSettings() & ~0x08);
+       self.setSettings(self.settings() & ~0x08);
        return True
 
     def flush(self):
@@ -715,11 +926,28 @@ class serialOpenADCInterface:
 
         return fpData
 
-#Following Extensions for SASEBO-W Only
-    def scGetStatus(self):
-        sets = self.sendMessage(CODE_READ, 30)
-        if sets:
-            return sets[0]
-        else:
-            return 0
+if __name__ == "__main__":
+    import serial
+    
+    ser = serial.Serial()
+    ser.port     = "com6"
+    ser.baudrate = 512000
+    ser.timeout  = 1.0
+    
+    try:
+        ser.open()
+    except serial.SerialException, e:
+        print "Could not open %s"%ser.name
+        sys.exit()
+    except ValueError, s:
+        print "Invalid settings for serial port"
+        ser.close()
+        ser = None
+        sys.exit()
 
+    adc = OpenADCInterface(ser)
+    adc.devicePresent()
+    
+    adc_settings = OpenADCSettings()
+    adc_settings.setInterface(adc)
+    adc_settings.parameters()
