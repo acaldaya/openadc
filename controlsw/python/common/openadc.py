@@ -84,21 +84,21 @@ class OpenADCSettings:
         for p in self.params:
             p.setInterface(oaiface)
 
-    def parameters(self,  doupdate=True):
+    def parameters(self,  doUpdate=True):
         """Return a dict of all parameter/settings. Useful for saving."""       
         paramdict = []
         for p in self.params:
             paramref = p.param               
             paramdict.append(paramref)
             
-        if doupdate:
+        if doUpdate:
             for p in paramdict:
                 for set in p['children']:
                     try:
                         if 'children' in set:
                             for subset in set['children']:
                                 if set['type'] != 'action':
-                                    subset['value']=subset['get']
+                                    subset['value']=subset['get']()
                         else:
                             if set['type'] != 'action':
                                 set['value'] = set['get']()
@@ -170,9 +170,11 @@ class GainSettings:
         self.name = "Gain Setting"
         self.param = {'name': 'Gain Setting', 'type': 'group', 'children': [
                 {'name': 'Mode', 'type': 'list', 'values': {"high", "low"}, 'value':"low", 'set':self.setMode,  'get':self.mode},
-                {'name': 'Setting', 'type': 'int', 'value':0, 'limits': (0, 78),  'set':self.setGain,  'get':self.gain},
+                {'name': 'Setting', 'type': 'int', 'value':0, 'limits': (0, 78),  'set':self.setGain,  'get':self.gain, 'linked':['Result']},
                 {'name': 'Result', 'type': 'float', 'suffix':'dB', 'readonly':True, 'get':self.gainDB},
                 ]}
+        self.gainlow_cached = False
+        self.gain_cached = 0
     
     def setInterface(self, oa):
         self.oa = oa
@@ -181,8 +183,10 @@ class GainSettings:
         '''Set the gain Mode'''
         if gainmode == "high":
             self.oa.setSettings(self.oa.settings() | SETTINGS_GAIN_HIGH)
+            self.gainlow_cached = False
         elif gainmode == "low":           
             self.setSettings(self.oa.settings() & ~SETTINGS_GAIN_HIGH)
+            self.gainlow_cached = True
         else:
             raise ValueError, "Invalid Gain Mode, only 'low' or 'high' allowed"
  
@@ -194,16 +198,30 @@ class GainSettings:
         if (gain < 0) | (gain > 78):
             raise ValueError,  "Invalid Gain, range 0-78 Only"
             
+        self.gain_cached = gain
+            
         cmd = bytearray(1)
         cmd[0] = gain               
         self.oa.sendMessage(CODE_WRITE, ADDR_GAIN, cmd)
 
-    def gain(self):
-        result = self.oa.sendMessage(CODE_READ, ADDR_GAIN)
-        return result[0]
+    def gain(self, cached=False):
+        if cached == False:
+            self.gain_cached = self.oa.sendMessage(CODE_READ, ADDR_GAIN)[0]
+            
+        return self.gain_cached
         
     def gainDB(self):
-        return 0
+        #GAIN (dB) = 50 (dB/V) * VGAIN - 6.5 dB, (HILO = LO)
+        #GAIN (dB) = 50 (dB/V) * VGAIN + 5.5 dB, (HILO = HI)        
+
+        gainV = (float(self.gain_cached) / 256.0) * 3.3;
+
+        if self.gainlow_cached:
+            gaindb = 50.0 * gainV - 6.5
+        else:
+            gaindb = 50.0 * gainV + 5.5
+
+        return gaindb
 
 class TriggerSettings:
     def __init__(self):
@@ -215,15 +233,21 @@ class TriggerSettings:
             {'name': 'Pre-Trigger Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setPresamples, 'get':self.presamples}, 
             {'name': 'Total Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setMaxSamples, 'get':self.maxSamples}, 
         ]}
+        self.maxsamples = 0
+
 
     def setInterface(self, oa):
         self.oa = oa
 
     def setMaxSamples(self, samples):
+        self.maxsamples = samples
         self.oa.setMaxSamples(samples)
         
-    def maxSamples(self):
-        self.oa.maxSamples()
+    def maxSamples(self,  cached=False):
+        if cached:
+            return self.maxsamples
+        else:
+            return self.oa.maxSamples()
 
     def setOffset(self,  offset):
         cmd = bytearray(4)
@@ -262,7 +286,11 @@ class TriggerSettings:
         
         return self.presamples_actual
 
-    def presamples(self):
+    def presamples(self, cached=False):
+        
+        if cached:
+            return self.presamples_desired
+        
         samples = 0x00000000;
 
         temp = self.oa.sendMessage(CODE_READ, ADDR_PRESAMPLES, maxResp=4)
@@ -271,7 +299,7 @@ class TriggerSettings:
         samples = samples | (temp[2] << 16)
         samples = samples | (temp[3] << 24)
 
-        self.presamples = samples*3
+        self.presamples_actual = samples*3
 
         return samples*3
 
@@ -320,12 +348,12 @@ class ClockSettings:
     def __init__(self):
         self.name = "Clock Setup"
         self.param = {'name': 'Clock Setup', 'type':'group', 'children': [
-            {'name':'Refresh Status', 'type':'action'}, 
-            {'name':'Relock DCMs', 'type':'action'}, 
+            {'name':'Refresh Status', 'type':'action', 'linked':[('ADC Clock','DCM Locked'), ('ADC Clock','ADC Freq'), ('CLKGEN Settings','DCM Locked'), 'EXTCLK Input Freq']}, 
+            {'name':'Relock DCMs', 'type':'action', 'action':self.resetDcms}, 
         
             {'name': 'ADC Clock', 'type':'group', 'children': [
-                {'name': 'Source', 'type':'list', 'values':{"EXTCLK Direct":["extclk", 4, "clkgen"], "EXTCLK x4 via DCM":["dcm", 4, "extclk"], "EXTCLK x1 via DCM":["dcm", 1, "extclk"], "CLKGEN x4 via DCM":["dcm", 4, "clkgen"], "CLKGEN x1 via DCM":["dcm", 1, "clkgen"]},  'value':["dcm", 1, "extclk"], 'set':self.setAdcSource,  'get':self.adcSource}, 
-                {'name': 'Phase Adjust', 'type':'int', 'value':0, 'limits':[-100, 100], 'set':self.setPhase, 'get':self.phase}, 
+                {'name': 'Source', 'type':'list', 'values':{"EXTCLK Direct":("extclk", 4, "clkgen"), "EXTCLK x4 via DCM":("dcm", 4, "extclk"), "EXTCLK x1 via DCM":("dcm", 1, "extclk"), "CLKGEN x4 via DCM":("dcm", 4, "clkgen"), "CLKGEN x1 via DCM":("dcm", 1, "clkgen")},  'value':("dcm", 1, "extclk"), 'set':self.setAdcSource,  'get':self.adcSource},
+                {'name': 'Phase Adjust', 'type':'int', 'value':0, 'limits':(-100, 100), 'set':self.setPhase, 'get':self.phase}, 
                 {'name': 'DCM Locked', 'type':'bool',  'value':False, 'get':self.dcmADCLocked, 'readonly':True}, 
                 {'name': 'ADC Freq', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.adcFrequency},
             ]},            
@@ -345,19 +373,19 @@ class ClockSettings:
     def setClkgenMul(self, mul):
        return
     
-    def clkgenMul(self, mul):
+    def clkgenMul(self):
        return 2
        
     def setClkgenDiv(self, div):
        return
        
-    def clkgenDiv(self, div):
+    def clkgenDiv(self):
        return 2
     
     def setClkgenDivTarget(self, div):
        return
        
-    def clkgenDivTarget(self, div):
+    def clkgenDivTarget(self):
        return 4
 
     def adcSource(self):
@@ -382,6 +410,13 @@ class ClockSettings:
         return (source, dcmout, dcminput)
 
     def setAdcSource(self, source="dcm", dcmout=4, dcminput="clkgen"):
+        
+        #Deal with being passed tuple with all 3 arguments
+        if isinstance(source, (list, tuple)):
+            dcminput = source[2]
+            dcmout = source[1]
+            source=source[0]
+        
         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
 
         result[0] = result[0] & ~0x07
@@ -488,14 +523,12 @@ class ClockSettings:
 
         #Set reset high
         result[0] = result[0] | 0x10
-
-        result[0] = result[0] | 0x0E
         
-        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, Validate=False)
 
         #Set reset low
         result[0] = result[0] & ~(0x10)
-        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, Validate=False)
 
     def extFrequency(self):
         """Return frequency of clock measured on EXTCLOCK pin in Hz"""

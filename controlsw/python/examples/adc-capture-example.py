@@ -270,14 +270,15 @@ class FX2ADCLayout():
  
 class MainWindow(QMainWindow):                    
     def ADCcapture(self):
-        self.oa.ADCarm()
-        self.oa.ADCcapture()
+        self.oa.arm()
+        self.oa.capture()
 
     def ADCupdate(self):
-        self.oa.ADCupdate()
+        #self.oa.update()
+        pass
 
     def ADCread(self):
-        self.oa.ADCread();
+        self.oa.read();
 
     def ADCloop(self):
         if self.startButton.isChecked():
@@ -321,7 +322,7 @@ class MainWindow(QMainWindow):
 
             #Find OpenADC
             try:
-                self.oa.ADCconnect(self.adccon.ser)
+                self.oa.connect(self.adccon.ser)
             except IOError as detail:
                 QMessageBox.warning(None, "OpenADC",
                         "Failed to find OpenADC Connected\nCheck Console for Detail")
