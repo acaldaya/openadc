@@ -140,7 +140,8 @@ class OpenADCQt(QObject):
     def setupParameterTree(self):
         if self.adc_settings is None:
             self.adc_settings = openadc.OpenADCSettings()        
-            self.params = ExtendedParameter.create(name='OpenADC', type='group', children=self.adc_settings.parameters(doUpdate=False))
+            self.params = Parameter.create(name='OpenADC', type='group', children=self.adc_settings.parameters(doUpdate=False))
+            ExtendedParameter.setupExtended(self.params)
             self.paramTree = ParameterTree()
             self.paramTree.setParameters(self.params, showTop=False)
             

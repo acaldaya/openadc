@@ -7,24 +7,17 @@
 # This project is released under the 2-Clause BSD License. See LICENSE
 # file which should have came with this code.
 
-try:
-    import pyqtgraph.parametertree.parameterTypes as pTypes
-    from pyqtgraph.parametertree import Parameter, ParameterTree, ParameterItem, registerParameterType
-except ImportError:
-    print "*************************************************"
-    print "*************************************************"
-    print "Install pyqtgraph from http://www.pyqtgraph.org"
-    print "*************************************************"
-    print "*************************************************"
-    
-class ExtendedParameter(Parameter):
-    def __init__(self, **opts):
-        super(Parameter, self).__init__(opts)
-        self.sigTreeStateChanged.connect(self.change)
+import types
 
+#This class adds some  hacks that allow us to have 'get', 'set', and 'linked' methods in the Parameter specification.
+#They are especially helpful for the work done here
+
+    
+class ExtendedParameter():           
+    @staticmethod
     def getAllParameters(self, parent=None):
         if parent is None:
-            parent = self.p
+            parent = self
         
         if parent.hasChildren():
             for child in parent.children():
@@ -32,9 +25,15 @@ class ExtendedParameter(Parameter):
         else:
             if 'get' in parent.opts:
                 parent.setValue(parent.opts['get']())
+          
+    @staticmethod      
+    def setupExtended(curParam):
+        curParam.getAllParameters = types.MethodType(ExtendedParameter.getAllParameters, curParam)
+        curParam.sigTreeStateChanged.connect(ExtendedParameter.change)
                     
     ## If anything changes in the tree, print a message
-    def change(self, param,  changes):    
+    @staticmethod  
+    def change(param,  changes):        
         for param, change, data in changes:
             #Call specific 'set' routine associated with data
             if 'set' in param.opts:
