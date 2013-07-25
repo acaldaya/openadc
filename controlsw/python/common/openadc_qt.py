@@ -140,18 +140,25 @@ class OpenADCQt(QObject):
     def getLayout(self):
         return self.masterLayout
 
-    def setupParameterTree(self, forceUpdate=False):
+    def setupParameterTree(self):
         if self.adc_settings is None:
             self.adc_settings = openadc.OpenADCSettings()        
-            self.p = Parameter.create(name='params', type='group', children=self.adc_settings.parameters(doUpdate=False))
+            self.p = Parameter.create(name='OpenADC', type='group', children=self.adc_settings.parameters(doUpdate=False))
             self.p.sigTreeStateChanged.connect(self.change)
             self.paramTree = ParameterTree()
             self.paramTree.setParameters(self.p, showTop=False)
-    
-        elif forceUpdate:
-            self.p = Parameter.create(name='params', type='group', children=self.adc_settings.parameters(doUpdate=True))
-            self.p.sigTreeStateChanged.connect(self.change)            
-            self.paramTree.setParameters(self.p, showTop=False)
+            
+    def getAllParameters(self, parent=None):
+        if parent is None:
+            parent = self.p
+        
+        if parent.hasChildren():
+            for child in parent.children():
+                self.getAllParameters(child)
+        else:
+            if 'get' in parent.opts:
+                parent.setValue(parent.opts['get']())
+                    
     ## If anything changes in the tree, print a message
     def change(self, param,  changes):    
         for param, change, data in changes:
@@ -188,7 +195,7 @@ class OpenADCQt(QObject):
 
     def reloadParameterTree(self):
         self.adc_settings.setInterface(self.sc)
-        self.setupParameterTree(True)
+        self.getAllParameters()
 
     def processData(self, data):
         fpData = []
@@ -257,7 +264,7 @@ class OpenADCQt(QObject):
     def test(self):
         self.sc.testAndTime()
         
-    def connect(self, ser):
+    def con(self, ser):
         self.ser = ser
 
         #See if device seems to be attached

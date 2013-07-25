@@ -490,7 +490,8 @@ class ClockSettings:
 
             return phase
         else:
-            return None
+            print "Error Reading Phase"
+            return 0
 
     def dcmADCLocked(self):
         result = self.DCMStatus()

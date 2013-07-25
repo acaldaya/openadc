@@ -322,7 +322,7 @@ class MainWindow(QMainWindow):
 
             #Find OpenADC
             try:
-                self.oa.connect(self.adccon.ser)
+                self.oa.con(self.adccon.ser)
             except IOError as detail:
                 QMessageBox.warning(None, "OpenADC",
                         "Failed to find OpenADC Connected\nCheck Console for Detail")
