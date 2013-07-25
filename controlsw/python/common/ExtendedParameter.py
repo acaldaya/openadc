@@ -18,7 +18,7 @@ class ExtendedParameter():
     def getAllParameters(self, parent=None):
         if parent is None:
             parent = self
-        
+                              
         if parent.hasChildren():
             for child in parent.children():
                 self.getAllParameters(child)
@@ -33,7 +33,8 @@ class ExtendedParameter():
                     
     ## If anything changes in the tree, print a message
     @staticmethod  
-    def change(param,  changes):        
+    def change(param,  changes):    
+          
         for param, change, data in changes:
             #Call specific 'set' routine associated with data
             if 'set' in param.opts:

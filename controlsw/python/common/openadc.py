@@ -8,13 +8,9 @@
 # file which should have came with this code.
 
 import sys
-import os
-import threading
 import time
 import datetime
 import logging
-import math
-import random
 
 ADDR_GAIN       = 0
 ADDR_SETTINGS   = 1
@@ -58,9 +54,9 @@ STATUS_DDRMODE_MASK= 0x40
 # sign extend b low bits in x
 # from "Bit Twiddling Hacks"
 def SIGNEXT(x, b):
-       m = 1 << (b - 1)
-       x = x & ((1 << b) - 1)
-       return (x ^ m) - m
+    m = 1 << (b - 1)
+    x = x & ((1 << b) - 1)
+    return (x ^ m) - m
 
 class OpenADCSettings:
     def __init__(self, oaiface=None):   
@@ -93,17 +89,17 @@ class OpenADCSettings:
             
         if doUpdate:
             for p in paramdict:
-                for set in p['children']:
+                for pset in p['children']:
                     try:
-                        if 'children' in set:
-                            for subset in set['children']:
-                                if set['type'] != 'action':
+                        if 'children' in pset:
+                            for subset in pset['children']:
+                                if pset['type'] != 'action':
                                     subset['value']=subset['get']()
                         else:
-                            if set['type'] != 'action':
-                                set['value'] = set['get']()
+                            if pset['type'] != 'action':
+                                pset['value'] = pset['get']()
                     except KeyError:
-                        print "Error in %s.%s - no 'get'"%(p['name'], set['name'])
+                        print "Error in %s.%s - no 'get'"%(p['name'], pset['name'])
         
         return paramdict
 
@@ -150,7 +146,7 @@ class HWInformation:
 
     def sysFrequency(self, force=False):
         if (self.sysFreq > 0) & (force == False):
-               return self.sysFreq
+            return self.sysFreq
            
         '''Return the system clock frequency in specific firmware version'''
         freq = 0x00000000;
@@ -801,26 +797,26 @@ class OpenADCInterface:
         return addr
         
     def arm(self):
-       self.setSettings(self.settings() | 0x08);
+        self.setSettings(self.settings() | 0x08);
 
     def capture(self):
-       #Wait for trigger
-       status = self.getStatus()
+        #Wait for trigger
+        status = self.getStatus()
 
-       starttime = datetime.datetime.now()
+        starttime = datetime.datetime.now()
        
-       while ((status & STATUS_ARM_MASK) == STATUS_ARM_MASK) | ((status & STATUS_FIFO_MASK) == 0):
-           status = self.getStatus()
-           time.sleep(0.05)
+        while ((status & STATUS_ARM_MASK) == STATUS_ARM_MASK) | ((status & STATUS_FIFO_MASK) == 0):
+            status = self.getStatus()
+            time.sleep(0.05)
            
-           diff = datetime.datetime.now() - starttime
+            diff = datetime.datetime.now() - starttime
            
-           if (diff.total_seconds() > self.timeout):
+            if (diff.total_seconds() > self.timeout):
                print "TIMEOUT OCCURED - TRIGGER FORCED"
-               self.triggerNow()     
-
-       self.setSettings(self.settings() & ~0x08);
-       return True
+               self.triggerNow()
+                    
+        self.setSettings(self.settings() & ~0x08);
+        return True
 
     def flush(self):
        #Flush output FIFO
@@ -874,13 +870,14 @@ class OpenADCInterface:
               #print "bytes = %d"%self.getBytesInFifo()
 
               bytesToRead = self.getBytesInFifo()
+              
+              print bytesToRead
 
               if bytesToRead == 0:
                      bytesToRead = BytesPerPackage
 
-              #print bytesToRead
-
-              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, bytesToRead) #BytesPerPackage)
+              #+1 for sync byte
+              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, bytesToRead+1) #BytesPerPackage)
 
 
               #for p in data:

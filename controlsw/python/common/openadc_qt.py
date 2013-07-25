@@ -88,7 +88,7 @@ class OpenADCQt(QObject):
     
     dataUpdated = Signal(list)
     
-    def __init__(self, MainWindow=None, includePreview=True, setupLayout=True):
+    def __init__(self, MainWindow=None, includePreview=True, setupLayout=True, includeParameters=True):
         super(OpenADCQt,  self).__init__()
         self.offset = 0.5
         self.ser = None
@@ -103,7 +103,7 @@ class OpenADCQt(QObject):
         self.timerStatusRefresh.timeout.connect(self.statusRefresh)
 
         if setupLayout:
-            self.setupLayout(MainWindow, includePreview)
+            self.setupLayout(MainWindow, includePreview, includeParameters)
             
     def setEnabled(self, enabled):
         pass
@@ -137,18 +137,22 @@ class OpenADCQt(QObject):
     def getLayout(self):
         return self.masterLayout
 
-    def setupParameterTree(self):
+    def setupParameterTree(self, makeTree=True):
         if self.adc_settings is None:
             self.adc_settings = openadc.OpenADCSettings()        
             self.params = Parameter.create(name='OpenADC', type='group', children=self.adc_settings.parameters(doUpdate=False))
             ExtendedParameter.setupExtended(self.params)
-            self.paramTree = ParameterTree()
-            self.paramTree.setParameters(self.params, showTop=False)
+            
+            if makeTree:
+                self.paramTree = ParameterTree()
+                self.paramTree.setParameters(self.params, showTop=False)
             
                     
     def reloadParameterTree(self):
         self.adc_settings.setInterface(self.sc)
+        self.params.blockTreeChangeSignal()
         self.params.getAllParameters()
+        self.params.unblockTreeChangeSignal()
 
     def processData(self, data):
         fpData = []
