@@ -7,17 +7,14 @@
 # This project is released under the 2-Clause BSD License. See LICENSE
 # file which should have came with this code.
 
-import sys
-import os
-import threading
-import time
-import logging
-import math
-import serial
-import openadc
 
+#Always import PySide FIRST to force everything to use this, in case both PySide & PyQt installed
 from PySide.QtCore import *
 from PySide.QtGui import *
+
+
+import openadc
+from ExtendedParameter import ExtendedParameter
 
 try:
     import pyqtgraph as pg
@@ -143,64 +140,19 @@ class OpenADCQt(QObject):
     def setupParameterTree(self):
         if self.adc_settings is None:
             self.adc_settings = openadc.OpenADCSettings()        
-            self.p = Parameter.create(name='OpenADC', type='group', children=self.adc_settings.parameters(doUpdate=False))
-            self.p.sigTreeStateChanged.connect(self.change)
+            self.params = ExtendedParameter.create(name='OpenADC', type='group', children=self.adc_settings.parameters(doUpdate=False))
             self.paramTree = ParameterTree()
-            self.paramTree.setParameters(self.p, showTop=False)
+            self.paramTree.setParameters(self.params, showTop=False)
             
-    def getAllParameters(self, parent=None):
-        if parent is None:
-            parent = self.p
-        
-        if parent.hasChildren():
-            for child in parent.children():
-                self.getAllParameters(child)
-        else:
-            if 'get' in parent.opts:
-                parent.setValue(parent.opts['get']())
                     
-    ## If anything changes in the tree, print a message
-    def change(self, param,  changes):    
-        for param, change, data in changes:
-            #Call specific 'set' routine associated with data
-            if 'set' in param.opts:
-                param.opts['set'](data)   
-                
-            if 'linked' in param.opts:
-                par = param.parent()
-                for link in param.opts['linked']:
-                    
-                    linked = par
-                    if isinstance(link, tuple):
-                        for p in link:
-                            linked = linked.names[p]
-                    else:                        
-                        linked = par.names[link]
-                        
-                    linked.setValue(linked.opts['get']())
-                    
-            if 'action' in param.opts:
-                param.opts['action']()
-                    
-            param.opts
-#            path = self.p.childPath(param)
-#            if path is not None:
-#                childName = '.'.join(path)
-#            else:
-#                childName = param.name()
-#            print('  parameter: %s'% childName)
-#            print('  change:    %s'% change)
-#            print('  data:      %s'% str(data))
-#            print('  ----------')
-
     def reloadParameterTree(self):
         self.adc_settings.setInterface(self.sc)
-        self.getAllParameters()
+        self.params.getAllParameters()
 
     def processData(self, data):
         fpData = []
 
-        lastpt = -100;
+        #lastpt = -100;
 
         if data[0] != 0xAC:
             self.showMessage("Unexpected sync byte: 0x%x"%data[0])

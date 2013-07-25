@@ -7,6 +7,9 @@
 # This project is released under the 2-Clause BSD License. See LICENSE
 # file which should have came with this code.
 
+from PySide.QtCore import *
+from PySide.QtGui import *
+
 import sys
 import os
 import threading
@@ -29,8 +32,7 @@ import openadc
 import openadc_qt
 import serial
 import scan
-from PySide.QtCore import *
-from PySide.QtGui import *
+
 
 #Non-Critical Imports
 try:
