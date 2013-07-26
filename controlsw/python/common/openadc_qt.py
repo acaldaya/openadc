@@ -194,7 +194,6 @@ class OpenADCQt(QObject):
         progress.setMinimumDuration(1000)
 
         self.datapoints = self.sc.readData(NumberPoints, progress)
-
         self.dataUpdated.emit(self.datapoints)
 
         if update & (self.preview is not None):               

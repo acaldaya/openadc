@@ -871,8 +871,6 @@ class OpenADCInterface:
 
               bytesToRead = self.getBytesInFifo()
               
-              print bytesToRead
-
               if bytesToRead == 0:
                      bytesToRead = BytesPerPackage
 
