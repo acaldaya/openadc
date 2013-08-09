@@ -42,8 +42,8 @@ class ExtendedParameter():
                                     
             #Call specific 'set' routine associated with data
             if 'set' in param.opts:
-                #QtCore.QTimer.singleShot(0, partial(param.opts['set'], data))
-                param.opts['set'](data) 
+                QtCore.QTimer.singleShot(0, partial(param.opts['set'], data))
+                #param.opts['set'](data) 
                 
             if 'linked' in param.opts:
                 par = param.parent()
@@ -55,12 +55,31 @@ class ExtendedParameter():
                     else:                        
                         linked = par.names[link]
                         
-                    #QtCore.QTimer.singleShot(0, partial(linked.setValue, linked.opts['get']()))
-                    linked.setValue(linked.opts['get']()) 
+                    QtCore.QTimer.singleShot(0, partial(linked.setValue, linked.opts['get']()))
+                    #linked.setValue(linked.opts['get']()) 
                     
             if 'action' in param.opts:                
-                #QtCore.QTimer.singleShot(0, param.opts['action'])
-                param.opts['action']()
+                QtCore.QTimer.singleShot(0, param.opts['action'])
+                #param.opts['action']()
+      
+    @staticmethod  
+    def reloadParams(lst, paramtree):
+            """
+            Reloads parameters in a paramtree. Hides anything that isn't in the list anymore, adds
+            any new parameters. Required to avoid deleting parameters that we actually want to see
+            again later, otherwise they are garbage collected.
+            """
+            
+            for i in range(0, paramtree.invisibleRootItem().childCount()):
+                refitem = paramtree.invisibleRootItem().child(i)
+                if refitem.param in lst:
+                    lst.remove(refitem.param)
+                    refitem.setHidden(False)
+                else:
+                    refitem.setHidden(True)                                  
+                    
+            for p in lst:
+                paramtree.addParameters(p)
                 
                 
 if __name__ == '__main__':
@@ -136,17 +155,14 @@ if __name__ == '__main__':
             self.paramListUpdated.emit(self.paramList())
             self.reloadParams()
             
+        def reloadParams(self):
+            ExtendedParameter.reloadParams(self.paramList(), self.t)
+            
         def paramList(self):
             p = [self.params]        
             if self.module is not None:
                 for a in self.module.paramList(): p.append(a)            
-            return p
-        
-        def reloadParams(self, lst=None):
-            self.t.clear()
-            for p in self.paramList():
-                self.t.addParameters(p)
-    
+            return p        
 
     m = maintest()
     
