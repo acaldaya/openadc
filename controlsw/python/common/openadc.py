@@ -626,7 +626,7 @@ class OpenADCInterface(BaseLog):
         length = len(payload)
 
         if ((mode == CODE_WRITE) and (length < 1)) or ((mode == CODE_READ) and (length != 0)):
-            self.log.error("Invalid payload for mode")
+            self.log("Invalid payload for mode")
             return None
 
         if mode == CODE_READ:
@@ -669,7 +669,7 @@ class OpenADCInterface(BaseLog):
             #Check for timeout, if so abort
             if len(result) < 1:
                 self.flushInput()
-                self.log.error("Timeout: %d"%len(result))
+                self.log("Timeout: %d"%len(result))
                 return None
 
             rb = bytearray(result)
