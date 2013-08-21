@@ -33,6 +33,7 @@ class ExtendedParameter():
         curParam.sigTreeStateChanged.connect(ExtendedParameter.change)
         
         if parent is not None:
+            parent.paramTreeChanged = types.MethodType(ExtendedParameter.paramTreeChanged, parent)
             curParam.sigTreeStateChanged.connect(parent.paramTreeChanged)
                          
     ## If anything changes in the tree, print a message
@@ -42,8 +43,8 @@ class ExtendedParameter():
                                     
             #Call specific 'set' routine associated with data
             if 'set' in param.opts:
-                QtCore.QTimer.singleShot(0, partial(param.opts['set'], data))
-                #param.opts['set'](data) 
+                #QtCore.QTimer.singleShot(0, partial(param.opts['set'], data))
+                param.opts['set'](data) 
                 
             if 'linked' in param.opts:
                 par = param.parent()
@@ -55,12 +56,17 @@ class ExtendedParameter():
                     else:                        
                         linked = par.names[link]
                         
-                    QtCore.QTimer.singleShot(0, partial(linked.setValue, linked.opts['get']()))
-                    #linked.setValue(linked.opts['get']()) 
+                    #QtCore.QTimer.singleShot(0, partial(linked.setValue, linked.opts['get']()))
+                    linked.setValue(linked.opts['get']()) 
                     
             if 'action' in param.opts:                
-                QtCore.QTimer.singleShot(0, param.opts['action'])
-                #param.opts['action']()
+                #QtCore.QTimer.singleShot(0, param.opts['action'])
+                param.opts['action']()
+    
+    @staticmethod
+    def paramTreeChanged(self, param, changes):        
+        if self.showScriptParameter is not None:
+            self.showScriptParameter(param, changes, self.params)
       
     @staticmethod  
     def reloadParams(lst, paramtree):
@@ -157,6 +163,23 @@ if __name__ == '__main__':
             
         def reloadParams(self):
             ExtendedParameter.reloadParams(self.paramList(), self.t)
+            
+        def reloadParamsBad(self):
+            """The following is kept as a reminder you must NOT do this, or else objects get deleted"""
+            
+            #Notes about my wasted day to report a bug later when I have more time:
+            # *Calling the .clear() causes stuff to be deleted
+            # *In file parameterTypes.py at line 180 you have the following:
+            #    self.widget.sigChanged.disconnect(self.widgetValueChanged)            
+            #  If self.widget has been deleted, which will happen once the ParameterTree is cleared, the call
+            #  to .disconnect causes a bad crash (sometimes). However - you can insert a call to 'self.widget.value()'
+            #  before the .disconnect() call. The self.widget.value() actually checks if the object was deleted, and if so
+            #  it raises a nice exception with a handy error message.
+            
+            lst = self.paramList()
+            self.t.clear()            
+            for p in lst:
+                self.t.addParameters(p)            
             
         def paramList(self):
             p = [self.params]        

@@ -86,7 +86,7 @@ class previewWindow():
 
 class OpenADCQt(QObject):
     
-    dataUpdated = Signal(list)
+    dataUpdated = Signal(list, int)
     
     def __init__(self, MainWindow=None, includePreview=True, setupLayout=True, includeParameters=True, console=None, showScriptParameter=None):
         super(OpenADCQt,  self).__init__()
@@ -202,16 +202,16 @@ class OpenADCQt(QObject):
         progress.setMinimumDuration(1000)
 
         self.datapoints = self.sc.readData(NumberPoints, progress)
-        self.dataUpdated.emit(self.datapoints)
+        self.dataUpdated.emit(self.datapoints, -self.adc_settings.parm_trigger.presamples(True))
 
         if update & (self.preview is not None):               
-            self.preview.updateData(self.datapoints, -self.adc_settings.parm_trigger.presamples())
+            self.preview.updateData(self.datapoints, -self.adc_settings.parm_trigger.presamples(True))
 
-        return True
         
     def capture(self, update=True, NumberPoints=None):
-        self.sc.capture()
-        return self.read(update, NumberPoints)
+        timeout = self.sc.capture()
+        self.read(update, NumberPoints)
+        return timeout
 
     def timeoutValidate(self, arg=None):
         if self.trigTimeout.isChecked():
@@ -247,7 +247,10 @@ class OpenADCQt(QObject):
             numTries += 1
 
             if (numTries == 5):
-                portname = self.ser.name
+                try:                
+                    portname = self.ser.name
+                except:
+                    portname = "UNKNOWN"
                 self.ser.close()
                 self.ser = None
 

@@ -130,6 +130,8 @@ class HWInformation(BaseLog):
                 {'name': 'Max Samples', 'type': 'int', 'value': 0, 'get':self.maxSamples, 'readonly':True}
                 ]}
         
+        self.vers = None
+        
     def setInterface(self, oa):
         self.oa = oa
         oa.hwInfo = self
@@ -148,7 +150,13 @@ class HWInformation(BaseLog):
         except:
             textType = "Invalid/Unknown"
 
-        return (regver, hwtype, textType, hwver)  
+        self.vers = (regver, hwtype, textType, hwver) 
+
+        #TODO: Temp fix for wrong HW reporting
+        if hwtype == 1:
+            self.sysFreq = 40E6
+
+        return self.vers
       
     def synthDate(self):
        return "unknown" 
@@ -244,10 +252,15 @@ class TriggerSettings(BaseLog):
             {'name': 'Total Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setMaxSamples, 'get':self.maxSamples}, 
         ]}
         self.maxsamples = 0
+        self.presamples_desired = 0
+        self.presamples_actual = 0
+        
+        self.presampleTempMargin = 24
 
 
     def setInterface(self, oa):
         self.oa = oa
+        self.oa.presamples_desired = self.presamples_desired
 
     def setMaxSamples(self, samples):
         self.maxsamples = samples
@@ -282,7 +295,7 @@ class TriggerSettings(BaseLog):
 
         #Account for shitty hardware design
         if samplesact > 0:
-               samplesact = samplesact + 16
+            samplesact = samplesact + self.presampleTempMargin
            
         cmd = bytearray(4)
         cmd[0] = ((samplesact >> 0) & 0xFF)
@@ -294,9 +307,14 @@ class TriggerSettings(BaseLog):
         self.presamples_actual = samplesact*3
         self.presamples_desired = samples
         
+        #print "Requested presamples: %d, actual: %d"%(samples, self.presamples_actual)
+        
+        self.oa.presamples_desired = samples
+        
         return self.presamples_actual
 
     def presamples(self, cached=False):
+        """If cached returns DESIRED presamples"""
         
         if cached:
             return self.presamples_desired
@@ -547,7 +565,7 @@ class ClockSettings(BaseLog):
         freq = 0x00000000;
 
         #Get sample frequency
-        samplefreq = float(self.oa.hwInfo.sysFrequency()) / float(pow(2,24))
+        samplefreq = float(self.oa.hwInfo.sysFrequency()) / float(pow(2,23))
 
         temp = self.oa.sendMessage(CODE_READ, ADDR_FREQ, maxResp=4)
         freq = freq | (temp[0] << 0);
@@ -555,7 +573,7 @@ class ClockSettings(BaseLog):
         freq = freq | (temp[2] << 16);
         freq = freq | (temp[3] << 24);
 
-        measured = freq * samplefreq * 0.8
+        measured = freq * samplefreq
         return long(measured)
 
     def adcFrequency(self):
@@ -564,7 +582,7 @@ class ClockSettings(BaseLog):
         freq = 0x00000000;
 
         #Get sample frequency
-        samplefreq = float(self.oa.hwInfo.sysFrequency()) / float(pow(2,24))
+        samplefreq = float(self.oa.hwInfo.sysFrequency()) / float(pow(2,23))
 
         temp = self.oa.sendMessage(CODE_READ, ADDR_ADCFREQ, maxResp=4)
         freq = freq | (temp[0] << 0);
@@ -572,7 +590,7 @@ class ClockSettings(BaseLog):
         freq = freq | (temp[2] << 16);
         freq = freq | (temp[3] << 24);
 
-        measured = freq * samplefreq * 0.8
+        measured = freq * samplefreq
 
         return long(measured)
 
@@ -584,7 +602,6 @@ class OpenADCInterface(BaseLog):
         self.timeout = 5
         self.offset = 0.5
         self.ddrMode = False        
-        self.presamples_desired = 0
         self.sysFreq = 0
 
         self.settings();
@@ -814,8 +831,10 @@ class OpenADCInterface(BaseLog):
     def arm(self):
         self.setSettings(self.settings() | 0x08);
 
-    def capture(self):
+    def capture(self):        
         #Wait for trigger
+        timeout = False
+        
         status = self.getStatus()
 
         starttime = datetime.datetime.now()
@@ -827,11 +846,12 @@ class OpenADCInterface(BaseLog):
             diff = datetime.datetime.now() - starttime
            
             if (diff.total_seconds() > self.timeout):
-               self.log("TIMEOUT OCCURED - TRIGGER FORCED")
+               self.log("Timeout in OpenADC capture(), trigger FORCED")
+               timeout = True
                self.triggerNow()
                     
         self.setSettings(self.settings() & ~0x08);
-        return True
+        return timeout
 
     def flush(self):
        #Flush output FIFO
@@ -896,7 +916,7 @@ class OpenADCInterface(BaseLog):
               #for p in data:
               #       print "%x "%p,
 
-              datapoints = datapoints + self.processData(data, 0)
+              datapoints = datapoints + self.processData(data, 0.0)
 
               if progressDialog:
                      progressDialog.setValue(status)
@@ -909,6 +929,10 @@ class OpenADCInterface(BaseLog):
        
        if len(datapoints) > NumberPoints:
               datapoints = datapoints[0:NumberPoints]
+              
+       #if len(datapoints) < NumberPoints:
+       print len(datapoints), 
+       print NumberPoints
 
        return datapoints
 
@@ -940,8 +964,8 @@ class OpenADCInterface(BaseLog):
                 mergpt = temppt >> 30;
                 if (mergpt != 3):
                        trigfound = True
-                       trigsamp = trigsamp + mergpt                       
-                       #print "Trigger found at %d"%trigsamp
+                       trigsamp = trigsamp + mergpt                                              
+                       #print "Trigger found at %d"%trigsamp                       
                 else:                     
                    trigsamp += 3
 	
@@ -963,10 +987,9 @@ class OpenADCInterface(BaseLog):
         diff = self.presamples_desired - trigsamp
         if diff > 0:
                fpData = [pad]*diff + fpData
+               print "WARNING: Pretrigger not met. Increase presampleTempMargin."
         else:
                fpData = fpData[-diff:]
-
-        #print "%d %d"%(len(fpData), diff)
 
         return fpData
 
