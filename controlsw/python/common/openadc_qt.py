@@ -200,8 +200,12 @@ class OpenADCQt(QObject):
         progress = QProgressDialog("Reading", "Abort", 0, 100)
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(1000)
-
-        self.datapoints = self.sc.readData(NumberPoints, progress)
+        
+        try:
+            self.datapoints = self.sc.readData(NumberPoints, progress)
+        except IndexError, e:
+            raise IOError("Error reading data: %s"%str(e))
+            
         self.dataUpdated.emit(self.datapoints, -self.adc_settings.parm_trigger.presamples(True))
 
         if update & (self.preview is not None):               

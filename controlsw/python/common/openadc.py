@@ -143,7 +143,7 @@ class HWInformation(BaseLog):
         hwtype = result[1] >> 3
         hwver = result[1] & 0x07
         hwList = ["Default/Unknown", "LX9 MicroBoard", "SASEBO-W", "ChipWhisperer Rev2 LX25",
-                  "Reserved?", "ZedBoard", "Papilio Pro"]
+                  "Reserved?", "ZedBoard", "Papilio Pro", "SAKURA-G"]
 
         try:
             textType = hwList[hwtype]
@@ -764,6 +764,7 @@ class OpenADCInterface(BaseLog):
     def getBytesInFifo(self):
         samples = 0
         temp = self.sendMessage(CODE_READ, ADDR_BYTESTORX, maxResp=4)
+        
         samples = samples | (temp[0] << 0)
         samples = samples | (temp[1] << 8)
         samples = samples | (temp[2] << 16)
@@ -911,7 +912,6 @@ class OpenADCInterface(BaseLog):
 
               #+1 for sync byte
               data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, bytesToRead+1) #BytesPerPackage)
-
 
               #for p in data:
               #       print "%x "%p,

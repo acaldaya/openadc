@@ -35,6 +35,7 @@ class ExtendedParameter():
         if parent is not None:
             parent.paramTreeChanged = types.MethodType(ExtendedParameter.paramTreeChanged, parent)
             curParam.sigTreeStateChanged.connect(parent.paramTreeChanged)
+            parent.findParam = types.MethodType(ExtendedParameter.findParam, parent)
                          
     ## If anything changes in the tree, print a message
     @staticmethod
@@ -87,6 +88,25 @@ class ExtendedParameter():
             for p in lst:
                 paramtree.addParameters(p)
                 
+      
+    @staticmethod
+    def findParam(self, paramKey, params=None):
+        """Match parameter based on 'key'"""
+        if params is None:
+            params = self.params
+            
+        try:
+            if params.opts['key'] == paramKey:
+                return params
+        except KeyError:
+            pass
+        
+        for t in params.children():
+            p = self.findParam(paramKey, t)
+            if p is not None:
+                return p
+             
+        return None
                 
 if __name__ == '__main__':
     import pyqtgraph as pg
