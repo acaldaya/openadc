@@ -42,6 +42,11 @@ except ImportError:
     ft_str = sys.exc_info()
     print ft_str
     print "ftd2xx import failed. Install XXX from XXX for FTDI support"
+except WindowsError:
+    ft = None
+    ft_str = sys.exc_info()
+    print ft_str
+    print "ftd2xx import failed. Install FTDI D2XX DLL from ftdichip.com if needed"    
 
 try:
     import usb

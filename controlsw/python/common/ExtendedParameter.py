@@ -36,6 +36,9 @@ class ExtendedParameter():
             parent.paramTreeChanged = types.MethodType(ExtendedParameter.paramTreeChanged, parent)
             curParam.sigTreeStateChanged.connect(parent.paramTreeChanged)
             parent.findParam = types.MethodType(ExtendedParameter.findParam, parent)
+            
+            if not hasattr(parent, 'showScriptParameter'):
+                parent.showScriptParameter = None
                          
     ## If anything changes in the tree, print a message
     @staticmethod
@@ -53,7 +56,7 @@ class ExtendedParameter():
                     linked = par
                     if isinstance(link, tuple):
                         for p in link:
-                            linked = linked.names[p]
+                            linked = linked.names[p]                            
                     else:                        
                         linked = par.names[link]
                         

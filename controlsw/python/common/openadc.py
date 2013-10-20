@@ -245,7 +245,9 @@ class TriggerSettings(BaseLog):
         super(TriggerSettings, self).__init__(console)
         self.name = "Trigger Settings"
         self.param = {'name': 'Trigger Setup', 'type':'group', 'children': [
-            {'name': 'Source', 'type': 'list', 'values':["digital",  "analog"],  'value':"digital", 'set':self.setSource,  'get':self.source}, 
+            {'name': 'Refresh Status', 'type':'action', 'linked':['Digital Pin State'], 'visible':False}, 
+            {'name': 'Source', 'type': 'list', 'values':["digital",  "analog"],  'value':"digital", 'set':self.setSource,  'get':self.source},
+            {'name': 'Digital Pin State', 'type':'bool', 'value':False, 'readonly':True, 'get':self.extTriggerPin}, 
             {'name': 'Mode',   'type':'list',  'values':["rising edge", "falling edge", "low", "high"], 'value':'low', 'set':self.setMode, 'get':self.mode}, 
             {'name': 'Offset', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setOffset, 'get':self.offset}, 
             {'name': 'Pre-Trigger Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setPresamples, 'get':self.presamples}, 
@@ -371,6 +373,13 @@ class TriggerSettings(BaseLog):
             mode = "low"
             
         return mode
+    
+    def extTriggerPin(self):
+        sets = self.oa.getStatus()
+        if sets & STATUS_EXT_MASK:
+            return True
+        else:
+            return False
 
 class ClockSettings(BaseLog):
     def __init__(self, console=None):
@@ -907,6 +916,8 @@ class OpenADCInterface(BaseLog):
 
               bytesToRead = self.getBytesInFifo()
               
+              #print bytesToRead
+              
               if bytesToRead == 0:
                      bytesToRead = BytesPerPackage
 
@@ -931,8 +942,8 @@ class OpenADCInterface(BaseLog):
               datapoints = datapoints[0:NumberPoints]
               
        #if len(datapoints) < NumberPoints:
-       print len(datapoints), 
-       print NumberPoints
+       #print len(datapoints), 
+       #print NumberPoints
 
        return datapoints
 
