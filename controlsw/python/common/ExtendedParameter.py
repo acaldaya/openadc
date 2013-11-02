@@ -93,7 +93,7 @@ class ExtendedParameter():
                 
       
     @staticmethod
-    def findParam(self, paramKey, params=None):
+    def findParam(self=None, paramKey=None, params=None):
         """Match parameter based on 'key'"""
         if params is None:
             params = self.params
@@ -105,7 +105,7 @@ class ExtendedParameter():
             pass
         
         for t in params.children():
-            p = self.findParam(paramKey, t)
+            p = self.findParam(paramKey=paramKey, params=t)
             if p is not None:
                 return p
              
