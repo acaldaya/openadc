@@ -11,6 +11,8 @@ successful.
 """
 
 import sys
+import platform
+import glob
 
 try:
     import serial
@@ -24,15 +26,19 @@ except ImportError:
 
 def scan():
     """scan for available ports. return a list of names"""
-    available = []
-    for i in range(64):
-        try:
-            s = serial.Serial(i)
-            available.append(s.portstr)
-            s.close()   # explicit close 'cause of delayed GC in java
-        except serial.SerialException:
-            pass
-    return available
+    system_name = platform.system()
+    if system_name == 'Windows':
+      available = []
+      for i in range(64):
+          try:
+              s = serial.Serial(i)
+              available.append(s.portstr)
+              s.close()   # explicit close 'cause of delayed GC in java
+          except serial.SerialException:
+              pass
+      return available
+    else:
+      return glob.glob('/dev/ttyS*') + glob.glob('/dev/ttyUSB*')
 
 if __name__=='__main__':
     print ("Found ports:")
