@@ -71,8 +71,8 @@ TIMESPEC TS_USER_CLOCK = PERIOD clk_40mhz 40000 kHz;
 NET clk_100mhz TNM_NET = clk_100mhz;
 TIMESPEC TS_clk_100mhz = PERIOD "clk_100mhz" 100000 KHz HIGH 50%;
 
-NET "oadc/genclocks/clkgenfx_out" TNM_NET = clkgenfx_out;
-TIMESPEC TS_clkgenfx_out = PERIOD "clkgenfx_out" 133000 KHz HIGH 50%;
+#NET "oadc/genclocks/clkgenfx_out" TNM_NET = clkgenfx_out;
+#TIMESPEC TS_clkgenfx_out = PERIOD "clkgenfx_out" 133000 KHz HIGH 50%;
 
 NET "oadc/genclocks/ADC_clk" TNM_NET = ADCClock;
 TIMESPEC TS_ADCClock = PERIOD "ADCClock" 133000 KHz HIGH 50%;
