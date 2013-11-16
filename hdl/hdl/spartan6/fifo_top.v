@@ -114,7 +114,7 @@ module fifo_top(
 			else if (adcfifo_merge_cnt == 'b10)
 				adcfifo_adcsample2 <= adc_datain;
 		
-			adcfifo_merge_cnt <= (adcfifo_merge_cnt == 'b10) ? 'b00 : adcfifo_merge_cnt + 1;			
+			adcfifo_merge_cnt <= (adcfifo_merge_cnt == 2'b10) ? 2'b00 : (adcfifo_merge_cnt + 1'b1);			
 		end
 	end
 		
@@ -190,7 +190,7 @@ module fifo_top(
 			presample_possible <= 0;
 			
 	always @(posedge adc_sampleclk)
-		presample <= (prog_full_thresh == 0) ? 0 : (~adc_capture_go & presample_possible);
+		presample <= (prog_full_thresh == 0) ? 1'b0 : (~adc_capture_go & presample_possible);
 	
 	/* Convert 128-bit to 8-bit */
 	reg [15:0] byte_select;
@@ -220,7 +220,7 @@ module fifo_top(
 		if (reset_i | presample | adc_capture_go | fifo_empty)
 			read_en <= 0;
 		else
-			read_en <= (byte_select == 16'b1000000000000000) ? 1 : 0;
+			read_en <= (byte_select == 16'b1000000000000000) ? 1'b1 : 1'b0;
 	
 	wire [127:0] fifo_data;
 	reg [7:0] fifo_read_data_reg;

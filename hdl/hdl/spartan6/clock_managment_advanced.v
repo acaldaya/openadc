@@ -12,7 +12,7 @@ This project is released under the Modified FreeBSD License. See LICENSE
 file which should have came with this code.
 *************************************************************************/
 module clock_managment_advanced(
-	 input		  reset,
+	 input		  reset, //Does NOT reset CLKGEN block
 
 	 /* Clock sources */
     input 		  clk_sys,     //System clock
@@ -32,14 +32,18 @@ module clock_managment_advanced(
 	 output       systemsample_clk,
 	 
 	 /* Mul/Div Control for Generated clock */
+	 input		  clkgen_reset,
+	 input [7:0]  clkgen_mul,
+	 input [7:0]  clkgen_div,
+	 input		  clkgen_load,
+	 output		  clkgen_done,
 	 
 	 /* Phase shift control for external clock*/
 	 input        phase_clk,
 	 input [8:0]  phase_requested,
 	 output [8:0] phase_actual,
 	 input		  phase_load,
-	 output		  phase_done,
-	 
+	 output		  phase_done,	 
 	 /* Is Selected DCM Locked? */
 	 output		  dcm_adc_locked,
 	 output		  dcm_gen_locked 
@@ -71,6 +75,31 @@ module clock_managment_advanced(
 											  .dcm_psincdec_o(dcm_psincdec),
 											  .dcm_psdone_i(dcm_psdone),
 											  .dcm_status_i(dcm_status));	
+
+	 //NOTE: Due to requirement of PHASECLK location in DCM_CLKGEN
+	 //      instance, ISE does some routing which can result in an
+	 //      error about clock & non-clock loads. Need to look into that.
+	 wire clkgen_clk;
+	 assign clkgen_clk = phase_clk;
+	 
+	 wire clkgen_progdone;
+	 wire clkgen_progdata;
+	 wire clkgen_progen;
+	 wire clkgen_progclk;
+	 
+	 dcm_clkgen_load clkgenload(
+		.clk_i(clkgen_clk),
+		.reset_i(clkgen_reset),
+		.mult(clkgen_mul),
+		.div(clkgen_div),
+		.load(clkgen_load),
+		.done(clkgen_done),
+		.PROGDONE(clkgen_progdone),
+		.PROGDATA(clkgen_progdata),
+		.PROGEN(clkgen_progen),
+		.PROGCLK(clkgen_progclk)
+    );
+
 
 	wire clkb;
 	wire clkgenfx_in;
@@ -115,7 +144,7 @@ module clock_managment_advanced(
 	.CLKFX_DIVIDE(1), // Divide value on CLKFX outputs - D - (1-32)
 	.CLKFX_MULTIPLY(4), // Multiply value on CLKFX outputs - M - (2-32)
 	.CLKIN_DIVIDE_BY_2("FALSE"), // CLKIN divide by two (TRUE/FALSE)
-	.CLKIN_PERIOD(10.0), // Input clock period specified in nS
+	//.CLKIN_PERIOD(10.0), // Input clock period specified in nS
 	.CLKOUT_PHASE_SHIFT("VARIABLE"), // Output phase shift (NONE, FIXED, VARIABLE)
 	.CLK_FEEDBACK("2X"), // Feedback source (NONE, 1X, 2X)
 	.DESKEW_ADJUST("SYSTEM_SYNCHRONOUS"), // SYSTEM_SYNCHRNOUS or SOURCE_SYNCHRONOUS
@@ -130,6 +159,7 @@ module clock_managment_advanced(
 	.CLK180(),
 	.CLK270(),
 	.CLKFX(ADC_clk_times4), // 1-bit output: Digital Frequency Synthesizer output (DFS)
+	.CLKFX180(),
 	.CLKDV(), //TODO: Use this output for additional options
 	.LOCKED(dcm_locked_int), // 1-bit output: DCM_SP Lock Output
 	.PSDONE(dcm_psdone), // 1-bit output: Phase shift done output
@@ -153,28 +183,28 @@ module clock_managment_advanced(
 	DCM_CLKGEN #(
 	.CLKFXDV_DIVIDE(4), // CLKFXDV divide value (2, 4, 8, 16, 32)
 	.CLKFX_DIVIDE(2), // Divide value - D - (1-256)
-	.CLKFX_MD_MAX(2.0), // Specify maximum M/D ratio for timing anlysis
 	.CLKFX_MULTIPLY(2), // Multiply value - M - (2-256)
-	.CLKIN_PERIOD(0), // Input clock period specified in nS
+	.CLKFX_MD_MAX(1.0), // Specify maximum M/D ratio for timing anlysis
+	//.CLKIN_PERIOD(10.0), // Input clock period specified in nS
 	.SPREAD_SPECTRUM("NONE"), // Spread Spectrum mode "NONE"
 	.STARTUP_WAIT("FALSE") // Delay config DONE until DCM_CLKGEN LOCKED
 	)
 	DCM_CLKGEN_inst (
 	.CLKFX(clkgenfx_out), // 1-bit output: Generated clock output
 	.CLKFX180(), // 1-bit output: Generated clock output 180 degree out of phase from CLKFX.	
-	.CLKFXDV(clkgenfx_dev_out), // 1-bit output: Divided clock output
+	.CLKFXDV(), // 1-bit output: Divided clock output
 	.LOCKED(dcm2_locked_int), // 1-bit output: Locked output
-	.PROGDONE(), // 1-bit output: Active high output to indicate the successful re-programming
+	.PROGDONE(clkgen_progdone), // 1-bit output: Active high output to indicate the successful re-programming
 	.STATUS(dcm2_status), // 2-bit output: DCM_CLKGEN status
 	.CLKIN(clkgenfx_in), // 1-bit input: Input clock
 	.FREEZEDCM(1'b0), // 1-bit input: Prevents frequency adjustments to input clock
-	.PROGCLK(1'b0), // 1-bit input: Clock input for M/D reconfiguration
-	.PROGDATA(1'b0), // 1-bit input: Serial data input for M/D reconfiguration
-	.PROGEN(1'b0), // 1-bit input: Active high program enable
-	.RST(reset) // 1-bit input: Reset input pin
+	.PROGCLK(clkgen_progclk), // 1-bit input: Clock input for M/D reconfiguration
+	.PROGDATA(clkgen_progdata), // 1-bit input: Serial data input for M/D reconfiguration
+	.PROGEN(clkgen_progen), // 1-bit input: Active high program enable
+	.RST(clkgen_reset) // 1-bit input: Reset input pin
 	);
 	
-	assign target_clk = clkgenfx_dev_out;
+	assign target_clk = clkgenfx_out;
 	
 	//Output buffers
 	wire out_from_dcmmux;

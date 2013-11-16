@@ -7,7 +7,7 @@ This file is the 'phaseshift' interface. It interfaces with the delay module
 (e.g.: DCM for Xilinx FPGAs) and provides a simple interface to adjust the
 delay added in a line.
 
-Copyright (c) 2012, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
+Copyright (c) 2012-2013, Colin O'Flynn <coflynn@newae.com>. All rights reserved.
 This project (and file) is released under the 2-Clause BSD License:
 
 Redistribution and use in source and binary forms, with or without 
@@ -34,10 +34,10 @@ POSSIBILITY OF SUCH DAMAGE.
 module dcm_phaseshift_interface(
     input clk_i,             //Clock for inputs & PCLK for DCM
 	 input reset_i,           //Reset - must also connect to DCM so this block knows when defaults are loaded
-	 input [8:0] default_value_i, //Default PS value in 2's complement format
-    input [8:0] value_i,     //Requested PS Value in 2's complement format	 
+	 input signed [8:0] default_value_i, //Default PS value in 2's complement format
+    input signed [8:0] value_i,     //Requested PS Value in 2's complement format	 
     input load_i,            //When high starts a new phase shift operation    
-	 output [8:0] value_o,    //Actual PS Value in 2's complement format, valid when done_o goes high
+	 output signed [8:0] value_o,    //Actual PS Value in 2's complement format, valid when done_o goes high
     output done_o,           //High for one clock cycle once operation complete
     output dcm_psen_o,       //Connect to DCM
     output dcm_psincdec_o,   //Connect to DCM
@@ -54,13 +54,13 @@ module dcm_phaseshift_interface(
     `define DONE           'b110          
 
     reg [3:0]              state = `RESET;
-	 reg [8:0]              dcm_ps_count;
-	 reg [8:0]					dcm_ps_target;
+	 reg signed [8:0]              dcm_ps_count;
+	 reg signed [8:0]					dcm_ps_target;
 	 
 	 reg							dcm_psen;
 	 reg							dcm_psincdec;
 	 reg							done;
-	 reg [8:0]					value;
+	 reg signed [8:0]					value;
 	 
 	 assign dcm_psen_o = dcm_psen;
 	 assign dcm_psincdec_o = dcm_psincdec;
@@ -119,7 +119,7 @@ module dcm_phaseshift_interface(
 							last_psincdec <= 0;
 							dcm_psincdec <= 0;
 							dcm_psen <= 1;
-							dcm_ps_count <= dcm_ps_count - 8'd1;
+							dcm_ps_count <= dcm_ps_count + (-8'sd1);
 							state <= `WAIT1;
 						end				
 					end else if (dcm_ps_target > dcm_ps_count) begin
@@ -134,7 +134,7 @@ module dcm_phaseshift_interface(
 							last_psincdec <= 1;
 							dcm_psincdec <= 1;
 							dcm_psen <= 1;
-							dcm_ps_count <= dcm_ps_count + 8'd1;
+							dcm_ps_count <= dcm_ps_count + 8'sd1;
 							state <= `WAIT1;
 						end
 					end else begin

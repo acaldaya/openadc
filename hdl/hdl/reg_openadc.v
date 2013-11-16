@@ -69,6 +69,7 @@ module reg_openadc(
 	
 	/* Measurement of external clock frequency */
 	input [31:0]	extclk_frequency,
+	output			extclk_measure_src,
 	input [31:0]   adcclk_frequency,
 	
 	/* Interface to phase shift module */
@@ -78,10 +79,17 @@ module reg_openadc(
 	input  [8:0]	phase_i,
 	input				phase_done_i,
 	
+	/* Interface to clkgen module */
+	output wire [7:0] clkgen_mul,        //Mult-1 (e.g.: value of 1 means Mult=2)
+	output wire [7:0] clkgen_div,         //Div-1 (e.g.: value of 1 means Div=2)
+	output reg        clkgen_load,
+	input wire        clkgen_done,
+	
 	/* Additional ADC control lines */
 	output [2:0]	adc_clk_src_o,
 	output			clkgen_src_o,
-	output			clkblock_reset_o,
+	output			clkblock_dcm_reset_o,
+	output			clkblock_gen_reset_o,
 	input				clkblock_dcm_locked_i,
 	input				clkblock_gen_locked_i,
 	output [31:0]  presamples_o,
@@ -130,6 +138,7 @@ module reg_openadc(
 	 wire [47:0] version_data;	
 	 wire [31:0] system_frequency = 32'd`SYSTEM_CLK;
 	 
+	 assign version_data[47:16] = 'b0;
 	 assign version_data[15:11] = 5'd`HW_TYPE;
 	 assign version_data[10:8] = 3'd`HW_VER;
 	 assign version_data[7:4] = 0;
@@ -184,11 +193,37 @@ module reg_openadc(
 	 assign registers_advclocksettings_read[5] = clkblock_gen_locked_i;
 	 assign registers_advclocksettings_read[6] = clkblock_dcm_locked_i;
 	 assign registers_advclocksettings_read[7] = 1'b1;
-	 assign registers_advclocksettings_read[31:8] = registers_advclocksettings[31:8];
+	 assign registers_advclocksettings_read[31:26] = registers_advclocksettings[31:26];
+	 assign registers_advclocksettings_read[24:8] = registers_advclocksettings[24:8];
 	 assign adc_clk_src_o[2:0] = registers_advclocksettings[2:0];
 	 assign clkgen_src_o = registers_advclocksettings[3];
-	 assign clkblock_reset_o = registers_advclocksettings[4];
+	 assign clkblock_dcm_reset_o = registers_advclocksettings[4];
+	 assign clkblock_gen_reset_o = registers_advclocksettings[26];
+	 assign extclk_measure_src = registers_advclocksettings[27];
+		
+	 wire clkgen_load_reg;
+	 reg clkgen_load_reg_int;
+	 reg clkgen_done_reg;
 	 
+	 //Make load 1-cycle only
+	 always @(posedge clk) begin
+		clkgen_load_reg_int <= clkgen_load_reg;
+		clkgen_load <= clkgen_load_reg & ~clkgen_load_reg_int;
+	 end
+	 
+	 //Make done latched until cleared by load
+	 always @(posedge clk) begin
+		if (clkgen_load | registers_advclocksettings[26])
+			clkgen_done_reg <= 'b0;
+		else if (clkgen_done)
+			clkgen_done_reg <= 'b1;
+	 end
+		
+	 assign clkgen_mul = registers_advclocksettings[15:8];
+	 assign clkgen_div = registers_advclocksettings[23:16];
+	 assign clkgen_load_reg = registers_advclocksettings[24];
+	 assign registers_advclocksettings_read[25] = clkgen_done_reg;
+	 	 
 	 assign gain = registers_gain;
 	 assign maxsamples_o = registers_samples;
 	 assign presamples_o = registers_presamples;

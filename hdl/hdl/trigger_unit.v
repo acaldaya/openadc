@@ -126,7 +126,7 @@ module trigger_unit(
 	assign resetarm = reset | reset_arm;
 		
 	//'armed' goes high when arm command present & conditions met during rising clock edge
-	always @(posedge clk)
+	always @(posedge adc_clk)
 	  if (resetarm) begin
 			armed <= 0;
 		end else if (arm_i & ((trigger != trigger_level_i) | (trigger_wait_i == 0))) begin

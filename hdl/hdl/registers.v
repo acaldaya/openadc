@@ -107,9 +107,32 @@
 			     0 = From DCM (e.g.: dependant on C1, C2, phase shift)
 				  1 = Direct from external input
 				  
-			[                         ] (Byte 1)
-			[                         ] (Byte 2)
-			[                         ] (Byte 3)
+			[ MUL7:0                 ] (Byte 1)
+			[ MUL7:0                 ] (Byte 2)
+    			 MUL7:0 = 8 Bits for 'Multiplication' setting, range 1-255
+				 DIV7:0 = 8 Bits for 'Division', range 0-255
+			     CLKOUT Frequency = ((MUL+1) / (DIV+1)) * CLKIN
+			     Note the DCM has certain allowed frequency ranges, see datasheet
+				  
+			[ X  X  X  X  FM R  D  L ] (Byte 3)
+			     L = (Bit 0) Load bit 
+				    Must write this to '1' than '0' for the new MUL/DIV settings to take effect
+					 				  
+				  D = (Bit 1) Done bit
+				    Bit indicates state of programming cycle. Cleared on start-up (e.g. when defaults
+					 loaded), set after new MUL/DIV loaded. Cleared when you write the 'L' bit to '1',
+					 then set again automatically when new data finished loading.
+					 
+				  R = (Bit 2) Reset CLKGEN DCM
+				    1 = Set CLKGEN Reset line high
+					 0 = Set CLKGEN Reset line low
+					 NOTE: When you reset the DCM, you automatically load default MUL/DIV settings. However
+					       The Mul/Div registers ARE NOT cleared. Thus you need to write whatever MUL/DIV
+							 settings you want & perform a load operation.
+
+				  FM = (Bit 3) External Frequency Counter Source
+				    0 = EXTCLKIn Input
+					 1 = CLKGEN Output Block			
 			
 	 0x07 - System Clock (4 Bytes) - Read Only
 	    Clock frequency in Hz
@@ -227,5 +250,32 @@
 	 
 	 `define REGISTER_VERSION 1
 	 
-	  
+	 //`define SCARDCTRL_ADDR	30
+	 //`define SCARDHDR_ADDR	31
+	 //`define SCARDPLD_ADDR	32
 	 
+	 //`define TARGSERIALDATA_ADDR 33
+	 //`define TARGSERIALLEN_ADDR	 34
+	 //`define TARGSERIALBAUD_ADDR 35
+	 
+	 //`define IOTRIGCLKDDIV_ADDR	36
+	 //`define IOTRIGPROG_ADDR		37 
+	 
+	 //`define CW_EXTCLK_ADDR		38
+	 //`define CW_TRIGSRC_ADDR		39
+	 //`define CW_TRIGMOD_ADDR		40
+	 
+	 //For SmartCard Only
+	 //`define TARGSERIALDATA_ADDR 41
+	 //`define TARGSERIALLEN_ADDR	 42
+	 //`define TARGSERIALBAUD_ADDR 43
+
+	 //`define ADDR_I2CSTATUS 47	 
+	 //`define ADDR_I2CDATA 48
+	 
+	 //`define SAKURA_STATUS_ADDR 49
+	 //`define SAKURA_FIFO_ADDR	50
+	 
+	 //`define CLOCKGLITCH_SETTINGS	51
+	 
+	 //`define RECONFIG_REG 52

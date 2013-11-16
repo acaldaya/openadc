@@ -39,6 +39,8 @@ module openadc_interface(
 	 /* Slower Clock - USB Interface, serial, etc. Typically ~20-60 MHz */
 	 input			clk_iface,
 	  
+	 output			clk_adcsample,
+	  
 `ifdef FAST_FTDI	 
 	/* Interface for FT2232H in Fast Syncronous Mode. Connect the
       FIFO Clock to 'clk_iface'. */
@@ -70,7 +72,10 @@ module openadc_interface(
 	 input         DUT_CLK_i,
 	 input         DUT_trigger_i,
 	 output        amp_gain,
-	 output        amp_hilo
+	 output        amp_hilo,
+	 
+	 /* Generated Clock for other uses */
+	 output 			target_clk
 	 
 `ifdef OPT_DDR
  /* To avoid modifying UCF file we keep these even in FIFO mode */
@@ -151,9 +156,9 @@ module openadc_interface(
    reg [24:0] timer_heartbeat;
    always @(posedge slowclock)
       if (reset) begin
-         timer_heartbeat <= 26'b0;
+         timer_heartbeat <= 25'b0;
       end else begin
-         timer_heartbeat <= timer_heartbeat +  26'd1;
+         timer_heartbeat <= timer_heartbeat +  25'd1;
       end	
       
    //Blink heartbeat LED
@@ -165,8 +170,13 @@ module openadc_interface(
 	wire freq_measure;
 	//BUFG buf_freqmeasure (.I(timer_heartbeat[25]), .O(freq_measure));
 	assign freq_measure = timer_heartbeat[23];
+	
+	wire extmeasure_clk;
+	wire extmeasure_src;
+	assign extmeasure_clk = (extmeasure_src) ? target_clk : DUT_CLK_i;
+	
 	reg [31:0] extclk_frequency_int;	
-	always @(posedge DUT_CLK_i or negedge freq_measure) begin
+	always @(posedge extmeasure_clk or negedge freq_measure) begin
 		if (freq_measure == 1'b0) begin
 			extclk_frequency_int <= 32'd0;
 		end else begin
@@ -215,21 +225,21 @@ module openadc_interface(
 			.SIM_TAPDELAY_VALUE(75) // Per tap delay used for simulation in ps
 			)
 		IODELAY2_inst (
-			.BUSY(), // 1-bit output: Busy output after CAL
+			//.BUSY(), // 1-bit output: Busy output after CAL
 			.DATAOUT(), // 1-bit output: Delayed data output to ISERDES/input register
 			.DATAOUT2(ADC_Data_delayed[index]), // 1-bit output: Delayed data output to general FPGA fabric
 			.DOUT(), // 1-bit output: Delayed data output
 			.TOUT(), // 1-bit output: Delayed 3-state output
-			.CAL(~reset_intermediate), // 1-bit input: Initiate calibration input
-			.CE(1'b0), // 1-bit input: Enable INC input
-			.CLK(), // 1-bit input: Clock input
+			//.CAL(), // 1-bit input: Initiate calibration input
+			//.CE(), // 1-bit input: Enable INC input
+			//.CLK(), // 1-bit input: Clock input
 			.IDATAIN(ADC_Data[index]), // 1-bit input: Data input (connect to top-level port or I/O buffer)
-			.INC(INC), // 1-bit input: Increment / decrement input
-			.IOCLK0(ADC_clk_sample), // 1-bit input: Input from the I/O clock network
-			.IOCLK1(), // 1-bit input: Input from the I/O clock network
-			.ODATAIN(), // 1-bit input: Output data input from output register or OSERDES2.
-			.RST(reset_intermediate), // 1-bit input: Reset to zero or 1/2 of total delay period
-			.T() // 1-bit input: 3-state input signal
+			//.INC(), // 1-bit input: Increment / decrement input
+			//.IOCLK0(), // 1-bit input: Input from the I/O clock network
+			//.IOCLK1(), // 1-bit input: Input from the I/O clock network
+			.ODATAIN() // 1-bit input: Output data input from output register or OSERDES2.
+			//RST(), // 1-bit input: Reset to zero or 1/2 of total delay period
+			//.T() // 1-bit input: 3-state input signal
 		);
 	  end
 	 endgenerate
@@ -424,11 +434,15 @@ module openadc_interface(
 	  .usr_data_i(ethusr_data)
     );
 `else
+
+`ifdef OPT_ETH
 	 assign eth_mdc = 1'b0;
 	 assign eth_mdio = 1'bZ;	 
 	 assign eth_reset_n = 1'b0;
 	 assign eth_tx_data = 4'd0;
 	 assign eth_tx_en = 1'b0;
+`endif
+
 `endif
 
 	wire reg_clk;
@@ -473,6 +487,12 @@ module openadc_interface(
 	wire [15:0] reg_hyplen_openadc;
 	wire clockreset;
 	
+	wire [7:0] clkgen_mul;
+	wire [7:0] clkgen_div;
+	wire clkgen_load;
+	wire clkgen_done;
+	wire clkgen_reset;
+	
 	reg_openadc registers_openadc (
 		.reset_i(reset_i),
 		.reset_o(reset_intermediate),
@@ -499,20 +519,26 @@ module openadc_interface(
 		.trigger_level(trigger_level),
 		.trigger_now(trigger_now),
 		.trigger_offset(trigger_offset),
-		.extclk_frequency(extclk_frequency),							
+		.extclk_frequency(extclk_frequency),		
+		.extclk_measure_src(extmeasure_src),
 		.adcclk_frequency(adcclk_frequency),
 		.phase_o(phase_requested),
 		.phase_ld_o(phase_load),
 		.phase_i(phase_actual),
 		.phase_done_i(phase_done),
 		.phase_clk_o(phase_clk),
+		.clkgen_mul(clkgen_mul),
+		.clkgen_div(clkgen_div),
+		.clkgen_load(clkgen_load),
+		.clkgen_done(clkgen_done),
 		.presamples_o(presamples),
 		.maxsamples_i(maxsamples_limit),
 		.maxsamples_o(maxsamples),
 		.samples_i(samples_cnt),
 		.adc_clk_src_o(ADC_clk_selection),
 		.clkgen_src_o(clkgen_selection),
-		.clkblock_reset_o(clockreset),
+		.clkblock_dcm_reset_o(clockreset),
+		.clkblock_gen_reset_o(clkgen_reset),
 		.clkblock_dcm_locked_i(dcm_locked),
 		.clkblock_gen_locked_i(dcm_gen_locked)		
 		);
@@ -561,7 +587,7 @@ module openadc_interface(
     .clk_sys(clk_100mhz_buf),
     .clk_ext(DUT_CLK_i),   
 	 .adc_clk(ADC_clk),
-	 .target_clk(),
+	 .target_clk(target_clk),
 	 .clkadc_source(ADC_clk_selection),
 	 .clkgen_source(clkgen_selection),
 	 .systemsample_clk(ADC_clk_sample),
@@ -570,6 +596,11 @@ module openadc_interface(
 	 .phase_actual(phase_actual),
 	 .phase_load(phase_load),
 	 .phase_done(phase_done),
+	 .clkgen_reset(reset | clkgen_reset),
+	 .clkgen_mul(clkgen_mul),
+	 .clkgen_div(clkgen_div),
+	 .clkgen_load(clkgen_load),
+	 .clkgen_done(clkgen_done),
 	 .dcm_adc_locked(dcm_locked),
 	 .dcm_gen_locked(dcm_gen_locked)
     );
@@ -688,19 +719,21 @@ module openadc_interface(
 	 );
 
 //`undef CHIPSCOPE
+
+`ifdef OPT_DDR
 	 /* To avoid modifying UCF file we keep these even in FIFO mode */
-	 assign LPDDR_A = 0;
-	 assign LPDDR_BA = 0;
-	 assign LPDDR_DQ = 16'bz;
-	 assign LPDDR_LDM = 0;
-	 assign LPDDR_UDM = 0;
-	 assign LPDDR_LDQS = 1'bz;
-	 assign LPDDR_UDQS = 1'bz;
-	 assign LPDDR_CKE = 0;
-	 assign LPDDR_CAS_n = 1;
-	 assign LPDDR_RAS_n = 1;
-	 assign LPDDR_WE_n = 1;
-	 assign LPDDR_RZQ = 1;
+	 assign LPDDR_A = 'b0;
+	 assign LPDDR_BA = 'b0;
+	 assign LPDDR_DQ = 'bz;
+	 assign LPDDR_LDM = 'b0;
+	 assign LPDDR_UDM = 'b0;
+	 assign LPDDR_LDQS = 'bz;
+	 assign LPDDR_UDQS = 'bz;
+	 assign LPDDR_CKE = 'b0;
+	 assign LPDDR_CAS_n = 'b1;
+	 assign LPDDR_RAS_n = 'b1;
+	 assign LPDDR_WE_n = 'b1;
+	 assign LPDDR_RZQ = 'b1;
 	 
 	 OBUFDS #(
 		.IOSTANDARD("DEFAULT") // Specify the output I/O standard
@@ -709,6 +742,7 @@ module openadc_interface(
 			.OB(LPDDR_CK_N), // Diff_n output (connect directly to top-level port)
 			.I(1'b1) // Buffer input
 		);
+`endif
 	 
 `endif
 			 		
