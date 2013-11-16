@@ -10,7 +10,7 @@
 import sys
 import time
 import datetime
-import logging
+from functools import partial
 
 ADDR_GAIN       = 0
 ADDR_SETTINGS   = 1
@@ -382,49 +382,91 @@ class TriggerSettings(BaseLog):
             return False
 
 class ClockSettings(BaseLog):
+    
+    readMask = [0x1f, 0xff, 0xff, 0xfd]
+    
     def __init__(self, console=None):
         super(ClockSettings, self).__init__(console)
         self.name = "Clock Setup"
         self.param = {'name': 'Clock Setup', 'type':'group', 'children': [
-            {'name':'Refresh Status', 'type':'action', 'linked':[('ADC Clock','DCM Locked'), ('ADC Clock','ADC Freq'), ('CLKGEN Settings','DCM Locked'), 'EXTCLK Input Freq']}, 
-            {'name':'Relock DCMs', 'type':'action', 'action':self.resetDcms}, 
+            {'name':'Refresh Status', 'type':'action', 'linked':[('ADC Clock','DCM Locked'), ('ADC Clock','ADC Freq'), ('CLKGEN Settings','DCM Locked'), 'Freq Counter']}, 
+            {'name':'Reset DCMs', 'type':'action', 'action':self.resetDcms, 'linked':[('CLKGEN Settings','Multiply'), ('CLKGEN Settings','Divide')]}, 
         
             {'name': 'ADC Clock', 'type':'group', 'children': [
                 {'name': 'Source', 'type':'list', 'values':{"EXTCLK Direct":("extclk", 4, "clkgen"), "EXTCLK x4 via DCM":("dcm", 4, "extclk"), "EXTCLK x1 via DCM":("dcm", 1, "extclk"), "CLKGEN x4 via DCM":("dcm", 4, "clkgen"), "CLKGEN x1 via DCM":("dcm", 1, "clkgen")},  'value':("dcm", 1, "extclk"), 'set':self.setAdcSource,  'get':self.adcSource},
                 {'name': 'Phase Adjust', 'type':'int', 'value':0, 'limits':(-255, 255), 'set':self.setPhase, 'get':self.phase}, 
-                {'name': 'DCM Locked', 'type':'bool',  'value':False, 'get':self.dcmADCLocked, 'readonly':True}, 
                 {'name': 'ADC Freq', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.adcFrequency},
+                {'name': 'DCM Locked', 'type':'bool',  'value':False, 'get':self.dcmADCLocked, 'readonly':True}, 
+                {'name':'Reset ADC DCM', 'type':'action', 'action':partial(self.resetDcms, True, False)}, 
             ]},            
-            {'name': 'EXTCLK Input Freq', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.extFrequency},
-            {'name':'CLKGEN Settings', 'type':'group', 'children': [
+            {'name': 'Freq Counter', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.extFrequency},
+            {'name': 'Freq Counter Src', 'type':'list', 'values':{'EXTCLK Input':0, 'CLKGEN Output':1}, 'value':0, 'set':self.setFreqSrc, 'get':self.freqSrc},
+            {'name': 'CLKGEN Settings', 'type':'group', 'children': [
                 {'name':'Input Source', 'type':'list', 'values':["system", "extclk"], 'value':"system", 'set':self.setClkgenSrc, 'get':self.clkgenSrc}, 
-                {'name':'Multiply', 'type':'list', 'values':{'2x':2}, 'value':2, 'set':self.setClkgenMul, 'get':self.clkgenMul}, 
-                {'name':'Divide', 'type':'list', 'values':{'/2':2}, 'value':2, 'set':self.setClkgenDiv, 'get':self.clkgenDiv}, 
-                {'name':'TargetDivide', 'type':'list', 'values':{'/4':4}, 'value':4, 'set':self.setClkgenDivTarget, 'get':self.clkgenDivTarget},
-                {'name':'DCM Locked', 'type':'bool',  'value':False, 'get':self.clkgenLocked, 'readonly':True},                
+                {'name':'Multiply', 'type':'int', 'limits':(2,256), 'value':2, 'set':self.setClkgenMul, 'get':self.clkgenMul}, 
+                {'name':'Divide', 'type':'int', 'limits':(1,256), 'value':2, 'set':self.setClkgenDiv, 'get':self.clkgenDiv}, 
+                {'name':'DCM Locked', 'type':'bool',  'value':False, 'get':self.clkgenLocked, 'readonly':True},    
+                {'name':'Reset CLKGEN DCM', 'type':'action', 'action':partial(self.resetDcms, False, True), 'linked':['Multiply', 'Divide']},             
             ]},             
         ]} 
         
     def setInterface(self, oa):
         self.oa = oa
         
+    def setFreqSrc(self, src):
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        result[3] = result[3] & ~(0x08)
+        result[3] |= src << 3
+        print "%x"%result[3]
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)        
+        
+    def freqSrc(self):
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        return ((result[3] & 0x08) >> 3)
+        
     def setClkgenMul(self, mul):
-       return
+        if mul < 2:
+            mul = 2
+                    
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        mul -= 1
+        result[1] = mul
+        result[3] |= 0x01
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
+        result[3] &= ~(0x01)
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
     
     def clkgenMul(self):
-       return 2
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        val =  result[1]
+        val += 1    
+            
+        if (result[3] & 0x02):        
+            return val
+        else:
+            return 2
        
     def setClkgenDiv(self, div):
-       return
+        if div < 1:
+            div = 1
+        
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        div -= 1                
+        result[2] = div      
+        result[3] |= 0x01
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
+        result[3] &= ~(0x01)
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
        
     def clkgenDiv(self):
-       return 2
-    
-    def setClkgenDivTarget(self, div):
-       return
-       
-    def clkgenDivTarget(self):
-       return 4
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        val =  result[2]
+        val += 1        
+        
+        if (result[3] & 0x02):  
+            return val
+        else:
+            return 2
 
     def adcSource(self):
         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
@@ -494,7 +536,7 @@ class ClockSettings(BaseLog):
         else:
             raise ValueError("source must be 'system' or 'extclk'")             
 
-        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
         
     def clkgenSrc(self):
         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
@@ -540,33 +582,41 @@ class ClockSettings(BaseLog):
         return result[1]
 
     def DCMStatus(self):
-         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
-         if (result[0] & 0x80) == 0:
-             self.log("ERROR: ADVCLK register not present. Version mismatch")
-             return (False, False)
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        if (result[0] & 0x80) == 0:
+            self.log("ERROR: ADVCLK register not present. Version mismatch")
+            return (False, False)
 
-         if (result[0] & 0x40) == 0:
-             dcmADCLocked = False
-         else:
-             dcmADCLocked = True
+        if (result[0] & 0x40) == 0:
+            dcmADCLocked = False
+        else:
+            dcmADCLocked = True
 
-         if (result[0] & 0x20) == 0:
-             dcmCLKGENLocked = False
-         else:
-             dcmCLKGENLocked = True
+        if (result[0] & 0x20) == 0:
+            dcmCLKGENLocked = False
+        else:
+            dcmCLKGENLocked = True
+            
+        #if (result[3] & 0x02):
+        #    print "CLKGEN Programming Done"
 
-         return (dcmADCLocked, dcmCLKGENLocked)
+        return (dcmADCLocked, dcmCLKGENLocked)
 
-    def resetDcms(self):
+    def resetDcms(self, resetMain=True, resetClkgen=True):
         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
 
-        #Set reset high
-        result[0] = result[0] | 0x10
+        #Set reset high on requested blocks only
+        if resetMain:
+            result[0] = result[0] | 0x10
+            
+        if resetClkgen:
+            result[3] = result[3] | 0x04
         
         self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, Validate=False)
 
         #Set reset low
         result[0] = result[0] & ~(0x10)
+        result[3] = result[3] & ~(0x04)
         self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, Validate=False)
 
     def extFrequency(self):
@@ -642,7 +692,7 @@ class OpenADCInterface(BaseLog):
                self.log("%d errors in %d"%(totalerror, totalbytes))
 
     
-    def sendMessage(self, mode, address, payload=None, Validate=True, maxResp=None):
+    def sendMessage(self, mode, address, payload=None, Validate=True, maxResp=None, readMask=None):
         """Send a message out the serial port"""
 
         if payload is None:
@@ -704,14 +754,23 @@ class OpenADCInterface(BaseLog):
         else:
             if Validate:
                 check = self.sendMessage(CODE_READ, address, maxResp=len(pba))
+                
+                if readMask:
+                    try:
+                        for i,m in enumerate(readMask):
+                            check[i] = check[i] & m
+                            pba[i] = pba[i] & m
+                    except IndexError:
+                        pass
+                
                 if check != pba:
                     errmsg = "For address 0x%02x=%d"%(address,address)
                     errmsg +=  "  Sent data: "
-                    for c in pba: errmsg += "%x"%c
+                    for c in pba: errmsg += "%02x"%c
                     errmsg += "\n"
                     errmsg += "  Read data: "
                     if check:
-                        for c in check: errmsg += "%x"%c
+                        for c in check: errmsg += "%02x"%c
                         errmsg += "\n"
                     else:
                         errmsg += "<Timeout>"
