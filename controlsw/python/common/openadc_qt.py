@@ -7,17 +7,14 @@
 # This project is released under the 2-Clause BSD License. See LICENSE
 # file which should have came with this code.
 
-import sys
-import os
-import threading
-import time
-import logging
-import math
-import serial
-import openadc
 
+#Always import PySide FIRST to force everything to use this, in case both PySide & PyQt installed
 from PySide.QtCore import *
 from PySide.QtGui import *
+
+
+import openadc
+from ExtendedParameter import ExtendedParameter
 
 try:
     import pyqtgraph as pg
@@ -89,10 +86,11 @@ class previewWindow():
 
 class OpenADCQt(QObject):
     
-    dataUpdated = Signal(list)
+    dataUpdated = Signal(list, int)
     
-    def __init__(self, MainWindow=None, includePreview=True, setupLayout=True):
+    def __init__(self, MainWindow=None, includePreview=True, setupLayout=True, includeParameters=True, console=None, showScriptParameter=None):
         super(OpenADCQt,  self).__init__()
+        self.console = console
         self.offset = 0.5
         self.ser = None
         self.sc = None
@@ -104,9 +102,10 @@ class OpenADCQt(QObject):
 
         self.timerStatusRefresh = QTimer(self)
         self.timerStatusRefresh.timeout.connect(self.statusRefresh)
+        self.showScriptParameter = showScriptParameter
 
         if setupLayout:
-            self.setupLayout(MainWindow, includePreview)
+            self.setupLayout(MainWindow, includePreview, includeParameters)
             
     def setEnabled(self, enabled):
         pass
@@ -140,67 +139,33 @@ class OpenADCQt(QObject):
     def getLayout(self):
         return self.masterLayout
 
-    def setupParameterTree(self):
-        if self.adc_settings is None:
-            self.adc_settings = openadc.OpenADCSettings()        
-            self.p = Parameter.create(name='OpenADC', type='group', children=self.adc_settings.parameters(doUpdate=False))
-            self.p.sigTreeStateChanged.connect(self.change)
-            self.paramTree = ParameterTree()
-            self.paramTree.setParameters(self.p, showTop=False)
-            
-    def getAllParameters(self, parent=None):
-        if parent is None:
-            parent = self.p
-        
-        if parent.hasChildren():
-            for child in parent.children():
-                self.getAllParameters(child)
-        else:
-            if 'get' in parent.opts:
-                parent.setValue(parent.opts['get']())
-                    
-    ## If anything changes in the tree, print a message
-    def change(self, param,  changes):    
-        for param, change, data in changes:
-            #Call specific 'set' routine associated with data
-            if 'set' in param.opts:
-                param.opts['set'](data)   
-                
-            if 'linked' in param.opts:
-                par = param.parent()
-                for link in param.opts['linked']:
-                    
-                    linked = par
-                    if isinstance(link, tuple):
-                        for p in link:
-                            linked = linked.names[p]
-                    else:                        
-                        linked = par.names[link]
-                        
-                    linked.setValue(linked.opts['get']())
-                    
-            if 'action' in param.opts:
-                param.opts['action']()
-                    
-            param.opts
-#            path = self.p.childPath(param)
-#            if path is not None:
-#                childName = '.'.join(path)
-#            else:
-#                childName = param.name()
-#            print('  parameter: %s'% childName)
-#            print('  change:    %s'% change)
-#            print('  data:      %s'% str(data))
-#            print('  ----------')
+    def paramTreeChanged(self, param, changes):
+        if self.showScriptParameter is not None:
+            self.showScriptParameter(param, changes, self.params)
 
+    def setupParameterTree(self, makeTree=True):
+        if self.adc_settings is None:
+            self.adc_settings = openadc.OpenADCSettings(self.console)        
+            self.params = Parameter.create(name='OpenADC', type='group', children=self.adc_settings.parameters(doUpdate=False))
+            #ExtendedParameter.setupExtended(self.params)
+            ep = ExtendedParameter()
+            ep.setupExtended(self.params, self)
+            
+            if makeTree:
+                self.paramTree = ParameterTree()
+                self.paramTree.setParameters(self.params, showTop=False)
+            
+                    
     def reloadParameterTree(self):
         self.adc_settings.setInterface(self.sc)
-        self.getAllParameters()
+        self.params.blockTreeChangeSignal()
+        self.params.getAllParameters()
+        self.params.unblockTreeChangeSignal()
 
     def processData(self, data):
         fpData = []
 
-        lastpt = -100;
+        #lastpt = -100;
 
         if data[0] != 0xAC:
             self.showMessage("Unexpected sync byte: 0x%x"%data[0])
@@ -235,19 +200,22 @@ class OpenADCQt(QObject):
         progress = QProgressDialog("Reading", "Abort", 0, 100)
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(1000)
-
-        self.datapoints = self.sc.readData(NumberPoints, progress)
-
-        self.dataUpdated.emit(self.datapoints)
+        
+        try:
+            self.datapoints = self.sc.readData(NumberPoints, progress)
+        except IndexError, e:
+            raise IOError("Error reading data: %s"%str(e))
+            
+        self.dataUpdated.emit(self.datapoints, -self.adc_settings.parm_trigger.presamples(True))
 
         if update & (self.preview is not None):               
-            self.preview.updateData(self.datapoints, -self.adc_settings.parm_trigger.presamples())
+            self.preview.updateData(self.datapoints, -self.adc_settings.parm_trigger.presamples(True))
 
-        return True
         
     def capture(self, update=True, NumberPoints=None):
-        self.sc.capture()
-        return self.read(update, NumberPoints)
+        timeout = self.sc.capture()
+        self.read(update, NumberPoints)
+        return timeout
 
     def timeoutValidate(self, arg=None):
         if self.trigTimeout.isChecked():
@@ -268,7 +236,7 @@ class OpenADCQt(QObject):
         self.ser = ser
 
         #See if device seems to be attached
-        self.sc = openadc.OpenADCInterface(self.ser)
+        self.sc = openadc.OpenADCInterface(self.ser, self.console)
 
         deviceFound = False
         numTries = 0
@@ -283,7 +251,10 @@ class OpenADCQt(QObject):
             numTries += 1
 
             if (numTries == 5):
-                portname = self.ser.name
+                try:                
+                    portname = self.ser.name
+                except:
+                    portname = "UNKNOWN"
                 self.ser.close()
                 self.ser = None
 

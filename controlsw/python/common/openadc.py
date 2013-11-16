@@ -8,13 +8,9 @@
 # file which should have came with this code.
 
 import sys
-import os
-import threading
 import time
 import datetime
-import logging
-import math
-import random
+from functools import partial
 
 ADDR_GAIN       = 0
 ADDR_SETTINGS   = 1
@@ -58,16 +54,27 @@ STATUS_DDRMODE_MASK= 0x40
 # sign extend b low bits in x
 # from "Bit Twiddling Hacks"
 def SIGNEXT(x, b):
-       m = 1 << (b - 1)
-       x = x & ((1 << b) - 1)
-       return (x ^ m) - m
+    m = 1 << (b - 1)
+    x = x & ((1 << b) - 1)
+    return (x ^ m) - m
 
-class OpenADCSettings:
-    def __init__(self, oaiface=None):   
-        self.parm_hwinfo = HWInformation()
-        self.parm_gain = GainSettings()
-        self.parm_trigger = TriggerSettings()
-        self.parm_clock = ClockSettings()
+class BaseLog(object):
+    def __init__(self, console=None):
+        self.console = console
+        
+    def log(self, msg):
+        if self.console:
+            self.console.append(msg)
+        else:
+            print msg
+
+class OpenADCSettings(BaseLog):
+    def __init__(self, oaiface=None, console=None):
+        super(OpenADCSettings, self).__init__(console)   
+        self.parm_hwinfo = HWInformation(console=console)
+        self.parm_gain = GainSettings(console=console)
+        self.parm_trigger = TriggerSettings(console=console)
+        self.parm_clock = ClockSettings(console=console)
         
         self.params = [
             self.parm_hwinfo, 
@@ -93,17 +100,17 @@ class OpenADCSettings:
             
         if doUpdate:
             for p in paramdict:
-                for set in p['children']:
+                for pset in p['children']:
                     try:
-                        if 'children' in set:
-                            for subset in set['children']:
-                                if set['type'] != 'action':
+                        if 'children' in pset:
+                            for subset in pset['children']:
+                                if pset['type'] != 'action':
                                     subset['value']=subset['get']()
                         else:
-                            if set['type'] != 'action':
-                                set['value'] = set['get']()
+                            if pset['type'] != 'action':
+                                pset['value'] = pset['get']()
                     except KeyError:
-                        print "Error in %s.%s - no 'get'"%(p['name'], set['name'])
+                        print "Error in %s.%s - no 'get'"%(p['name'], pset['name'])
         
         return paramdict
 
@@ -111,8 +118,9 @@ class OpenADCSettings:
         """Set all parameters/settings from a dict. Can pass only part of the dictionary too for changes."""
         return
             
-class HWInformation:
-    def __init__(self):
+class HWInformation(BaseLog):
+    def __init__(self, console=None):
+        super(HWInformation, self).__init__(console)
         self.name = "Hardware Information"
         self.sysFreq = 0
         self.param = {'name': 'HW Information', 'type': 'group', 'children': [
@@ -121,6 +129,8 @@ class HWInformation:
                 {'name': 'System Freq', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'get':self.sysFrequency, 'readonly':True},
                 {'name': 'Max Samples', 'type': 'int', 'value': 0, 'get':self.maxSamples, 'readonly':True}
                 ]}
+        
+        self.vers = None
         
     def setInterface(self, oa):
         self.oa = oa
@@ -133,14 +143,20 @@ class HWInformation:
         hwtype = result[1] >> 3
         hwver = result[1] & 0x07
         hwList = ["Default/Unknown", "LX9 MicroBoard", "SASEBO-W", "ChipWhisperer Rev2 LX25",
-                  "Reserved?", "ZedBoard", "Papilio Pro"]
+                  "Reserved?", "ZedBoard", "Papilio Pro", "SAKURA-G"]
 
         try:
             textType = hwList[hwtype]
         except:
             textType = "Invalid/Unknown"
 
-        return (regver, hwtype, textType, hwver)  
+        self.vers = (regver, hwtype, textType, hwver) 
+
+        #TODO: Temp fix for wrong HW reporting
+        if hwtype == 1:
+            self.sysFreq = 40E6
+
+        return self.vers
       
     def synthDate(self):
        return "unknown" 
@@ -150,7 +166,7 @@ class HWInformation:
 
     def sysFrequency(self, force=False):
         if (self.sysFreq > 0) & (force == False):
-               return self.sysFreq
+            return self.sysFreq
            
         '''Return the system clock frequency in specific firmware version'''
         freq = 0x00000000;
@@ -165,8 +181,9 @@ class HWInformation:
         
         return self.sysFreq
 
-class GainSettings:
-    def __init__(self):
+class GainSettings(BaseLog):
+    def __init__(self, console=None):
+        super(GainSettings, self).__init__(console)
         self.name = "Gain Setting"
         self.param = {'name': 'Gain Setting', 'type': 'group', 'children': [
                 {'name': 'Mode', 'type': 'list', 'values': {"high", "low"}, 'value':"low", 'set':self.setMode,  'get':self.mode},
@@ -223,21 +240,29 @@ class GainSettings:
 
         return gaindb
 
-class TriggerSettings:
-    def __init__(self):
+class TriggerSettings(BaseLog):
+    def __init__(self, console=None):
+        super(TriggerSettings, self).__init__(console)
         self.name = "Trigger Settings"
         self.param = {'name': 'Trigger Setup', 'type':'group', 'children': [
-            {'name': 'Source', 'type': 'list', 'values':["digital",  "analog"],  'value':"digital", 'set':self.setSource,  'get':self.source}, 
+            {'name': 'Refresh Status', 'type':'action', 'linked':['Digital Pin State'], 'visible':False}, 
+            {'name': 'Source', 'type': 'list', 'values':["digital",  "analog"],  'value':"digital", 'set':self.setSource,  'get':self.source},
+            {'name': 'Digital Pin State', 'type':'bool', 'value':False, 'readonly':True, 'get':self.extTriggerPin}, 
             {'name': 'Mode',   'type':'list',  'values':["rising edge", "falling edge", "low", "high"], 'value':'low', 'set':self.setMode, 'get':self.mode}, 
             {'name': 'Offset', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setOffset, 'get':self.offset}, 
             {'name': 'Pre-Trigger Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setPresamples, 'get':self.presamples}, 
             {'name': 'Total Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setMaxSamples, 'get':self.maxSamples}, 
         ]}
         self.maxsamples = 0
+        self.presamples_desired = 0
+        self.presamples_actual = 0
+        
+        self.presampleTempMargin = 24
 
 
     def setInterface(self, oa):
         self.oa = oa
+        self.oa.presamples_desired = self.presamples_desired
 
     def setMaxSamples(self, samples):
         self.maxsamples = samples
@@ -272,7 +297,7 @@ class TriggerSettings:
 
         #Account for shitty hardware design
         if samplesact > 0:
-               samplesact = samplesact + 16
+            samplesact = samplesact + self.presampleTempMargin
            
         cmd = bytearray(4)
         cmd[0] = ((samplesact >> 0) & 0xFF)
@@ -284,9 +309,14 @@ class TriggerSettings:
         self.presamples_actual = samplesact*3
         self.presamples_desired = samples
         
+        #print "Requested presamples: %d, actual: %d"%(samples, self.presamples_actual)
+        
+        self.oa.presamples_desired = samples
+        
         return self.presamples_actual
 
     def presamples(self, cached=False):
+        """If cached returns DESIRED presamples"""
         
         if cached:
             return self.presamples_desired
@@ -343,50 +373,100 @@ class TriggerSettings:
             mode = "low"
             
         return mode
+    
+    def extTriggerPin(self):
+        sets = self.oa.getStatus()
+        if sets & STATUS_EXT_MASK:
+            return True
+        else:
+            return False
 
-class ClockSettings:
-    def __init__(self):
+class ClockSettings(BaseLog):
+    
+    readMask = [0x1f, 0xff, 0xff, 0xfd]
+    
+    def __init__(self, console=None):
+        super(ClockSettings, self).__init__(console)
         self.name = "Clock Setup"
         self.param = {'name': 'Clock Setup', 'type':'group', 'children': [
-            {'name':'Refresh Status', 'type':'action', 'linked':[('ADC Clock','DCM Locked'), ('ADC Clock','ADC Freq'), ('CLKGEN Settings','DCM Locked'), 'EXTCLK Input Freq']}, 
-            {'name':'Relock DCMs', 'type':'action', 'action':self.resetDcms}, 
+            {'name':'Refresh Status', 'type':'action', 'linked':[('ADC Clock','DCM Locked'), ('ADC Clock','ADC Freq'), ('CLKGEN Settings','DCM Locked'), 'Freq Counter']}, 
+            {'name':'Reset DCMs', 'type':'action', 'action':self.resetDcms, 'linked':[('CLKGEN Settings','Multiply'), ('CLKGEN Settings','Divide')]}, 
         
             {'name': 'ADC Clock', 'type':'group', 'children': [
                 {'name': 'Source', 'type':'list', 'values':{"EXTCLK Direct":("extclk", 4, "clkgen"), "EXTCLK x4 via DCM":("dcm", 4, "extclk"), "EXTCLK x1 via DCM":("dcm", 1, "extclk"), "CLKGEN x4 via DCM":("dcm", 4, "clkgen"), "CLKGEN x1 via DCM":("dcm", 1, "clkgen")},  'value':("dcm", 1, "extclk"), 'set':self.setAdcSource,  'get':self.adcSource},
-                {'name': 'Phase Adjust', 'type':'int', 'value':0, 'limits':(-100, 100), 'set':self.setPhase, 'get':self.phase}, 
-                {'name': 'DCM Locked', 'type':'bool',  'value':False, 'get':self.dcmADCLocked, 'readonly':True}, 
+                {'name': 'Phase Adjust', 'type':'int', 'value':0, 'limits':(-255, 255), 'set':self.setPhase, 'get':self.phase}, 
                 {'name': 'ADC Freq', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.adcFrequency},
+                {'name': 'DCM Locked', 'type':'bool',  'value':False, 'get':self.dcmADCLocked, 'readonly':True}, 
+                {'name':'Reset ADC DCM', 'type':'action', 'action':partial(self.resetDcms, True, False)}, 
             ]},            
-            {'name': 'EXTCLK Input Freq', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.extFrequency},
-            {'name':'CLKGEN Settings', 'type':'group', 'children': [
+            {'name': 'Freq Counter', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.extFrequency},
+            {'name': 'Freq Counter Src', 'type':'list', 'values':{'EXTCLK Input':0, 'CLKGEN Output':1}, 'value':0, 'set':self.setFreqSrc, 'get':self.freqSrc},
+            {'name': 'CLKGEN Settings', 'type':'group', 'children': [
                 {'name':'Input Source', 'type':'list', 'values':["system", "extclk"], 'value':"system", 'set':self.setClkgenSrc, 'get':self.clkgenSrc}, 
-                {'name':'Multiply', 'type':'list', 'values':{'2x':2}, 'value':2, 'set':self.setClkgenMul, 'get':self.clkgenMul}, 
-                {'name':'Divide', 'type':'list', 'values':{'/2':2}, 'value':2, 'set':self.setClkgenDiv, 'get':self.clkgenDiv}, 
-                {'name':'TargetDivide', 'type':'list', 'values':{'/4':4}, 'value':4, 'set':self.setClkgenDivTarget, 'get':self.clkgenDivTarget},
-                {'name':'DCM Locked', 'type':'bool',  'value':False, 'get':self.clkgenLocked, 'readonly':True},                
+                {'name':'Multiply', 'type':'int', 'limits':(2,256), 'value':2, 'set':self.setClkgenMul, 'get':self.clkgenMul}, 
+                {'name':'Divide', 'type':'int', 'limits':(1,256), 'value':2, 'set':self.setClkgenDiv, 'get':self.clkgenDiv}, 
+                {'name':'DCM Locked', 'type':'bool',  'value':False, 'get':self.clkgenLocked, 'readonly':True},    
+                {'name':'Reset CLKGEN DCM', 'type':'action', 'action':partial(self.resetDcms, False, True), 'linked':['Multiply', 'Divide']},             
             ]},             
         ]} 
         
     def setInterface(self, oa):
         self.oa = oa
         
+    def setFreqSrc(self, src):
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        result[3] = result[3] & ~(0x08)
+        result[3] |= src << 3
+        print "%x"%result[3]
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)        
+        
+    def freqSrc(self):
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        return ((result[3] & 0x08) >> 3)
+        
     def setClkgenMul(self, mul):
-       return
+        if mul < 2:
+            mul = 2
+                    
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        mul -= 1
+        result[1] = mul
+        result[3] |= 0x01
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
+        result[3] &= ~(0x01)
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
     
     def clkgenMul(self):
-       return 2
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        val =  result[1]
+        val += 1    
+            
+        if (result[3] & 0x02):        
+            return val
+        else:
+            return 2
        
     def setClkgenDiv(self, div):
-       return
+        if div < 1:
+            div = 1
+        
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        div -= 1                
+        result[2] = div      
+        result[3] |= 0x01
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
+        result[3] &= ~(0x01)
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
        
     def clkgenDiv(self):
-       return 2
-    
-    def setClkgenDivTarget(self, div):
-       return
-       
-    def clkgenDivTarget(self):
-       return 4
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        val =  result[2]
+        val += 1        
+        
+        if (result[3] & 0x02):  
+            return val
+        else:
+            return 2
 
     def adcSource(self):
         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
@@ -456,7 +536,7 @@ class ClockSettings:
         else:
             raise ValueError("source must be 'system' or 'extclk'")             
 
-        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result)
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
         
     def clkgenSrc(self):
         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
@@ -490,7 +570,7 @@ class ClockSettings:
 
             return phase
         else:
-            print "Error Reading Phase"
+            self.log("Error Reading Phase")
             return 0
 
     def dcmADCLocked(self):
@@ -502,33 +582,41 @@ class ClockSettings:
         return result[1]
 
     def DCMStatus(self):
-         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
-         if (result[0] & 0x80) == 0:
-             print "ERROR: ADVCLK register not present. Version mismatch"
-             return (False, False)
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+        if (result[0] & 0x80) == 0:
+            self.log("ERROR: ADVCLK register not present. Version mismatch")
+            return (False, False)
 
-         if (result[0] & 0x40) == 0:
-             dcmADCLocked = False
-         else:
-             dcmADCLocked = True
+        if (result[0] & 0x40) == 0:
+            dcmADCLocked = False
+        else:
+            dcmADCLocked = True
 
-         if (result[0] & 0x20) == 0:
-             dcmCLKGENLocked = False
-         else:
-             dcmCLKGENLocked = True
+        if (result[0] & 0x20) == 0:
+            dcmCLKGENLocked = False
+        else:
+            dcmCLKGENLocked = True
+            
+        #if (result[3] & 0x02):
+        #    print "CLKGEN Programming Done"
 
-         return (dcmADCLocked, dcmCLKGENLocked)
+        return (dcmADCLocked, dcmCLKGENLocked)
 
-    def resetDcms(self):
+    def resetDcms(self, resetMain=True, resetClkgen=True):
         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
 
-        #Set reset high
-        result[0] = result[0] | 0x10
+        #Set reset high on requested blocks only
+        if resetMain:
+            result[0] = result[0] | 0x10
+            
+        if resetClkgen:
+            result[3] = result[3] | 0x04
         
         self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, Validate=False)
 
         #Set reset low
         result[0] = result[0] & ~(0x10)
+        result[3] = result[3] & ~(0x04)
         self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, Validate=False)
 
     def extFrequency(self):
@@ -536,7 +624,7 @@ class ClockSettings:
         freq = 0x00000000;
 
         #Get sample frequency
-        samplefreq = float(self.oa.hwInfo.sysFrequency()) / float(pow(2,24))
+        samplefreq = float(self.oa.hwInfo.sysFrequency()) / float(pow(2,23))
 
         temp = self.oa.sendMessage(CODE_READ, ADDR_FREQ, maxResp=4)
         freq = freq | (temp[0] << 0);
@@ -544,7 +632,7 @@ class ClockSettings:
         freq = freq | (temp[2] << 16);
         freq = freq | (temp[3] << 24);
 
-        measured = freq * samplefreq * 0.8
+        measured = freq * samplefreq
         return long(measured)
 
     def adcFrequency(self):
@@ -553,7 +641,7 @@ class ClockSettings:
         freq = 0x00000000;
 
         #Get sample frequency
-        samplefreq = float(self.oa.hwInfo.sysFrequency()) / float(pow(2,24))
+        samplefreq = float(self.oa.hwInfo.sysFrequency()) / float(pow(2,23))
 
         temp = self.oa.sendMessage(CODE_READ, ADDR_ADCFREQ, maxResp=4)
         freq = freq | (temp[0] << 0);
@@ -561,19 +649,18 @@ class ClockSettings:
         freq = freq | (temp[2] << 16);
         freq = freq | (temp[3] << 24);
 
-        measured = freq * samplefreq * 0.8
+        measured = freq * samplefreq
 
         return long(measured)
 
 
-class OpenADCInterface:        
-    def __init__(self, serial_instance, debug=None):
-        self.serial = serial_instance
-        self.log = logging.getLogger('serialUsb')
+class OpenADCInterface(BaseLog):
+    def __init__(self, serial_instance, debug=None, console=None):
+        super(OpenADCInterface, self).__init__(console)
+        self.serial = serial_instance        
         self.timeout = 5
         self.offset = 0.5
         self.ddrMode = False        
-        self.presamples_desired = 0
         self.sysFreq = 0
 
         self.settings();
@@ -585,8 +672,7 @@ class OpenADCInterface:
         self.serial.write(str(nullmessage));
         
         self.setReset(True)
-        self.setReset(False)
-
+        self.setReset(False)        
 
     def testAndTime(self):
         totalbytes = 0
@@ -603,10 +689,10 @@ class OpenADCInterface:
                totalerror = totalerror + len([(i,j) for i,j in zip(testData,testDataEcho) if i!=j])
                totalbytes = totalbytes + len(testData)
 
-               print "%d errors in %d"%(totalerror, totalbytes)
+               self.log("%d errors in %d"%(totalerror, totalbytes))
 
     
-    def sendMessage(self, mode, address, payload=None, Validate=True, maxResp=None):
+    def sendMessage(self, mode, address, payload=None, Validate=True, maxResp=None, readMask=None):
         """Send a message out the serial port"""
 
         if payload is None:
@@ -616,7 +702,7 @@ class OpenADCInterface:
         length = len(payload)
 
         if ((mode == CODE_WRITE) and (length < 1)) or ((mode == CODE_READ) and (length != 0)):
-            self.log.error("Invalid payload for mode")
+            self.log("Invalid payload for mode")
             return None
 
         if mode == CODE_READ:
@@ -659,7 +745,7 @@ class OpenADCInterface:
             #Check for timeout, if so abort
             if len(result) < 1:
                 self.flushInput()
-                self.log.error("Timeout: %d"%len(result))
+                self.log("Timeout: %d"%len(result))
                 return None
 
             rb = bytearray(result)
@@ -668,18 +754,28 @@ class OpenADCInterface:
         else:
             if Validate:
                 check = self.sendMessage(CODE_READ, address, maxResp=len(pba))
+                
+                if readMask:
+                    try:
+                        for i,m in enumerate(readMask):
+                            check[i] = check[i] & m
+                            pba[i] = pba[i] & m
+                    except IndexError:
+                        pass
+                
                 if check != pba:
-                    self.log.error("Command text not set correctly")
-                    print "For address 0x%02x=%d"%(address,address)
-                    print "  Sent data: ",
-                    for c in pba: print("%x")%c,
-                    print("")
-                    print "  Read data: ",
+                    errmsg = "For address 0x%02x=%d"%(address,address)
+                    errmsg +=  "  Sent data: "
+                    for c in pba: errmsg += "%02x"%c
+                    errmsg += "\n"
+                    errmsg += "  Read data: "
                     if check:
-                        for c in check: print("%x")%c,
-                        print("")
+                        for c in check: errmsg += "%02x"%c
+                        errmsg += "\n"
                     else:
-                        print "<Timeout>"
+                        errmsg += "<Timeout>"
+                        
+                    self.log(errmsg)
 
 ### Generic
     def setSettings(self, state):
@@ -736,6 +832,7 @@ class OpenADCInterface:
     def getBytesInFifo(self):
         samples = 0
         temp = self.sendMessage(CODE_READ, ADDR_BYTESTORX, maxResp=4)
+        
         samples = samples | (temp[0] << 0)
         samples = samples | (temp[1] << 8)
         samples = samples | (temp[2] << 16)
@@ -801,26 +898,29 @@ class OpenADCInterface:
         return addr
         
     def arm(self):
-       self.setSettings(self.settings() | 0x08);
+        self.setSettings(self.settings() | 0x08);
 
-    def capture(self):
-       #Wait for trigger
-       status = self.getStatus()
+    def capture(self):        
+        #Wait for trigger
+        timeout = False
+        
+        status = self.getStatus()
 
-       starttime = datetime.datetime.now()
+        starttime = datetime.datetime.now()
        
-       while ((status & STATUS_ARM_MASK) == STATUS_ARM_MASK) | ((status & STATUS_FIFO_MASK) == 0):
-           status = self.getStatus()
-           time.sleep(0.05)
+        while ((status & STATUS_ARM_MASK) == STATUS_ARM_MASK) | ((status & STATUS_FIFO_MASK) == 0):
+            status = self.getStatus()
+            time.sleep(0.05)
            
-           diff = datetime.datetime.now() - starttime
+            diff = datetime.datetime.now() - starttime
            
-           if (diff.total_seconds() > self.timeout):
-               print "TIMEOUT OCCURED - TRIGGER FORCED"
-               self.triggerNow()     
-
-       self.setSettings(self.settings() & ~0x08);
-       return True
+            if (diff.total_seconds() > self.timeout):
+               self.log("Timeout in OpenADC capture(), trigger FORCED")
+               timeout = True
+               self.triggerNow()
+                    
+        self.setSettings(self.settings() & ~0x08);
+        return timeout
 
     def flush(self):
        #Flush output FIFO
@@ -874,19 +974,19 @@ class OpenADCInterface:
               #print "bytes = %d"%self.getBytesInFifo()
 
               bytesToRead = self.getBytesInFifo()
-
+              
+              #print bytesToRead
+              
               if bytesToRead == 0:
                      bytesToRead = BytesPerPackage
 
-              #print bytesToRead
-
-              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, bytesToRead) #BytesPerPackage)
-
+              #+1 for sync byte
+              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, bytesToRead+1) #BytesPerPackage)
 
               #for p in data:
               #       print "%x "%p,
 
-              datapoints = datapoints + self.processData(data, 0)
+              datapoints = datapoints + self.processData(data, 0.0)
 
               if progressDialog:
                      progressDialog.setValue(status)
@@ -899,6 +999,10 @@ class OpenADCInterface:
        
        if len(datapoints) > NumberPoints:
               datapoints = datapoints[0:NumberPoints]
+              
+       #if len(datapoints) < NumberPoints:
+       #print len(datapoints), 
+       #print NumberPoints
 
        return datapoints
 
@@ -907,7 +1011,7 @@ class OpenADCInterface:
         lastpt = -100;
 
         if data[0] != 0xAC:
-            print("Unexpected sync byte: 0x%x"%data[0])
+            self.log("Unexpected sync byte: 0x%x"%data[0])
             return None
 
         trigfound = False
@@ -930,8 +1034,8 @@ class OpenADCInterface:
                 mergpt = temppt >> 30;
                 if (mergpt != 3):
                        trigfound = True
-                       trigsamp = trigsamp + mergpt                       
-                       #print "Trigger found at %d"%trigsamp
+                       trigsamp = trigsamp + mergpt                                              
+                       #print "Trigger found at %d"%trigsamp                       
                 else:                     
                    trigsamp += 3
 	
@@ -953,10 +1057,9 @@ class OpenADCInterface:
         diff = self.presamples_desired - trigsamp
         if diff > 0:
                fpData = [pad]*diff + fpData
+               print "WARNING: Pretrigger not met. Increase presampleTempMargin."
         else:
                fpData = fpData[-diff:]
-
-        #print "%d %d"%(len(fpData), diff)
 
         return fpData
 

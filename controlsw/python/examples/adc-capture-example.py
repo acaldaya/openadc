@@ -7,6 +7,9 @@
 # This project is released under the 2-Clause BSD License. See LICENSE
 # file which should have came with this code.
 
+from PySide.QtCore import *
+from PySide.QtGui import *
+
 import sys
 import os
 import threading
@@ -29,8 +32,7 @@ import openadc
 import openadc_qt
 import serial
 import scan
-from PySide.QtCore import *
-from PySide.QtGui import *
+
 
 #Non-Critical Imports
 try:
@@ -40,6 +42,11 @@ except ImportError:
     ft_str = sys.exc_info()
     print ft_str
     print "ftd2xx import failed. Install XXX from XXX for FTDI support"
+except WindowsError:
+    ft = None
+    ft_str = sys.exc_info()
+    print ft_str
+    print "ftd2xx import failed. Install FTDI D2XX DLL from ftdichip.com if needed"    
 
 try:
     import usb
