@@ -417,7 +417,7 @@ class ClockSettings(BaseLog):
         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
         result[3] = result[3] & ~(0x08)
         result[3] |= src << 3
-        print "%x"%result[3]
+        #print "%x"%result[3]
         self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)        
         
     def freqSrc(self):
@@ -745,7 +745,7 @@ class OpenADCInterface(BaseLog):
             #Check for timeout, if so abort
             if len(result) < 1:
                 self.flushInput()
-                self.log("Timeout: %d"%len(result))
+                self.log("Timeout in read: %d"%len(result))
                 return None
 
             rb = bytearray(result)
