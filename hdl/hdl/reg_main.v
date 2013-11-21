@@ -328,7 +328,7 @@ module reg_main(
 					regout_read <= 0;
 					regout_addrvalid <= 1;
 														
-					if (bytecnt == (total_bytes-1)) begin
+					if ((bytecnt == (total_bytes-1)) || (total_bytes == 0)) begin
 						state <= `IDLE;         
 					end else begin					
 						state <= `DATAWR1;
@@ -342,7 +342,7 @@ module reg_main(
 					regout_read <= 0;
 					regout_addrvalid <= 1;
 					
-					if ( (reg_stream == 1) || (bytecnt < (total_bytes-16'd1)) ) begin
+					if ( (reg_stream == 1) || ((bytecnt < (total_bytes-16'd1)) && (total_bytes != 0)) ) begin
 						//More data to read from other module
 						
 						if (ftdi_txe_n == 0)  begin
