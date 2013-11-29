@@ -54,10 +54,10 @@ input_depth = 8192
 output_depth = CALCULATE $input_depth$ / 4
 full_threshold_assert_value = CALCULATE $input_depth$ - 2
 full_threshold_negate_value = CALCULATE $input_depth$ - 1
-#These are set to 16-bits for all systems... overkills most of the time
-write_data_count_width = 16
-read_data_count_width = 16
-data_count_width = 16
+#How to get these widths? Just copied from the file in the end...
+write_data_count_width = 14
+read_data_count_width = 12
+data_count_width = 13
 
 [Setup File]
 AVNET
