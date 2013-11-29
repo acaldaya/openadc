@@ -17,7 +17,7 @@ import ConfigParser
 
 def printusage():
     """Print usage information & exit"""
-    print "Usage: %s inputfile <outputfile> <templatefile>"%sys.argv[0]
+    print "Usage: %s inputfile <outputfile>"%sys.argv[0]
 
 class ISEModify(object):
     def __init__(self):
@@ -28,6 +28,7 @@ class ISEModify(object):
 
     def loadTemplate(self, tfile):
         self.f = open(tfile, 'r').read().splitlines(True)
+        self.fname = tfile
 
     def saveProject(self, outputfile):
         of = open(outputfile, 'w')
@@ -37,10 +38,16 @@ class ISEModify(object):
     def modifyProperty(self, propname, newvalue):
         """Modify a property in an ISE Project File"""
 
+        linendx = None
+
         pstr = 'property xil_pn:name="'+propname+'"'
         for ndx, l in enumerate(self.f):
             if pstr in l:
                 linendx = ndx
+
+        if linendx is None:
+            raise ValueError("Did not find property %s in %s"%(propname, self.fname))
+
         part = self.f[linendx].partition(pstr)
 
         self.f[linendx] = part[0] + '%s xil_pn:value="%s" xil_pn:valueState="non-default"/>\n'%(pstr, newvalue)
@@ -134,10 +141,9 @@ class coregenModify(object):
         else:
             self.f[linendx] = "%s %s=%s\n"%(prefix, propname, newvalue)
 
-
-def parseCoregenSection(config, sectionName, outputFile, fpga):
+def parseCoregenSection(config, sectionName, outputFile, fpga, basedir, outdir):
     cg = coregenModify()
-    cg.loadTemplate(config.get(sectionName, 'InputFile'))
+    cg.loadTemplate(os.path.join(basedir, config.get(sectionName, 'InputFile')))
 
     for key in config.options(sectionName):
 
@@ -192,7 +198,32 @@ def parseCoregenSection(config, sectionName, outputFile, fpga):
     cg.modifyProperty('package', fpga[2].lower())
     cg.modifyProperty('speedgrade', fpga[3].lower())
 
-    cg.saveProject(outputFile)
+    if not os.path.exists(os.path.join(outdir, "coregen")):
+        os.makedirs(os.path.join(outdir, "coregen"))
+
+    cg.saveProject(os.path.join(outdir, "coregen", outputFile))
+
+def parseVerilogSection(config, sectionName, outputFile, basedir, outdir):
+
+    outputfile = os.path.join(outdir, outputFile)
+    fout = open(outputfile, "w")
+    fout.write("//AUTOMATICALLY GENERATED - MAY BE OVERWRITTEN\n")
+
+    for key in config.options(sectionName):
+        value = config.get(sectionName, key)     
+        if value is None:
+            value = ""
+        fout.write("`define %s %s\n"%(key, value))
+
+    fout.close()
+
+def makeRelPath(basedir, inpfile, outdir):
+    bf = os.path.join(basedir, inpfile)
+
+    if os.path.isfile(bf) is False:
+        raise IOError("Unable to find file %s, check relative path to project file"%bf)
+
+    return os.path.relpath(bf, outdir)
 
 def main(args = None):
     if args == None:
@@ -209,21 +240,12 @@ def main(args = None):
     else:
         outputfile = args[1]
 
-    if len(args) < 3:
-        template = "ise_project_template.xise.in"
-    else:
-        template = args[2]
     
-    print "Using %s input file with %s template to make %s"%(inputfile, template, outputfile)
+    print "Using %s input file to make %s"%(inputfile, outputfile)
     print ""
-    
-    ise = ISEModify()
 
-    ise.loadTemplate(template)
-#    ise.modifyProperty("Package", "ftg384")
-#    ise.modifyVersion("14.6")
-#    ise.addUCF("project.ucf")
-    
+    basedir = os.path.dirname(inputfile)
+    outdir = os.path.dirname(outputfile)
 
     config = ConfigParser.RawConfigParser(allow_no_value=True)
     #Preserve case for ISE Tools
@@ -240,9 +262,24 @@ def main(args = None):
     iseopts = config.options(isename)
     if ('Device Family' not in iseopts) or ('Package' not in iseopts) or ('Device' not in iseopts) or ('Speed Grade' not in iseopts):
         raise ValueError('Must specify "Device Family", "Device", "Package", and "Speed Grade".')
-    
+
+    template = None
+
+    #Get template file
     for opt in iseopts:
-        if opt == 'Version':
+        if (opt == 'InputFile'):
+	        template = os.path.join(basedir, config.get(isename, opt))
+
+    if template is None:
+        raise ValueError("Must specify 'InputFile' in project for XISE Template")
+    
+    ise = ISEModify()
+    ise.loadTemplate(template)
+
+    for opt in iseopts:
+        if (opt == 'InputFile') or (opt == 'OutputFile'):
+            continue
+        elif opt == 'Version':
             ise.modifyVersion(config.get(isename, 'Version'))
         else:
             val = config.get(isename, opt)
@@ -260,26 +297,32 @@ def main(args = None):
     fpga = (fpga_family, fpga_device, fpga_package, fpga_speed)
     print "FPGA = %s %s in %s%s"%(fpga[0], fpga[1], fpga[2], fpga[3])
 
-    print "Verilog Sources:"
+    print "**Verilog Sources:"
     if config.has_section('Verilog Files'):
         for vf in config.options('Verilog Files'):
+            vSetup = config.get('Verilog Files', vf)
+            if vSetup is not None:
+                parseVerilogSection(config, vSetup, vf, basedir, outdir)               
+            else:
+                vf = makeRelPath(basedir, vf, outdir)
             ise.addVerilog(vf)
             print "   %s"%vf
 
-    print "\nUCF Files:"
+    print "**UCF Files:"
     if config.has_section('UCF Files'):
         for uf in config.options('UCF Files'):
+            uf = makeRelPath(basedir, uf, outdir)
             ise.addUCF(uf)
             print "   %s"%uf
 
-    print "\nXCO Files:"
+    print "**XCO Files:"
     if config.has_section('CoreGen Files'):
         for cf in config.options('CoreGen Files'):
-            ise.addUCF(cf)
+            ise.addUCF(os.path.join("coregen", cf))
             cgSetup = config.get('CoreGen Files', cf)
             print "   %s"%cf
             if cgSetup is not None:
-                parseCoregenSection(config, cgSetup, cf, fpga)
+                parseCoregenSection(config, cgSetup, cf, fpga, basedir, outdir)
 
     print ""
     ise.saveProject(outputfile)

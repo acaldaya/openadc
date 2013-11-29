@@ -27,6 +27,7 @@ system.ucf
 #List of verilog source files... by default added for sim + implementation
 simpletop.v
 simplemodule.v
+setup.v = Setup File
 
 [CoreGen Files]
 #Add XCO files. You can just list the filename, OR have the CoreGen files be
@@ -43,3 +44,9 @@ full_threshold_negate_value = CALCULATE $input_depth$ - 1
 write_data_count_width = 16
 read_data_count_width = 16
 data_count_width = 16
+
+[Setup File]
+AVNET
+UART_CLK = 40000000
+UART_BAUD = 512000
+
