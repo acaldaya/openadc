@@ -202,7 +202,7 @@ class GainSettings(BaseLog):
             self.oa.setSettings(self.oa.settings() | SETTINGS_GAIN_HIGH)
             self.gainlow_cached = False
         elif gainmode == "low":           
-            self.setSettings(self.oa.settings() & ~SETTINGS_GAIN_HIGH)
+            self.oa.setSettings(self.oa.settings() & ~SETTINGS_GAIN_HIGH)
             self.gainlow_cached = True
         else:
             raise ValueError, "Invalid Gain Mode, only 'low' or 'high' allowed"
