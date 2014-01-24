@@ -44,11 +44,17 @@ class ExtendedParameter():
     @staticmethod
     def change(param,  changes):  
         for param, change, data in changes:
+
+            # print change
+
+            # Only trigger on 'value' changes!
+            if (change != 'value') and (change != 'activated') and (change != 'limits'):
+                return
                                     
             #Call specific 'set' routine associated with data
             if 'set' in param.opts:
-                #QtCore.QTimer.singleShot(0, partial(param.opts['set'], data))
-                param.opts['set'](data) 
+                # QtCore.QTimer.singleShot(0, partial(param.opts['set'], data))
+                param.opts['set'](data)
                 
             if 'linked' in param.opts:
                 par = param.parent()
