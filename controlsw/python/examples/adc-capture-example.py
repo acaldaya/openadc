@@ -27,11 +27,9 @@ except ImportError:
     print "*************************************************"
     print "*************************************************"    
 
-sys.path.append('../common')
-import openadc
-import openadc_qt
+import openadc.qt as oaqt
+import openadc.scan as scan
 import serial
-import scan
 
 
 #Non-Critical Imports
@@ -365,7 +363,7 @@ class MainWindow(QMainWindow):
         self.title.setFont(flabel)
 
         ## Get an OpenADC Instance
-        self.oa = openadc_qt.OpenADCQt(self);
+        self.oa = oaqt.OpenADCQt(self);
 
         ##Get Connection Instances
         self.OADC_Ser = SerialADCLayout()
