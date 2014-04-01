@@ -86,6 +86,13 @@ class OpenADCSettings(BaseLog):
         if oaiface is not None:
             self.setInterface(oaiface)  
         
+    def setFindParam(self, findParam):
+        self.findParam = findParam
+        
+        for t in self.params:
+            if hasattr(t, 'setFindParam'):
+                t.setFindParam(findParam)
+        
     def setInterface(self, oaiface):
         self.oa = oaiface
         for p in self.params:
@@ -388,6 +395,7 @@ class ClockSettings(BaseLog):
     def __init__(self, console=None):
         super(ClockSettings, self).__init__(console)
         self.name = "Clock Setup"
+        self.findParam = None
         self.param = {'name': 'Clock Setup', 'type':'group', 'children': [
             {'name':'Refresh Status', 'type':'action', 'linked':[('ADC Clock','DCM Locked'), ('ADC Clock','ADC Freq'), ('CLKGEN Settings','DCM Locked'), 'Freq Counter']}, 
             {'name':'Reset DCMs', 'type':'action', 'action':self.resetDcms, 'linked':[('CLKGEN Settings','Multiply'), ('CLKGEN Settings','Divide')]}, 
@@ -397,7 +405,7 @@ class ClockSettings(BaseLog):
                 {'name': 'Phase Adjust', 'type':'int', 'value':0, 'limits':(-255, 255), 'set':self.setPhase, 'get':self.phase}, 
                 {'name': 'ADC Freq', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.adcFrequency},
                 {'name': 'DCM Locked', 'type':'bool',  'value':False, 'get':self.dcmADCLocked, 'readonly':True}, 
-                {'name':'Reset ADC DCM', 'type':'action', 'action':partial(self.resetDcms, True, False)}, 
+                {'name':'Reset ADC DCM', 'type':'action', 'action':partial(self.resetDcms, True, False), 'linked':['Phase Adjust']}, 
             ]},            
             {'name': 'Freq Counter', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.extFrequency},
             {'name': 'Freq Counter Src', 'type':'list', 'values':{'EXTCLK Input':0, 'CLKGEN Output':1}, 'value':0, 'set':self.setFreqSrc, 'get':self.freqSrc},
@@ -412,6 +420,9 @@ class ClockSettings(BaseLog):
         
     def setInterface(self, oa):
         self.oa = oa
+        
+    def setFindParam(self, fp):
+        self.findParam = fp
         
     def setFreqSrc(self, src):
         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
@@ -437,14 +448,21 @@ class ClockSettings(BaseLog):
         self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
     
     def clkgenMul(self):
-        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
-        val =  result[1]
-        val += 1    
+        timeout = 2
+        
+        while timeout > 0:
+            result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+            val =  result[1]
+            val += 1    
+                
+            if (result[3] & 0x02):        
+                return val
             
-        if (result[3] & 0x02):        
-            return val
-        else:
-            return 2
+            self.clkgenLoad()
+            
+            timeout -= 1
+        
+        raise IOError("clkgen never loaded value?")
        
     def setClkgenDiv(self, div):
         if div < 1:
@@ -457,16 +475,33 @@ class ClockSettings(BaseLog):
         self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
         result[3] &= ~(0x01)
         self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
+        
+    def clkgenLoad(self):
+        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)      
+        result[3] |= 0x01
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
+        result[3] &= ~(0x01)
+        self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, readMask=self.readMask)
        
     def clkgenDiv(self):
-        result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
-        val =  result[2]
-        val += 1        
         
-        if (result[3] & 0x02):  
-            return val
-        else:
-            return 2
+        timeout = 2
+        
+        while timeout > 0:
+            result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
+            val =  result[2]
+            val += 1        
+        
+            if (result[3] & 0x02):
+                #Done loading value yet  
+                return val
+            
+            self.clkgenLoad()
+            
+            timeout -= 1
+         
+        raise IOError("clkgen never loaded value?")
+         
 
     def adcSource(self):
         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
@@ -608,9 +643,11 @@ class ClockSettings(BaseLog):
         #Set reset high on requested blocks only
         if resetMain:
             result[0] = result[0] | 0x10
+            #NB: High-Level system will call 'get' to re-read ADC phase
             
         if resetClkgen:
             result[3] = result[3] | 0x04
+            
         
         self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, Validate=False)
 
@@ -618,6 +655,10 @@ class ClockSettings(BaseLog):
         result[0] = result[0] & ~(0x10)
         result[3] = result[3] & ~(0x04)
         self.oa.sendMessage(CODE_WRITE, ADDR_ADVCLK, result, Validate=False)
+
+        #Load clkgen if required
+        if resetClkgen:
+            self.clkgenLoad()
 
     def extFrequency(self):
         """Return frequency of clock measured on EXTCLOCK pin in Hz"""
