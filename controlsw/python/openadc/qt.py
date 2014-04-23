@@ -215,8 +215,8 @@ class OpenADCQt(QObject):
             self.preview.updateData(self.datapoints, -self.adc_settings.parm_trigger.presamples(True))
 
         
-    def capture(self, update=True, NumberPoints=None):
-        timeout = self.sc.capture()
+    def capture(self, update=True, NumberPoints=None, waitingCallback=None):
+        timeout = self.sc.capture(waitingCallback=waitingCallback)
         self.read(update, NumberPoints)
         return timeout
 
