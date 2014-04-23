@@ -882,9 +882,9 @@ class OpenADCInterface(BaseLog):
 
     def flushInput(self):
         try:
-           self.serial.flushInput()
+            self.serial.flushInput()
         except AttributeError:
-           return
+            return
               
     def devicePresent(self):
         msgin = bytearray([])
@@ -941,7 +941,7 @@ class OpenADCInterface(BaseLog):
     def arm(self):
         self.setSettings(self.settings() | 0x08);
 
-    def capture(self):        
+    def capture(self, waitingCallback=None):
         #Wait for trigger
         timeout = False
         
@@ -956,96 +956,99 @@ class OpenADCInterface(BaseLog):
             diff = datetime.datetime.now() - starttime
            
             if (diff.total_seconds() > self.timeout):
-               self.log("Timeout in OpenADC capture(), trigger FORCED")
-               timeout = True
-               self.triggerNow()
+                self.log("Timeout in OpenADC capture(), trigger FORCED")
+                timeout = True
+                self.triggerNow()
                     
+            if waitingCallback:
+                waitingCallback()
+
         self.setSettings(self.settings() & ~0x08);
         return timeout
 
     def flush(self):
-       #Flush output FIFO
-       self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, None)
+        # Flush output FIFO
+        self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, None)
 
     def readData(self, NumberPoints=None, progressDialog=None):
-       datapoints = []
+        datapoints = []
 
-       if NumberPoints == None:
-              NumberPoints = 0x1000
+        if NumberPoints == None:
+            NumberPoints = 0x1000
 
-       if self.ddrMode:
-              #We were passed number of samples to read. DDR interface
-              #reads 3 points per 4 bytes, and reads in blocks of
-              #256 bytes (e.g.: 192 samples)
-              NumberPackages = NumberPoints / 192
+        if self.ddrMode:
+            # We were passed number of samples to read. DDR interface
+            # reads 3 points per 4 bytes, and reads in blocks of
+            # 256 bytes (e.g.: 192 samples)
+            NumberPackages = NumberPoints / 192
 
-              #If user requests we send extra then scale back afterwards
-              if (NumberPoints % 192) > 0:
-                     NumberPackages = NumberPackages + 1
+            # If user requests we send extra then scale back afterwards
+            if (NumberPoints % 192) > 0:
+                NumberPackages = NumberPackages + 1
 
-              start = 0
-              self.setDDRAddress(0)
+            start = 0
+            self.setDDRAddress(0)
 
               
-              BytesPerPackage = 257
+            BytesPerPackage = 257
 
-              if progressDialog:
-                     progressDialog.setMinimum(0)
-                     progressDialog.setMaximum(NumberPackages)
-       else:
-              #FIFO takes 3 samples at a time... todo figure this out
-              NumberPackages = 1
+            if progressDialog:
+                progressDialog.setMinimum(0)
+                progressDialog.setMaximum(NumberPackages)
+        else:
+            # FIFO takes 3 samples at a time... todo figure this out
+            NumberPackages = 1
 
-              #We get 3 samples in each word returned (word = 4 bytes)
-              #So need to convert samples requested to words, rounding
-              #up if we request an incomplete number
-              nwords = NumberPoints / 3
-              if NumberPoints % 3:
-                     nwords = nwords + 1
+            # We get 3 samples in each word returned (word = 4 bytes)
+            # So need to convert samples requested to words, rounding
+            # up if we request an incomplete number
+            nwords = NumberPoints / 3
+            if NumberPoints % 3:
+                nwords = nwords + 1
 
-              #Return 4x as many bytes as words, +1 for sync byte
-              BytesPerPackage = nwords * 4 + 1
+            # Return 4x as many bytes as words, +1 for sync byte
+            BytesPerPackage = nwords * 4 + 1
        
-       for status in range(0, NumberPackages):        
-              #Address of DDR is auto-incremented following a read command
-              #so no need to write new address
+        for status in range(0, NumberPackages):
+            # Address of DDR is auto-incremented following a read command
+            # so no need to write new address
               
-              #print "Address=%x"%self.getDDRAddress()
+            # print "Address=%x"%self.getDDRAddress()
 
-              #print "bytes = %d"%self.getBytesInFifo()
+            # print "bytes = %d"%self.getBytesInFifo()
 
-              bytesToRead = self.getBytesInFifo()
+            bytesToRead = self.getBytesInFifo()
               
-              #print bytesToRead
+            # print bytesToRead
               
-              if bytesToRead == 0:
-                     bytesToRead = BytesPerPackage
+            if bytesToRead == 0:
+                bytesToRead = BytesPerPackage
 
-              #+1 for sync byte
-              data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, bytesToRead+1) #BytesPerPackage)
+            # +1 for sync byte
+            data = self.sendMessage(CODE_READ, ADDR_ADCDATA, None, False, bytesToRead + 1)  # BytesPerPackage)
 
-              #for p in data:
-              #       print "%x "%p,
+            # for p in data:
+            #       print "%x "%p,
 
-              datapoints = datapoints + self.processData(data, 0.0)
+            datapoints = datapoints + self.processData(data, 0.0)
 
-              if progressDialog:
-                     progressDialog.setValue(status)
+            if progressDialog:
+                progressDialog.setValue(status)
 
-                     if progressDialog.wasCanceled():
-                            break              
+                if progressDialog.wasCanceled():
+                    break
 
-       #for point in datapoints:
-       #       print "%3x"%(int((point+0.5)*1024))
+        # for point in datapoints:
+        #       print "%3x"%(int((point+0.5)*1024))
        
-       if len(datapoints) > NumberPoints:
-              datapoints = datapoints[0:NumberPoints]
+        if len(datapoints) > NumberPoints:
+            datapoints = datapoints[0:NumberPoints]
               
-       #if len(datapoints) < NumberPoints:
-       #print len(datapoints), 
-       #print NumberPoints
+        # if len(datapoints) < NumberPoints:
+        # print len(datapoints),
+        # print NumberPoints
 
-       return datapoints
+        return datapoints
 
     def processData(self, data, pad=float('NaN'), pretrigger_out=None):
         fpData = []
