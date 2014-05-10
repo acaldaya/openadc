@@ -128,7 +128,10 @@ module openadc_interface(
 	 output			reg_addrvalid_o,
 	 input			reg_stream_i,
 	 output [5:0]	reg_hypaddress_o,
-	 input  [15:0]	reg_hyplen_i 
+	 input  [15:0]	reg_hyplen_i,
+	 
+	 output [9:0]  ADC_Data_out,
+	 output        ADC_Clk_out
     );
 
 	wire        slowclock;
@@ -265,6 +268,10 @@ module openadc_interface(
 		//	ADC_Data_tofifo <= ADC_Data_tofifo + 10'd1;
 	end
    	
+	//Output stuff
+	assign ADC_Data_out = ADC_Data_tofifo;
+	assign ADC_Clk_out = ADC_clk_sample;
+		
 	wire [7:0] 	reg_status;
 	
 `ifdef CHIPSCOPE
