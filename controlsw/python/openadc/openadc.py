@@ -414,7 +414,9 @@ class ClockSettings(BaseLog):
                 {'name':'Multiply', 'type':'int', 'limits':(2,256), 'value':2, 'set':self.setClkgenMul, 'get':self.clkgenMul}, 
                 {'name':'Divide', 'type':'int', 'limits':(1,256), 'value':2, 'set':self.setClkgenDiv, 'get':self.clkgenDiv}, 
                 {'name':'DCM Locked', 'type':'bool',  'value':False, 'get':self.clkgenLocked, 'readonly':True},    
-                {'name':'Reset CLKGEN DCM', 'type':'action', 'action':partial(self.resetDcms, False, True), 'linked':['Multiply', 'Divide']},             
+                {'name':'Reset CLKGEN DCM', 'type':'action', 'action':partial(self.resetDcms, False, True), 'linked':['Multiply', 'Divide']},
+                {'name':'Desired Frequency', 'type':'float', 'limits':(3.3E6, 200E6), 'value':0, 'step':100E6, 'siPrefix':True, 'suffix':'Hz',
+                                            'set':self.autoMulDiv, 'linked':['Multiply', 'Divide']},
             ]},             
         ]} 
         
@@ -434,6 +436,35 @@ class ClockSettings(BaseLog):
     def freqSrc(self):
         result = self.oa.sendMessage(CODE_READ, ADDR_ADVCLK, maxResp=4)
         return ((result[3] & 0x08) >> 3)
+        
+    def autoMulDiv(self, freq):
+        sets = self.calculateClkGenMulDiv(freq)
+        self.setClkgenMul(sets[0])
+        self.setClkgenDiv(sets[1])
+        self.resetDcms(False, True)
+        
+    def calculateClkGenMulDiv(self, freq, inpfreq=30E6):
+        """Calculate Multiply & Divide settings based on input frequency"""
+        
+        #Max setting for divide is 60 (see datasheet)
+        #Multiply is 2-256
+        
+        lowerror = 1E99
+        best = (0, 0)
+        
+        # From datasheet, if input freq is < 52MHz limit max divide
+        if inpfreq < 52E6:
+            maxdiv = int(inpfreq / 0.5E6)
+    
+        for mul in range(2, 257):
+            for div in range(1, maxdiv):
+                
+                err = abs(freq - ((inpfreq * mul) / div))
+                if err < lowerror:
+                    lowerror = err
+                    best = (mul, div)
+    
+        return best
         
     def setClkgenMul(self, mul):
         if mul < 2:
@@ -462,8 +493,9 @@ class ClockSettings(BaseLog):
             
             timeout -= 1
         
-        raise IOError("clkgen never loaded value?")
-       
+        # raise IOError("clkgen never loaded value?")
+        return 0
+              
     def setClkgenDiv(self, div):
         if div < 1:
             div = 1
@@ -500,7 +532,8 @@ class ClockSettings(BaseLog):
             
             timeout -= 1
          
-        raise IOError("clkgen never loaded value?")
+        #raise IOError("clkgen never loaded value?")
+        return 0
          
 
     def adcSource(self):
