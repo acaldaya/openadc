@@ -25,7 +25,10 @@ class ExtendedParameter():
                 self.getAllParameters(child)
         else:
             if 'get' in parent.opts:
-                parent.setValue(parent.opts['get']())
+                try:
+                    parent.setValue(parent.opts['get']())
+                except TypeError:
+                    parent.hide()
              
     @staticmethod
     def setupExtended(curParam, parent=None):

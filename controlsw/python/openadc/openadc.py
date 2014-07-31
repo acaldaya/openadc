@@ -638,7 +638,7 @@ class ClockSettings(BaseLog):
 
             return phase
         else:
-            self.log("Error Reading Phase")
+            self.log("No phase shift loaded")
             return 0
 
     def dcmADCLocked(self):
@@ -852,10 +852,10 @@ class OpenADCInterface(BaseLog):
                     self.log(errmsg)
 
 ### Generic
-    def setSettings(self, state):
+    def setSettings(self, state, validate=True):
         cmd = bytearray(1)
         cmd[0] = state        
-        self.sendMessage(CODE_WRITE, ADDR_SETTINGS, cmd);
+        self.sendMessage(CODE_WRITE, ADDR_SETTINGS, cmd, Validate=validate);
 
     def settings(self):
         sets = self.sendMessage(CODE_READ, ADDR_SETTINGS)
@@ -866,10 +866,10 @@ class OpenADCInterface(BaseLog):
 
     def setReset(self, value):           
         if value:
-               self.setSettings(self.settings() | SETTINGS_RESET);
-               self.hwMaxSamples = self.maxSamples()
+            self.setSettings(self.settings() | SETTINGS_RESET, validate=False);
+            self.hwMaxSamples = self.maxSamples()
         else:
-                self.setSettings(self.settings() | SETTINGS_RESET);
+            self.setSettings(self.settings() & ~SETTINGS_RESET);
                 
     def triggerNow(self):
         initial = self.settings()
