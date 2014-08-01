@@ -31,13 +31,13 @@ class previewWindow():
     def __init__(self):
         pg.setConfigOption('background', 'w')
         pg.setConfigOption('foreground', 'k')
-        
+
         self.pw = pg.PlotWidget(name="Trace Preview")
         self.pw.setLabel('bottom', 'Sample Number')
         self.pw.setLabel('left', 'Value')
         vb = self.pw.getPlotItem().getViewBox()
         vb.setMouseMode(vb.RectMode)
-            
+
         self.dock = QDockWidget("Trace Preview")
         self.dock.setAllowedAreas(Qt.BottomDockWidgetArea | Qt.RightDockWidgetArea| Qt.LeftDockWidgetArea)
         self.dock.setWidget(self.pw)
@@ -48,10 +48,10 @@ class previewWindow():
 
         self.persistant = QCheckBox("Persistance")
         clearPB = QPushButton("Clear")
-        clearPB.clicked.connect(self.pw.clear)        
+        clearPB.clicked.connect(self.pw.clear)
         layout.addWidget(self.persistant, 0, 0)
         layout.addWidget(clearPB, 0, 1)
-        
+
         self.colour = QSpinBox()
         self.colour.setMinimum(0)
         self.colour.setMaximum(7)
@@ -72,22 +72,22 @@ class previewWindow():
         if self.persistant.isChecked():
             if self.autocolour.isChecked():
                 nc = (self.colour.value() + 1) % 8
-                self.colour.setValue(nc)            
+                self.colour.setValue(nc)
         else:
             self.pw.clear()
 
         xaxis = range(start, len(data)+start)
-            
+
         self.pw.plot(xaxis, data, pen=(self.colour.value(),8))
 
     def hideGraph(self):
         self.dock.close()
-        
+
 
 class OpenADCQt(QObject):
-    
+
     dataUpdated = Signal(list, int)
-    
+
     def __init__(self, MainWindow=None, includePreview=True, setupLayout=True, includeParameters=True, console=None, showScriptParameter=None):
         super(OpenADCQt,  self).__init__()
         self.console = console
@@ -106,15 +106,15 @@ class OpenADCQt(QObject):
 
         if setupLayout:
             self.setupLayout(MainWindow, includePreview, includeParameters)
-            
+
     def setEnabled(self, enabled):
         pass
-        
+
     def statusRefresh(self):
         pass
-      
+
     def setupLayout(self, MainWindow, includePreview=True,  includeParameters=True):
-    
+
         vlayout = QVBoxLayout()
         self.tb = QToolBox()
         vlayout.addWidget(self.tb)
@@ -123,15 +123,15 @@ class OpenADCQt(QObject):
         if includePreview:
             self.preview = previewWindow()
             self.preview.addDock(MainWindow)
-            vlayout.addWidget(self.preview.getSetupWidget())  
-   
+            vlayout.addWidget(self.preview.getSetupWidget())
+
         if includeParameters:
             self.setupParameterTree()
             self.paramDock = QDockWidget("Settings")
             self.paramDock.setAllowedAreas(Qt.BottomDockWidgetArea | Qt.RightDockWidgetArea| Qt.LeftDockWidgetArea)
             self.paramDock.setWidget(self.paramTree)
             MainWindow.addDockWidget(Qt.LeftDockWidgetArea, self.paramDock)
-      
+
         self.masterLayout = vlayout
 
         self.setEnabled(False)
@@ -150,15 +150,15 @@ class OpenADCQt(QObject):
             #ExtendedParameter.setupExtended(self.params)
             ep = ExtendedParameter()
             ep.setupExtended(self.params, self)
-            
+
             #todo: this is a somewhat insane way to cut through the layers
             self.adc_settings.setFindParam(self.findParam)
-            
+
             if makeTree:
                 self.paramTree = ParameterTree()
                 self.paramTree.setParameters(self.params, showTop=False)
-            
-                    
+
+
     def reloadParameterTree(self):
         self.adc_settings.setInterface(self.sc)
         self.params.blockTreeChangeSignal()
@@ -188,7 +188,7 @@ class OpenADCQt(QObject):
             ##if (intpt != lastpt + 1) and (lastpt != 0x3ff):
             ##    print "intpt: %x lstpt %x\n"%(intpt, lastpt)
             ##lastpt = intpt;
-            
+
             fpData.append(float(intpt) / 1024.0 - self.offset)
 
         return fpData
@@ -203,30 +203,22 @@ class OpenADCQt(QObject):
         progress = QProgressDialog("Reading", "Abort", 0, 100)
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(1000)
-        
+
         try:
             self.datapoints = self.sc.readData(NumberPoints, progress)
         except IndexError, e:
             raise IOError("Error reading data: %s"%str(e))
-            
+
         self.dataUpdated.emit(self.datapoints, -self.adc_settings.parm_trigger.presamples(True))
 
-        if update & (self.preview is not None):               
+        if update & (self.preview is not None):
             self.preview.updateData(self.datapoints, -self.adc_settings.parm_trigger.presamples(True))
 
-        
+
     def capture(self, update=True, NumberPoints=None, waitingCallback=None):
         timeout = self.sc.capture(waitingCallback=waitingCallback)
         self.read(update, NumberPoints)
         return timeout
-
-    def timeoutValidate(self, arg=None):
-        if self.trigTimeout.isChecked():
-            self.trigTimeout.setEnabled(False)
-            self.sc.timeout = 1E99
-        else:
-            self.trigTimeout.setEnabled(True)
-            self.sc.timeout = self.trigTimeout.value()
 
     def reset(self):
         self.sc.setReset(True)
@@ -234,7 +226,7 @@ class OpenADCQt(QObject):
 
     def test(self):
         self.sc.testAndTime()
-        
+
     def con(self, ser):
         self.ser = ser
 
@@ -254,7 +246,7 @@ class OpenADCQt(QObject):
             numTries += 1
 
             if (numTries == 5):
-                try:                
+                try:
                     portname = self.ser.name
                 except:
                     portname = "UNKNOWN"
@@ -282,4 +274,4 @@ class OpenADCQt(QObject):
     def __del__(self):
         self.close()
 
-        
+
