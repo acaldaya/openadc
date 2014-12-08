@@ -165,6 +165,7 @@
 			3 = ChipWhisperer Rev2 on LX25
 			4 = Reserved
 			5 = ZedBoard
+			6 = ChipWhisperer Lite, LX9
 		  
 		  HV = Hardware Revision (3 bits)
 		   Specific to Hardware Type
@@ -264,11 +265,14 @@
 	 //`define CW_EXTCLK_ADDR		38
 	 //`define CW_TRIGSRC_ADDR		39
 	 //`define CW_TRIGMOD_ADDR		40
+	 //`define CW_IOROUTE_ADDR    55
 	 
 	 //For SmartCard Only
 	 //`define TARGSERIALDATA_ADDR 41
 	 //`define TARGSERIALLEN_ADDR	 42
 	 //`define TARGSERIALBAUD_ADDR 43
+
+	 // 44 - 46 is USI
 
 	 //`define ADDR_I2CSTATUS 47	 
 	 //`define ADDR_I2CDATA 48
@@ -277,5 +281,12 @@
 	 //`define SAKURA_FIFO_ADDR	50
 	 
 	 //`define CLOCKGLITCH_SETTINGS	51
+	 //`define CLOCKGLITCH_OFFSET    25
+	 //`define CLOCKGLITCH_OFFSET_LEN 4
 	 
 	 //`define RECONFIG_REG 52
+	 
+	 //`define SAD_STATUSCFG_ADDR 53
+	 //`define SAD_REFDATA_ADDR   54
+	 
+	 //NEXT ADDRESS = 56

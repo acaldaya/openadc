@@ -51,6 +51,13 @@ module openadc_interface(
 	 output		 	ftdi_wrn,
 	 output		 	ftdi_oen,	
 	 output			ftdi_siwua,
+`elsif NEWAEUSBCHIP
+	 inout wire [7:0]	USB_D,
+	 input wire [7:0]	USB_Addr,
+	 input wire			USB_RDn,
+	 input wire			USB_WRn,
+	 input wire			USB_CEn,
+	 input wire			USB_ALEn,
 `else
 	 //Assume serial
     input         rxd,
@@ -388,6 +395,8 @@ module openadc_interface(
 	 assign ftdi_wrn = ~cmdfifo_wr;
 	 assign ftdi_oen = cmdfifo_isout;
 	 assign ftdi_siwua = 1'b1;
+`elsif NEWAEUSBCHIP
+	//Nothing needed
 `else	
 	 serial_reg_iface cmdfifo_serial(.reset_i(reset),
 										  .clk_i(slowclock),
@@ -466,6 +475,36 @@ module openadc_interface(
 	wire [7:0] reg_datai_oadc;
 	wire [15:0] reg_hyplen;
 	
+`ifdef NEWAEUSBCHIP
+	 assign USB_D = cmdfifo_isout ? cmdfifo_dout : 8'bZ;
+	 assign cmdfifo_din = USB_D;
+	 
+	reg_main_cwlite registers_mainctl_cwlite (
+		.reset_i(reset_i), 
+		.clk(slowclock), 
+		.cwusb_din(cmdfifo_din), 
+		.cwusb_dout(cmdfifo_dout), 
+		.cwusb_rdn(USB_RDn), 
+		.cwusb_wrn(USB_WRn),
+		.cwusb_cen(USB_CEn),
+		.cwusb_alen(USB_ALEn),
+		.cwusb_addr(USB_Addr),
+		.cwusb_isout(cmdfifo_isout), 
+		.reg_clk(reg_clk), 
+		.reg_address(reg_address), 
+		.reg_bytecnt(reg_bytecnt), 
+		.reg_datao(reg_datao), 
+		.reg_datai(reg_datai_fifo | reg_datai_oadc | reg_datai_i), 
+		.reg_size(reg_size), 
+		.reg_read(reg_read), 
+		.reg_write(reg_write), 
+		.reg_addrvalid(reg_addrvalid), 
+		.reg_stream(reg_stream),
+		.reg_hypaddress(reg_hypaddress), 
+		.reg_hyplen(reg_hyplen)
+	);	
+
+`else
 	reg_main registers_mainctl (
 		.reset_i(reset_i), 
 		.clk(slowclock), 
@@ -489,6 +528,7 @@ module openadc_interface(
 		.reg_hypaddress(reg_hypaddress), 
 		.reg_hyplen(reg_hyplen)
 	);	
+`endif
 	
 	wire reg_stream_openadc;
 	wire [15:0] reg_hyplen_openadc;
