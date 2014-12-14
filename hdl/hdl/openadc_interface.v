@@ -213,7 +213,7 @@ module openadc_interface(
 		adcclk_frequency <= adcclk_frequency_int;
 	end		
  
-   wire ADC_clk_sample; 
+   wire ADC_clk_sample;
     
 	wire chipscope_clk;
 	
@@ -222,6 +222,10 @@ module openadc_interface(
 	generate
 	for (index=0; index < 10; index=index+1)
 	  begin: gen_iodelay_adcdata
+`ifdef ADCCLK_FEEDBACK
+		//If we have feedback clock shouldn't need IODELAY2
+		assign ADC_Data_delayed[index] = ADC_Data[index];
+`else	  
 		IODELAY2 #(
 			.COUNTER_WRAPAROUND("WRAPAROUND"), // "STAY_AT_LIMIT" or "WRAPAROUND"
 			.DATA_RATE("SDR"), // "SDR" or "DDR"
@@ -251,6 +255,7 @@ module openadc_interface(
 			//RST(), // 1-bit input: Reset to zero or 1/2 of total delay period
 			//.T() // 1-bit input: 3-state input signal
 		);
+`endif
 	  end
 	 endgenerate
 	
@@ -634,6 +639,9 @@ module openadc_interface(
     .clk_sys(clk_100mhz_buf),
     .clk_ext(DUT_CLK_i),   
 	 .adc_clk(ADC_clk),
+`ifdef ADCCLK_FEEDBACK
+	 .adc_clk_feedback(ADC_clk_feedback),
+`endif
 	 .target_clk(target_clk),
 	 .clkadc_source(ADC_clk_selection),
 	 .clkgen_source(clkgen_selection),

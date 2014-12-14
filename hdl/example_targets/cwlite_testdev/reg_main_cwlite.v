@@ -1,5 +1,5 @@
 `include "includes.v"
-`define CHIPSCOPE
+//`define CHIPSCOPE
 
 /***********************************************************************
 This file is part of the OpenADC Project. See www.newae.com for more details,
@@ -69,7 +69,15 @@ module reg_main_cwlite(
     );
 	 
 `ifdef CHIPSCOPE
-	 wire [63:0] cs_data;
+	 wire [31:0] cs_data;
+	 
+	 assign cs_data[7:0] = cwusb_din;
+	 assign cs_data[15:8] = reg_datai;
+	 assign cs_data[16] = cwusb_rdn;
+	 assign cs_data[17] = cwusb_wrn;
+	 assign cs_data[18] = rdflag;
+	 assign cs_data[19] = regout_write;	 
+	 assign cs_data[31:20] = reg_bytecnt[11:0];
 `endif
 		 
 	 wire usb_clk;
@@ -99,10 +107,18 @@ module reg_main_cwlite(
 	 
 	 //TODO: this should be synchronous to device clock, but is phase OK? Might need to
 	 //use resyncronized version...
-	 assign		reg_read = rdflag;
+	 assign		reg_read = rdflag_rs;
 	 assign 		cwusb_dout = reg_datai;	 
 	 
-	 assign cwusb_isout = ~cwusb_rdn;
+	 reg isoutreg, isoutregdly;
+	 
+	 always @(posedge usb_clk) begin
+		isoutreg <= ~cwusb_rdn;
+		isoutregdly <= isoutreg;
+	 end
+	 
+	 //Don't immediatly turn off output drivers
+	 assign cwusb_isout = isoutreg | isoutregdly;
 		 
 	 //Address valid on rising edge of ALEn, simplify and just latch when ALEn low
 	 assign reg_hypaddress = cwusb_addr[5:0];
@@ -113,12 +129,6 @@ module reg_main_cwlite(
 			address <= cwusb_addr[5:0];
 		end
 	 end
-	 
-	 assign cs_data[7:0] = reg_datai;
-	 assign cs_data[13:8] = address;
-	 assign cs_data[14] = reg_read;
-	 assign cs_data[15] = ~cwusb_rdn;
-	 assign cs_data[16] = ~cwusb_cen;
 	 
 	 //Address valid from ALEn until transaction done marked OR next falling edge of ALEn
 	 reg addrvalid_outreg;
@@ -163,10 +173,11 @@ module reg_main_cwlite(
 	 always @(posedge usb_clk) begin
 		if (cwusb_alen_rs == 1'b0) begin
 			regout_bytecnt <= 0;
-		end else if (((cwusb_rdn_rs == 1'b1) && (cwusb_rdn_rs_dly == 1'b0)) ||
-						 (regout_write_dly) ) begin
-			//TODO: is roll-over OK?
-			regout_bytecnt <= regout_bytecnt + 1;			 
+		end else if ((rdflag_rs_dly) || (regout_write_dly) ) begin
+			//Stop roll-over
+			if (regout_bytecnt != 16'hFFFF) begin
+				regout_bytecnt <= regout_bytecnt + 1;			 
+			end
 		end
 	 end
 

@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`include "includes.v"
 /***********************************************************************
 This file is part of the OpenADC Project. See www.newae.com for more details,
 or the codebase at http://www.assembla.com/spaces/openadc .
@@ -20,6 +21,9 @@ module clock_managment_advanced(
 	 
 	 /* Clock to ADC */
 	 output 		  adc_clk,    //Output clock to ADC
+`ifdef ADCCLK_FEEDBACK
+	 input		  adc_clk_feedback,
+`endif
 	 
 	 /* Clock to DUT */
 	 output		  target_clk,
@@ -229,7 +233,14 @@ module clock_managment_advanced(
 	);	
 		
 	assign ADC_clk_src = ADC_clk_sample;
+	
+`ifdef ADCCLK_FEEDBACK
+	IBUFG IBUFG_inst (
+	.O(systemsample_clk),
+	.I(adc_clk_feedback) );
+`else
 	assign systemsample_clk = ADC_clk_sample;
+`endif
 
 	//Output clock using DDR2 block (recommended for Spartan-6 device)
 	ODDR2 #(
