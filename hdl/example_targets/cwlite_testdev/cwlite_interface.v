@@ -24,10 +24,18 @@ module cwlite_interface(
 //	 input         DUT_CLK_i,
 //	 input         DUT_trigger_i,
 	 output wire       amp_gain,
-	 output wire       amp_hilo
+	 output wire       amp_hilo,
+	 
+	 input wire       XMEGA_PDID,
+	 input wire       XMEGA_PDIC
 
 	 );
 	
+	
+	/* PDI Programming done from SAM, must float these wires
+	   or programming will fail from weak pull-down on FPGA */
+	//assign XMEGA_PDID = 1'bZ;
+	//assign XMEGA_PDIC = 1'bZ;
 	
 	wire [35:0] cs_control0;
 	wire [63:0] ila_trigbus;
