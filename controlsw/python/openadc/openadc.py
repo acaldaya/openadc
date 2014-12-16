@@ -74,7 +74,7 @@ class OpenADCSettings(BaseLog):
         self.parm_hwinfo = HWInformation(console=console)
         self.parm_gain = GainSettings(console=console)
         self.parm_trigger = TriggerSettings(console=console)
-        self.parm_clock = ClockSettings(console=console)
+        self.parm_clock = ClockSettings(console=console, hwinfo=self.parm_hwinfo)
 
         self.params = [
             self.parm_hwinfo,
@@ -150,7 +150,7 @@ class HWInformation(BaseLog):
         hwtype = result[1] >> 3
         hwver = result[1] & 0x07
         hwList = ["Default/Unknown", "LX9 MicroBoard", "SASEBO-W", "ChipWhisperer Rev2 LX25",
-                  "Reserved?", "ZedBoard", "Papilio Pro", "SAKURA-G"]
+                  "Reserved?", "ZedBoard", "Papilio Pro", "SAKURA-G", "ChipWhisperer Lite"]
 
         try:
             textType = hwList[hwtype]
@@ -166,7 +166,7 @@ class HWInformation(BaseLog):
         return self.vers
 
     def synthDate(self):
-       return "unknown"
+        return "unknown"
 
     def maxSamples(self):
         return self.oa.hwMaxSamples
@@ -404,7 +404,7 @@ class ClockSettings(BaseLog):
 
     readMask = [0x1f, 0xff, 0xff, 0xfd]
 
-    def __init__(self, console=None):
+    def __init__(self, console=None, hwinfo=None):
         super(ClockSettings, self).__init__(console)
         self.name = "Clock Setup"
         self.findParam = None
@@ -432,6 +432,8 @@ class ClockSettings(BaseLog):
             ]},
         ]}
 
+        self._hwinfo = hwinfo
+
     def setInterface(self, oa):
         self.oa = oa
 
@@ -450,7 +452,10 @@ class ClockSettings(BaseLog):
         return ((result[3] & 0x08) >> 3)
 
     def autoMulDiv(self, freq):
-        sets = self.calculateClkGenMulDiv(freq)
+
+        inpfreq = self._hwinfo.sysFrequency()
+
+        sets = self.calculateClkGenMulDiv(freq, inpfreq)
         self.setClkgenMul(sets[0])
         self.setClkgenDiv(sets[1])
         self.resetDcms(False, True)
@@ -467,6 +472,8 @@ class ClockSettings(BaseLog):
         # From datasheet, if input freq is < 52MHz limit max divide
         if inpfreq < 52E6:
             maxdiv = int(inpfreq / 0.5E6)
+        else:
+            maxdiv = 256
 
         for mul in range(2, 257):
             for div in range(1, maxdiv):
@@ -752,9 +759,12 @@ class OpenADCInterface(BaseLog):
 
         #self.params = OpenADCSettings(self)
 
-        #Send clearing function
-        nullmessage = bytearray([0] * 20)
-        self.serial.write(str(nullmessage));
+        # Send clearing function if using streaming mode
+        if hasattr(self.serial, "stream") and self.serial.stream == False:
+            pass
+        else:
+            nullmessage = bytearray([0] * 20)
+            self.serial.write(str(nullmessage));
 
         self.setReset(True)
         self.setReset(False)
@@ -787,7 +797,7 @@ class OpenADCInterface(BaseLog):
         """Send a message out the serial port"""
 
         if payload is None:
-          payload = []
+            payload = []
 
         #Get length
         length = len(payload)
@@ -797,76 +807,121 @@ class OpenADCInterface(BaseLog):
             return None
 
         if mode == CODE_READ:
-              self.flushInput()
+            self.flushInput()
 
         #Flip payload around
         pba = bytearray(payload)
+        
+        #Check if stream or newaechip mode expected
+        if hasattr(self.serial, "stream") and self.serial.stream is False:
+            #The serial interface is actually special USB Chip
+            if mode == CODE_READ:
+                if maxResp:
+                    datalen = maxResp
+                elif ADDR_ADCDATA == address:
+                    datalen = 65000
+                else:
+                    datalen = 1
 
-        ### Setup Message
-        message = bytearray([])
-
-        #Message type
-        message.append(mode | address)
-
-        #Length
-        lenpayload = len(pba)
-        message.append(lenpayload & 0xff)
-        message.append((lenpayload >> 8) & 0xff)
-
-        #append payload
-        message = message + pba
-
-        ### Send out serial port
-        self.serial.write(str(message))
-
-        #for b in message: print "%02x "%b,
-        # print ""
-
-        ### Wait Response (if requested)
-        if (mode == CODE_READ):
-            if (maxResp):
-                datalen = maxResp
-            elif (ADDR_ADCDATA == address):
-                datalen = 65000
+                data = bytearray(self.serial.cmdReadMem(address, datalen))
+                return data
+            
             else:
-                datalen = 1
+                # Write output to memory
+                self.serial.cmdWriteMem(address, pba)
+                
+                # Check write was successful if validation requested
+                if Validate:
+                    check =  bytearray(self.serial.cmdReadMem(address, len(pba)))
 
-            result = self.serial.read(datalen)
+                    if readMask:
+                        try:
+                            for i, m in enumerate(readMask):
+                                check[i] = check[i] & m
+                                pba[i] = pba[i] & m
+                        except IndexError:
+                            pass
 
-            #Check for timeout, if so abort
-            if len(result) < 1:
-                self.flushInput()
-                self.log("Timeout in read: %d"%len(result))
-                return None
-
-            rb = bytearray(result)
-
-            return rb
-        else:
-            if Validate:
-                check = self.sendMessage(CODE_READ, address, maxResp=len(pba))
-
-                if readMask:
-                    try:
-                        for i,m in enumerate(readMask):
-                            check[i] = check[i] & m
-                            pba[i] = pba[i] & m
-                    except IndexError:
-                        pass
-
-                if check != pba:
-                    errmsg = "For address 0x%02x=%d"%(address,address)
-                    errmsg +=  "  Sent data: "
-                    for c in pba: errmsg += "%02x"%c
-                    errmsg += "\n"
-                    errmsg += "  Read data: "
-                    if check:
-                        for c in check: errmsg += "%02x"%c
+                    if check != pba:
+                        errmsg = "For address 0x%02x=%d" % (address, address)
+                        errmsg += "  Sent data: "
+                        for c in pba: errmsg += "%02x" % c
                         errmsg += "\n"
-                    else:
-                        errmsg += "<Timeout>"
+                        errmsg += "  Read data: "
+                        if check:
+                            for c in check: errmsg += "%02x" % c
+                            errmsg += "\n"
+                        else:
+                            errmsg += "<Timeout>"
 
-                    self.log(errmsg)
+                        self.log(errmsg)
+
+        else:
+            # ## Setup Message
+            message = bytearray([])
+
+            # Message type
+            message.append(mode | address)
+
+            # Length
+            lenpayload = len(pba)
+            message.append(lenpayload & 0xff)
+            message.append((lenpayload >> 8) & 0xff)
+
+            # append payload
+            message = message + pba
+
+            # ## Send out serial port
+            self.serial.write(str(message))
+
+            # for b in message: print "%02x "%b,
+            # print ""
+
+            # ## Wait Response (if requested)
+            if mode == CODE_READ:
+                if maxResp:
+                    datalen = maxResp
+                elif ADDR_ADCDATA == address:
+                    datalen = 65000
+                else:
+                    datalen = 1
+
+                result = self.serial.read(datalen)
+
+                # Check for timeout, if so abort
+                if len(result) < 1:
+                    self.flushInput()
+                    self.log("Timeout in read: %d" % len(result))
+                    return None
+
+                rb = bytearray(result)
+
+                return rb
+            else:
+                if Validate:
+                    check = self.sendMessage(CODE_READ, address, maxResp=len(pba))
+
+                    if readMask:
+                        try:
+                            for i, m in enumerate(readMask):
+                                check[i] = check[i] & m
+                                pba[i] = pba[i] & m
+                        except IndexError:
+                            pass
+
+                    if check != pba:
+                        errmsg = "For address 0x%02x=%d" % (address, address)
+                        errmsg += "  Sent data: "
+                        for c in pba: errmsg += "%02x" % c
+                        errmsg += "\n"
+                        errmsg += "  Read data: "
+                        if check:
+                            for c in check: errmsg += "%02x" % c
+                            errmsg += "\n"
+                        else:
+                            errmsg += "<Timeout>"
+
+                        self.log(errmsg)
 
 ### Generic
     def setSettings(self, state, validate=True):
@@ -1123,6 +1178,8 @@ class OpenADCInterface(BaseLog):
             intpt1 = temppt & 0x3FF;
             intpt2 = (temppt >> 10) & 0x3FF;
             intpt3 = (temppt >> 20) & 0x3FF;
+
+            # print "%x %x %x" % (intpt1, intpt2, intpt3)
 
             if trigfound == False:
                 mergpt = temppt >> 30;
