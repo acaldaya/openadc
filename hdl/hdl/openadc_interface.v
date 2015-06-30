@@ -69,6 +69,8 @@ module openadc_interface(
     output        LED_hbeat, /* Heartbeat LED */
     output        LED_armed, /* Armed LED */
     output        LED_capture, /* Capture in Progress LED (only illuminate during capture, very quick) */
+	 output        LED_ADCDCMUnlock, /* DCM for ADC is unlocked */
+	 output        LED_CLKGENDCMUnlock, /* DCM for CLKGEN is unlocked */
 	 
 	 /* OpenADC Interface Pins */
 	 input [9:0]   ADC_Data,
@@ -175,6 +177,8 @@ module openadc_interface(
    assign LED_hbeat = timer_heartbeat[24];
 	assign LED_armed = armed;
    assign LED_capture = adc_capture_go;
+	assign LED_ADCDCMUnlock = ~dcm_locked;
+	assign LED_CLKGENDCMUnlock = ~dcm_gen_locked;
  
 	//Frequency Measurement
 	wire freq_measure;
