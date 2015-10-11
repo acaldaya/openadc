@@ -257,7 +257,7 @@ class TriggerSettings(BaseLog):
             {'name': 'Digital Pin State', 'type':'bool', 'value':False, 'readonly':True, 'get':self.extTriggerPin},
             {'name': 'Mode', 'type':'list', 'values':["rising edge", "falling edge", "low", "high"], 'value':'low', 'set':self.setMode, 'get':self.mode},
             {'name': 'Timeout (secs)', 'type':'float', 'value':2, 'step':1, 'limits':(0, 1E99), 'set':self.setTimeout, 'get':self.timeout},
-            {'name': 'Offset', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setOffset, 'get':self.offset},
+            {'name': 'Offset', 'type':'int', 'value':0, 'limits':(0, 4294967294), 'set':self.setOffset, 'get':self.offset},
             {'name': 'Pre-Trigger Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setPresamples, 'get':self.presamples},
             {'name': 'Total Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setMaxSamples, 'get':self.maxSamples},
         ]}
