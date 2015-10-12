@@ -1044,7 +1044,7 @@ class OpenADCInterface(BaseLog):
         return addr
 
     def arm(self):
-        self.setSettings(self.settings() | 0x08);
+        self.setSettings(self.settings() | SETTINGS_ARM);
 
     def capture(self, waitingCallback=None):
         #Wait for trigger
@@ -1068,7 +1068,22 @@ class OpenADCInterface(BaseLog):
             if waitingCallback:
                 waitingCallback()
 
-        self.setSettings(self.settings() & ~0x08);
+
+            print self.getBytesInFifo()
+
+        print self.getBytesInFifo()
+        self.setSettings(self.settings() & ~SETTINGS_ARM);
+        
+        # If using large offsets, system doesn't know we are delaying capture        
+        nosampletimeout = 100
+        while (self.getBytesInFifo() == 0) and nosampletimeout:
+            time.sleep(0.05)
+            nosampletimeout -= 1
+
+        if nosampletimeout == 0:
+            print "WARNING: No samples received from ADC. Either very long offset, or no ADC clock."
+            print "         If you need such a long offset, manually update 'nosampletimeout' limit in source code."
+        
         return timeout
 
     def flush(self):
