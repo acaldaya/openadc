@@ -1068,10 +1068,6 @@ class OpenADCInterface(BaseLog):
             if waitingCallback:
                 waitingCallback()
 
-
-            print self.getBytesInFifo()
-
-        print self.getBytesInFifo()
         self.setSettings(self.settings() & ~SETTINGS_ARM);
         
         # If using large offsets, system doesn't know we are delaying capture        
