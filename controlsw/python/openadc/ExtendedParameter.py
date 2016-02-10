@@ -9,14 +9,57 @@
 
 import types
 from functools import partial
-from pyqtgraph.Qt import QtCore
+from pyqtgraph.Qt import QtGui, QtCore
 
 #This class adds some  hacks that allow us to have 'get', 'set', and 'linked' methods in the Parameter specification.
 #They are especially helpful for the work done here
     
+from pyqtgraph.parametertree.parameterTypes import *
+
+class WidgetParameterItemHelp(WidgetParameterItem):
+    def __init__(self, *args, **kwargs):
+        super(WidgetParameterItemHelp, self).__init__(*args, **kwargs)
+        ExtendedParameter.drawHelpIcon(self)
+
+    def updateDefaultBtn(self):
+        pass
+
+class ListParameterItemHelp(ListParameterItem):
+    def __init__(self, *args, **kwargs):
+        super(ListParameterItemHelp, self).__init__(*args, **kwargs)
+        ExtendedParameter.drawHelpIcon(self)
+
+    def updateDefaultBtn(self):
+        pass
+
+class ActionParameterItemHelp(ActionParameterItem):
+    def __init__(self, *args, **kwargs):
+        super(ActionParameterItemHelp, self).__init__(*args, **kwargs)
+        ExtendedParameter.drawHelpIcon(self)
+
+    def updateDefaultBtn(self):
+        pass
+
+class TextParameterItemHelp(TextParameterItem):
+    def __init__(self, *args, **kwargs):
+        super(TextParameterItemHelp, self).__init__(*args, **kwargs)
+        ExtendedParameter.drawHelpIcon(self)
+
+    def updateDefaultBtn(self):
+        pass
+
+classmapping = {
+ "<class 'pyqtgraph.parametertree.parameterTypes.WidgetParameterItem'>":WidgetParameterItemHelp,
+ "<class 'pyqtgraph.parametertree.parameterTypes.ListParameterItem'>":ListParameterItemHelp,
+ "<class 'pyqtgraph.parametertree.parameterTypes.ActionParameterItem'>":ActionParameterItemHelp,
+  "<class 'pyqtgraph.parametertree.parameterTypes.TextParameterItem'>":TextParameterItemHelp
+ }
+
+    
 class ExtendedParameter():
     @staticmethod
     def getAllParameters(self, parent=None):
+        """Causes the 'get' function for all parameters to be called (if present)."""
         if parent is None:
             parent = self
                               
@@ -29,11 +72,83 @@ class ExtendedParameter():
                     parent.setValue(parent.opts['get']())
                 except TypeError:
                     parent.hide()
-             
+
+    @staticmethod
+    def findHelpWindowMethod(curParam):
+        if hasattr(curParam, 'param'):
+            if hasattr(curParam.param, 'opts'):
+                if 'helpwnd' in curParam.param.opts:
+                    return curParam.param.opts['helpwnd']
+
+        if hasattr(curParam, 'parent'):
+            return ExtendedParameter.findHelpWindowMethod(curParam.parent())
+
+        return None
+
+    @staticmethod
+    def showHelpWindow(curParam):
+        """
+        Helper to show the help text. If class defines a 'helpwnd' it uses that function, otherwise
+        a simple message box is called upon.
+        """
+
+        nametext = curParam.param.opts['name']
+        helptext = curParam.param.opts['help']
+        hdrtext = '-' * len(nametext)
+
+        helptext = helptext.replace('%namehdr%', '%s\n%s\n\n' % (nametext, hdrtext))
+
+        helpwnd = ExtendedParameter.findHelpWindowMethod(curParam)
+
+        if helpwnd:
+            helpwnd(helptext, curParam)
+        else:
+            #Shitty default window
+            if hasattr(curParam, 'widget'):
+                wdgt = curParam.widget
+            else:
+                wdgt = None
+            QtGui.QMessageBox.information(wdgt, 'Help: %s' % nametext, helptext, QtGui.QMessageBox.Cancel, QtGui.QMessageBox.Cancel)
+       
+    @staticmethod
+    def drawHelpIcon(curParam):
+        """Add a single help icons to a Parameter Item. Also removes the "default" button which isn't really used in our applications"""
+        layout = curParam.layoutWidget.layout()
+
+        # Bonus: We don't want the default button so delete it here
+        numitems = layout.count()
+        lastitem = layout.itemAt(numitems - 1)
+
+        if (type(lastitem.widget()) == QtGui.QPushButton) and lastitem.widget().width() == 20:
+            lastitem.widget().deleteLater()
+
+        # If help option add the button
+        if 'help' in curParam.param.opts:
+            buthelp = QtGui.QPushButton()
+            buthelp.setFixedWidth(20)
+            buthelp.setFixedHeight(20)
+            buthelp.setIcon(curParam.layoutWidget.style().standardIcon(QtGui.QStyle.SP_TitleBarContextHelpButton))
+            buthelp.clicked[bool].connect(lambda ignored: ExtendedParameter.showHelpWindow(curParam))
+            layout.addWidget(buthelp)
+
+    @staticmethod
+    def addHelpIcons(curParam):
+        """Iterate through parameter tree, and add help icon to each one. Replaces existing class with overloaded class which will generate
+           a help icon when the widget is made."""
+        if len(curParam.children()) > 0:
+            for child in curParam.children():
+                ExtendedParameter.addHelpIcons(child)
+        else:
+            if str(curParam.itemClass) in classmapping.keys():
+                curParam.itemClass = classmapping[str(curParam.itemClass)]
+
     @staticmethod
     def setupExtended(curParam, parent=None):
+        """Setup the 'extended' parameters, which is the name given to the OpenADC extensions."""
         curParam.getAllParameters = types.MethodType(ExtendedParameter.getAllParameters, curParam)
         curParam.sigTreeStateChanged.connect(ExtendedParameter.change)
+        
+        ExtendedParameter.addHelpIcons(curParam)
         
         if parent is not None:
             parent.paramTreeChanged = types.MethodType(ExtendedParameter.paramTreeChanged, parent)
@@ -46,6 +161,7 @@ class ExtendedParameter():
     ## If anything changes in the tree, print a message
     @staticmethod
     def change(param,  changes):  
+        """Monitor changes in the tree"""
         for param, change, data in changes:
 
             # print change
@@ -176,8 +292,10 @@ if __name__ == '__main__':
         def __init__(self):
             super(maintest, self).__init__()
             p = [
-                        {'name': 'Basic parameter data types', 'type': 'group', 'children': [
-                            {'name': 'Module 1', 'type': 'list', 'values':{'module 1':module(), 'module 2':module(), 'module 3':module()}, 'set':self.setmodule},
+                        {'name': 'Basic parameter data types', 'type': 'group', 'helpwnd':self.printhelp, 'children': [
+                            {'name': 'Module 1', 'type': 'list', 'values':{'module 1':module(), 'module 2':module(), 'module 3':module()},
+                              'set':self.setmodule, 'help':'%namehdr%Boatload of text is possible here. Can use markup too with external help window.'},
+                            {'name':'Rocks to Skips', 'type':'int', 'help':'Another help example', 'helpwnd':None}
                     ]}]
             self.params = Parameter.create(name='Test', type='group', children=p)
             ExtendedParameter.setupExtended(self.params)
@@ -186,6 +304,9 @@ if __name__ == '__main__':
             self.t = ParameterTree()    
             self.reloadParams()        
             
+        def printhelp(self, msg, obj):
+            print msg
+
         def setmodule(self, module):
             print "Changing Module"
             self.module = module            

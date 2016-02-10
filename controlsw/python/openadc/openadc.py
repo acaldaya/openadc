@@ -193,9 +193,18 @@ class GainSettings(BaseLog):
         super(GainSettings, self).__init__(console)
         self.name = "Gain Setting"
         self.param = {'name': 'Gain Setting', 'type': 'group', 'children': [
-                {'name': 'Mode', 'type': 'list', 'values': {"high", "low"}, 'value':"low", 'set':self.setMode,  'get':self.mode},
-                {'name': 'Setting', 'type': 'int', 'value':0, 'limits': (0, 78),  'set':self.setGain,  'get':self.gain, 'linked':['Result']},
-                {'name': 'Result', 'type': 'float', 'suffix':'dB', 'readonly':True, 'get':self.gainDB},
+                {'name': 'Mode', 'type': 'list', 'values': {"high", "low"}, 'value':"low", 'set':self.setMode, 'get':self.mode,
+                         'help': '%namehdr%'+
+                                 'Sets the AD8331 Low Noise Amplifier into to "High" or "Low" gain mode. Low mode ranges from ' +
+                                 '-4.5dB to +43.5dB, and High mode ranges from +7.5dB to +55.5dB. Better performance is found ' +
+                                 'using the "High" gain mode typically.'},
+                {'name': 'Setting', 'type': 'int', 'value':0, 'limits': (0, 78), 'set':self.setGain, 'get':self.gain, 'linked':['Result'],
+                         'help':'%namehdr%'+
+                                'Sets the AD8331 gain value. This is a unitless number which ranges from 0 (minimum) to 78 (maximum).' +
+                                ' The resulting gain in dB is given in the "calculated" output.'},
+                {'name': 'Result', 'type': 'float', 'suffix':'dB', 'readonly':True, 'get':self.gainDB,
+                         'help':'%namehdr%'+
+                                'Gives the gain the AD8331 should have, based on the "High/Low" setting and the "gain setting".'},
                 ]}
         self.gainlow_cached = False
         self.gain_cached = 0
@@ -252,14 +261,43 @@ class TriggerSettings(BaseLog):
         super(TriggerSettings, self).__init__(console)
         self.name = "Trigger Settings"
         self.param = {'name': 'Trigger Setup', 'type':'group', 'children': [
-            {'name': 'Refresh Status', 'type':'action', 'linked':['Digital Pin State'], 'visible':False},
-            {'name': 'Source', 'type': 'list', 'values':["digital",  "analog"],  'value':"digital", 'set':self.setSource,  'get':self.source},
-            {'name': 'Digital Pin State', 'type':'bool', 'value':False, 'readonly':True, 'get':self.extTriggerPin},
-            {'name': 'Mode', 'type':'list', 'values':["rising edge", "falling edge", "low", "high"], 'value':'low', 'set':self.setMode, 'get':self.mode},
-            {'name': 'Timeout (secs)', 'type':'float', 'value':2, 'step':1, 'limits':(0, 1E99), 'set':self.setTimeout, 'get':self.timeout},
-            {'name': 'Offset', 'type':'int', 'value':0, 'limits':(0, 4294967294), 'set':self.setOffset, 'get':self.offset},
-            {'name': 'Pre-Trigger Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setPresamples, 'get':self.presamples},
-            {'name': 'Total Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setMaxSamples, 'get':self.maxSamples},
+            {'name': 'Refresh Status', 'type':'action', 'linked':['Digital Pin State'], 'visible':False,
+                     'help':'%namehdr%'+
+                            'Refreshes the "Digital Pin State" status.'},
+            {'name': 'Source', 'type': 'list', 'values':["digital", "analog"], 'value':"digital", 'set':self.setSource, 'get':self.source,
+                     'help':'%namehdr%'+
+                            'Selects if trigger system is based on digital signal (including internally generated), or an ADC level. Currently ' +
+                            'only the digital trigger system is supported.'},
+            {'name': 'Digital Pin State', 'type':'bool', 'value':False, 'readonly':True, 'get':self.extTriggerPin,
+                     'help':'%namehdr%'+
+                            'Gives the status of the digital signal being used as the trigger signal, either high or low.'},
+            {'name': 'Mode', 'type':'list', 'values':["rising edge", "falling edge", "low", "high"], 'value':'low', 'set':self.setMode, 'get':self.mode,
+                     'help':'%namehdr%'+
+                            'When using a digital system, sets the trigger mode:\n\n'
+                            '  =============== ==============================\n' +
+                            '  Mode            Description\n' +
+                            '  =============== ==============================\n' +
+                            '  Rising Edge     Trigger on rising edge only.\n' +
+                            '  Falling Edge    Trigger on falling edge only.\n' +
+                            '  Low             Trigger when line is "low".\n' +
+                            '  High            Trigger when line is "high".\n' +
+                            '  =============== ==============================\n\n' +
+                            'Note the "Trigger Mode" should be set to "Rising Edge" if using either the "SAD Trigger" or "IO Trigger" modes.'
+                            },
+            {'name': 'Timeout (secs)', 'type':'float', 'value':2, 'step':1, 'limits':(0, 1E99), 'set':self.setTimeout, 'get':self.timeout,
+                     'help':'%namehdr%'+
+                            'If no trigger occurs in this many seconds, force the trigger.'},
+            {'name': 'Offset', 'type':'int', 'value':0, 'limits':(0, 4294967294), 'set':self.setOffset, 'get':self.offset,
+                     'help':'%namehdr%'+
+                            'Delays this many samples after the trigger event before recording samples. Based on the ADC clock cycles. ' +
+                            'If using a 4x mode for example, an offset of "1000" would mean we skip 250 cycles of the target device.'},
+            {'name': 'Pre-Trigger Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setPresamples, 'get':self.presamples,
+                     'help':'%namehdr%'+
+                            'Record a certain number of samples before the main samples are captured. If "offset" is set to 0, this means ' +
+                            'recording pre-trigger samples.'},
+            {'name': 'Total Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setMaxSamples, 'get':self.maxSamples,
+                     'help':'%namehdr%'+
+                            'Total number of samples to record. Note the capture system has an upper limit, and may have a practical lower limit.'},
         ]}
         self.maxsamples = 0
         self.presamples_desired = 0
@@ -409,7 +447,8 @@ class ClockSettings(BaseLog):
         self.name = "Clock Setup"
         self.findParam = None
         self.param = {'name': 'Clock Setup', 'type':'group', 'children': [
-            {'name':'Refresh Status', 'type':'action', 'linked':[('ADC Clock', 'DCM Locked'), ('ADC Clock', 'ADC Freq'), ('CLKGEN Settings', 'DCM Locked'), 'Freq Counter']},
+            {'name':'Refresh Status', 'type':'action', 'linked':[('ADC Clock', 'DCM Locked'), ('ADC Clock', 'ADC Freq'), ('CLKGEN Settings', 'DCM Locked'), 'Freq Counter'],
+                     'help':'ff'},
             {'name':'Reset DCMs', 'type':'action', 'action':self.resetDcms, 'linked':[('CLKGEN Settings', 'Multiply'), ('CLKGEN Settings', 'Divide')]},
 
             {'name': 'ADC Clock', 'type':'group', 'children': [
