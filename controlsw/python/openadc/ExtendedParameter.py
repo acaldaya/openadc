@@ -198,7 +198,7 @@ class ExtendedParameter():
             self.showScriptParameter(param, changes, self.params)
       
     @staticmethod  
-    def reloadParams(lst, paramtree):
+    def reloadParams(lst, paramtree, help_window=None):
             """
             Reloads parameters in a paramtree. Hides anything that isn't in the list anymore, adds
             any new parameters. Required to avoid deleting parameters that we actually want to see
@@ -214,6 +214,15 @@ class ExtendedParameter():
                     refitem.setHidden(True)                                  
                     
             for p in lst:
+                if help_window:
+                    for c in p.children():
+                        if hasattr(c, 'children'):
+                            for k in c.children():
+                                # if hasattr(k, 'param'):
+                                #    print k.param()
+                                if hasattr(k, 'opts'):
+                                    k.opts['helpwnd'] = help_window
+
                 paramtree.addParameters(p)
                 
       

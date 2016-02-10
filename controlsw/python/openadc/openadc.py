@@ -294,10 +294,11 @@ class TriggerSettings(BaseLog):
             {'name': 'Pre-Trigger Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setPresamples, 'get':self.presamples,
                      'help':'%namehdr%'+
                             'Record a certain number of samples before the main samples are captured. If "offset" is set to 0, this means ' +
-                            'recording pre-trigger samples.'},
+                            'recording samples BEFORE the trigger event.'},
             {'name': 'Total Samples', 'type':'int', 'value':0, 'limits':(0, 1000000), 'set':self.setMaxSamples, 'get':self.maxSamples,
                      'help':'%namehdr%'+
-                            'Total number of samples to record. Note the capture system has an upper limit, and may have a practical lower limit.'},
+                            'Total number of samples to record. Note the capture system has an upper limit, and may have a practical lower limit (i.e.,' +
+                            ' if this value is set too low the system may not capture samples. Suggest to always set > 256 samples.'},
         ]}
         self.maxsamples = 0
         self.presamples_desired = 0
@@ -448,12 +449,33 @@ class ClockSettings(BaseLog):
         self.findParam = None
         self.param = {'name': 'Clock Setup', 'type':'group', 'children': [
             {'name':'Refresh Status', 'type':'action', 'linked':[('ADC Clock', 'DCM Locked'), ('ADC Clock', 'ADC Freq'), ('CLKGEN Settings', 'DCM Locked'), 'Freq Counter'],
-                     'help':'ff'},
-            {'name':'Reset DCMs', 'type':'action', 'action':self.resetDcms, 'linked':[('CLKGEN Settings', 'Multiply'), ('CLKGEN Settings', 'Divide')]},
+                     'help':'%namehdr%' +
+                            'Update if the Digital Clock Manager (DCM) are "locked" and their operating frequency.'},
+            {'name':'Reset DCMs', 'type':'action', 'action':self.resetDcms, 'linked':[('CLKGEN Settings', 'Multiply'), ('CLKGEN Settings', 'Divide')],
+                      'help':'%namehdr%' +
+                            'When the input frequency to the DCM blocks changes, it can cause them to become "unlocked". When they are "unlocked" they are NOT ' +
+                            'generating a reliable output frequency. You must press the "Reset" button to cause them to re-lock. This is currently not automatically ' +
+                            'done as during regular operation they shouldn\'t become unlocked.\n\nHowever every time you change the DCM block source, it will cause ' +
+                            'the blocks to lose lock.'},
 
             {'name': 'ADC Clock', 'type':'group', 'children': [
-                {'name': 'Source', 'type':'list', 'values':{"EXTCLK Direct":("extclk", 4, "clkgen"), "EXTCLK x4 via DCM":("dcm", 4, "extclk"), "EXTCLK x1 via DCM":("dcm", 1, "extclk"), "CLKGEN x4 via DCM":("dcm", 4, "clkgen"), "CLKGEN x1 via DCM":("dcm", 1, "clkgen")},  'value':("dcm", 1, "extclk"), 'set':self.setAdcSource,  'get':self.adcSource},
-                {'name': 'Phase Adjust', 'type':'int', 'value':0, 'limits':(-255, 255), 'set':self.setPhase, 'get':self.phase},
+                {'name': 'Source', 'type':'list', 'values':{"EXTCLK Direct":("extclk", 4, "clkgen"), "EXTCLK x4 via DCM":("dcm", 4, "extclk"), "EXTCLK x1 via DCM":("dcm", 1, "extclk"), "CLKGEN x4 via DCM":("dcm", 4, "clkgen"), "CLKGEN x1 via DCM":("dcm", 1, "clkgen")}, 'value':("dcm", 1, "extclk"), 'set':self.setAdcSource, 'get':self.adcSource,
+                          'help':'%namehdr%' +
+                                'The ADC sample clock is generated from this source. Options are either an external input (which input set elsewhere) or an internal clock generator. Details of each option:\n\n' +
+                                '=================== ====================== =================== ===============\n' +
+                                ' Name                Description            Input Freq Range   Fine Phase Adj.\n' +
+                                '=================== ====================== =================== ===============\n' +
+                                ' EXCLK Direct       Connects sample clock     1-105 MHz            NO\n' +
+                                '                    external pin directly.\n' +
+                                ' EXTCLK xN via DCM  Takes external pin,       5-105 MHz (x1)       YES\n\n' +
+                                '                    multiplies frequency      5-26.25 MHz (x4)        \n\n' +
+                                '                    xN and feeds to ADC.  \n' + 
+                                ' CLKGEN xN via DCM  Multiples CLKGEN by       5-105 MHz (x1)       YES\n\n' +
+                                '                    xN and feeds to ADC.      5-26.25 MHz (x4)        \n\n' +
+                                '=================== ====================== =================== ===============\n'},
+                {'name': 'Phase Adjust', 'type':'int', 'value':0, 'limits':(-255, 255), 'set':self.setPhase, 'get':self.phase, 'help':'%namehdr%' +
+                         'Makes small amount of adjustment to sampling point compared to the clock source. This can be used to improve the stability ' +
+                         'of the measurement. Total phase adjustment range is < 5nS regardless of input frequency.'},
                 {'name': 'ADC Freq', 'type': 'int', 'value': 0, 'siPrefix':True, 'suffix': 'Hz', 'readonly':True, 'get':self.adcFrequency},
                 {'name': 'DCM Locked', 'type':'bool', 'value':False, 'get':self.dcmADCLocked, 'readonly':True},
                 {'name':'Reset ADC DCM', 'type':'action', 'action':partial(self.resetDcms, True, False), 'linked':['Phase Adjust']},

@@ -83,8 +83,11 @@ class HelpBrowser(QDialog):
 
     def showHelp(self, rstinput):
         data = html_body(unicode(rstinput))
-        view.setHtml(data)
+        self.webkit.setHtml(data)
         self.show()
+
+    def helpwnd(self, text, param=None):
+        self.showHelp(text)
 
 
 if __name__ == '__main__':
