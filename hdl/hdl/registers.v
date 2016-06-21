@@ -165,7 +165,9 @@
 			3 = ChipWhisperer Rev2 on LX25
 			4 = Reserved
 			5 = ZedBoard
-			6 = ChipWhisperer Lite, LX9
+			8 = ChipWhisperer Lite, LX9
+			9 = CW1200, LX45
+			
 		  
 		  HV = Hardware Revision (3 bits)
 		   Specific to Hardware Type
@@ -289,4 +291,9 @@
 	 //`define SAD_STATUSCFG_ADDR 53
 	 //`define SAD_REFDATA_ADDR   54
 	 
-	 //NEXT ADDRESS = 56
+	 //`define GLITCH_RECONFIG_RB_ADDR 56
+	 
+	 //`define IODECODETRIG_CFG_ADDR  57
+	 //`define IODECODETRIG_DATA_ADDR 58
+	 
+	 //NEXT ADDRESS = 59

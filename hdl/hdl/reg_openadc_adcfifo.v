@@ -108,8 +108,8 @@ module reg_openadc_adcfifo(
 		end
 	 end
 	  
-//	 always @(reg_address, reg_addrvalid, reg_bytecnt, fifo_data) begin
-	 always @(posedge clk) begin
+	 always @(reg_address, reg_addrvalid, reg_bytecnt, fifo_data) begin
+//	 always @(posedge clk) begin
 		if (reg_read) begin
 //		if (reg_addrvalid) begin
 			case (reg_address)
@@ -136,8 +136,8 @@ module reg_openadc_adcfifo(
 	 end	 
  */
  
-	 always @(reg_read, reg_address, reg_bytecnt) begin
-	 //always @(posedge clk) begin
+	 //always @(reg_read, reg_address, reg_bytecnt) begin
+	 always @(posedge clk) begin
 		 if ((reg_read == 1) && (reg_address == `ADCREAD_ADDR) && (reg_bytecnt > 16'd0)) begin
 			fifo_rd_en_reg <= 1;
 		 end else begin
