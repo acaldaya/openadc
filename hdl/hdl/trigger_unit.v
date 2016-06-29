@@ -66,7 +66,8 @@ module trigger_unit(
 
 	//**** Trigger Logic *****	
 	reg 	armed;
-	assign arm_o = armed;
+	reg   armed_led;
+	assign arm_o = armed_led;
 	
 	wire 	adc_capture_done;
 	reg 	adc_capture_go;
@@ -132,4 +133,37 @@ module trigger_unit(
 		end else if (arm_i & ((trigger != trigger_level_i) | (trigger_wait_i == 0))) begin
 			armed <= 1;
 		end
+		
+	//'armed_led' goes high when arm command present (doesn't look at other conditions)
+	always @(posedge adc_clk)
+	  if (resetarm) begin
+			armed_led <= 0;
+		end else if (arm_i) begin
+			armed_led <= 1;
+		end
+	/*
+	wire [127:0] ila_trigbus;
+	wire [35:0] cs_control0;
+	assign ila_trigbus[0] = int_reset_capture;
+	assign ila_trigbus[1] = adc_capture_go;
+	assign ila_trigbus[2] = trigger;
+	assign ila_trigbus[3] = trigger_level_i;
+	assign ila_trigbus[4] = arm_i;
+	assign ila_trigbus[5] = armed;
+	assign ila_trigbus[6] = resetarm;
+	assign ila_trigbus[7] = trigger_now_i;
+	assign ila_trigbus[8] = adc_capture_go_delayed;	
+	assign ila_trigbus[41:10] = adc_delay_cnt[20:0];
+	assign ila_trigbus[73:42] = trigger_offset_i[20:0];
+
+	coregen_icon coregen_icon (
+    .CONTROL0(cs_control0) // INOUT BUS [35:0]
+	);
+	
+	coregen_ila coregen_ila  (
+    .CONTROL(cs_control0), // INOUT BUS [35:0]
+    .CLK(adc_clk), // IN
+    .TRIG0(ila_trigbus) // IN BUS [63:0]
+	 );
+	 */
 endmodule

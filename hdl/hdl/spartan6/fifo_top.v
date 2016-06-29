@@ -50,7 +50,7 @@ module fifo_top(
 	 input			fifo_read_fifoen,
 	 output			fifo_read_fifoempty,
 	 output [7:0]	fifo_read_data,
-	 input         cmd_arm_i,
+	 input         arm_i,
 	 
 	 input  [31:0] presample_i,
 	 input  [31:0]	max_samples_i,

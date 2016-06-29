@@ -759,7 +759,7 @@ module openadc_interface(
 	 .adc_trig_status(DUT_trigger_i),
 	 .adc_capture_go(adc_capture_go), //Set to '1' to start capture, keep at 1 until adc_capture_stop goes high
 	 .adc_capture_stop(adc_capture_done),
-	 .cmd_arm_i(cmd_arm),
+	 .arm_i(armed),
 	  
 	 //DDR to USB Read Interface
 	 .fifo_read_fifoclk(ddrfifo_rd_clk),
